@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agent World</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="arrows"></div>
+
+    <!-- Intro: shown until the first snapshot arrives -->
+    <div id="intro">
+      <div class="intro-card">
+        <div class="intro-logo"><span class="gem"></span></div>
+        <h1>Agent World</h1>
+        <p class="intro-sub">See what your Claude Code and Codex agents are up to</p>
+        <p class="intro-status"><span class="spinner"></span><span class="text">Looking for agents on this computer…</span></p>
+      </div>
+    </div>
+
+    <header id="topbar">
+      <div class="brand glass"><span class="gem small"></span><span>Agent World</span></div>
+      <div id="status" class="chip glass" data-state="connecting"><span class="dot"></span><span class="text">Connecting…</span></div>
+      <div id="clock" class="chip glass" title="Time of day"></div>
+      <div id="demo-chip" class="chip glass" hidden title="These agents are simulated. Run npm run dev to watch your real Claude Code and Codex sessions.">Demo<span class="long"> · simulated agents</span></div>
+    </header>
+
+    <!-- Waiting agents, front and center -->
+    <div id="needs" hidden>
+      <div class="needs-label"><span class="pulse"></span>Needs you</div>
+      <div id="needs-list"></div>
+    </div>
+
+    <aside id="roster" class="glass panel">
+      <header>
+        <h2>Your projects</h2>
+        <span class="count" id="roster-count"></span>
+        <button class="icon-btn" id="roster-toggle" aria-label="Collapse project list"></button>
+      </header>
+      <div id="roster-body"></div>
+    </aside>
+
+    <aside id="inspect" class="glass panel" hidden></aside>
+
+    <div id="toasts"></div>
+    <div id="hint" class="glass" hidden></div>
+
+    <nav id="dock" class="glass">
+      <button class="icon-btn" data-action="rotate-left" title="Rotate left (Q)"></button>
+      <button class="icon-btn" data-action="rotate-right" title="Rotate right (E)"></button>
+      <span class="sep"></span>
+      <div class="menu-wrap">
+        <button class="icon-btn" data-menu="time" title="Time of day"></button>
+        <div class="menu glass" data-for="time" hidden></div>
+      </div>
+      <div class="menu-wrap">
+        <button class="icon-btn" data-menu="walls" title="Walls"></button>
+        <div class="menu glass" data-for="walls" hidden></div>
+      </div>
+      <div class="menu-wrap">
+        <button class="icon-btn" data-menu="quality" title="Graphics quality"></button>
+        <div class="menu glass" data-for="quality" hidden></div>
+      </div>
+      <button class="icon-btn" data-action="sound" title="Sounds"></button>
+      <span class="sep"></span>
+      <div class="menu-wrap">
+        <button class="icon-btn" data-menu="help" title="Controls"></button>
+        <div class="menu glass help" data-for="help" hidden>
+          <h3>Controls</h3>
+          <dl>
+            <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Walk (hold <kbd>Shift</kbd> to run)</dd>
+            <dt><kbd>Q</kbd><kbd>E</kbd> or right-drag</dt><dd>Rotate camera</dd>
+            <dt>Scroll</dt><dd>Zoom</dd>
+            <dt>Click / <kbd>Space</kbd></dt><dd>Inspect a Sim</dd>
+            <dt><kbd>Esc</kbd></dt><dd>Close panel</dd>
+          </dl>
+          <h3 style="margin-top:14px">What you're looking at</h3>
+          <p><b>Each house is a project folder.</b> Each Sim is a Claude Code or Codex session working in it. A Sim with a laptop is a helper (sub-agent) that its agent started.</p>
+          <p><b>Bubbles, screens and the diamond above each head are real</b>: they show what the agent is doing right now, with the actual files and commands. A yellow diamond means it needs you.</p>
+          <p>Coffee breaks and couch time are just for fun while an agent is idle.</p>
+        </div>
+      </div>
+    </nav>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,29 @@
+{
+  "name": "agent-world",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A Sims-style low-poly world that visualizes AI agents working on your machine.",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "demo": "node scripts/dev.mjs --demo",
+    "bridge": "node bridge/server.mjs",
+    "fake": "node adapters/fake-agent.mjs",
+    "build": "vite build",
+    "start": "vite build && node scripts/dev.mjs --prod",
+    "test": "node --test test/",
+    "hooks:claude": "node adapters/claude-code/install.mjs",
+    "codex": "node adapters/codex/tail.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@fontsource-variable/nunito": "^5.3.0",
+    "lucide-static": "^1.52.0",
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.21"
+  }
+}
