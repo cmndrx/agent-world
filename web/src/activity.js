@@ -292,6 +292,8 @@ export function activityKey(a) {
 export function appName(session) {
   if (!session) return '';
   if (session.app) return session.app;
+  if (session.source === 'chatgpt') return 'ChatGPT';
+  if (session.source === 'claude') return 'Claude';
   if (session.source === 'claude-code') return 'Claude Code';
   if (session.source === 'codex') return 'Codex';
   return session.source || 'Agent';
@@ -300,6 +302,7 @@ export function appName(session) {
 /** Short brand for compact places (chips, badges). */
 export function brandOf(session) {
   if (!session) return '';
+  if (session.source === 'chatgpt') return 'ChatGPT';
   if (session.provider === 'anthropic' || session.source === 'claude-code') return 'Claude';
   if (session.provider === 'openai' || session.source === 'codex') return 'Codex';
   return appName(session);

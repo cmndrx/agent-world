@@ -11,6 +11,7 @@ const config = readConfig();
 export function emit(raw) {
   const { ok, event, error } = normalizeEvent({ ts: new Date().toISOString(), ...raw });
   if (!ok) throw new Error(`invalid event: ${error}`);
+  if (config.conversationTitles !== true) event.conversation.title = null;
   event.detail = redactDetail(event.detail, config.privacy);
   ensureHome();
   const safe = (s) => s.replace(/[^a-zA-Z0-9._-]/g, '_');

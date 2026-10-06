@@ -1,3 +1,4 @@
+import { normalizeConversation } from './conversations.mjs';
 // Canonical Agent World event schema (v1). Shared by the bridge, adapters, and client.
 // See CONCEPT.md → "Event schema".
 
@@ -63,6 +64,8 @@ export function normalizeEvent(raw) {
     provider: typeof raw.provider === 'string' ? raw.provider : 'unknown',
     // Which app the session runs in, in plain words ("Claude desktop app", "Codex CLI"). Optional.
     app: typeof raw.app === 'string' && raw.app ? raw.app.slice(0, 60) : null,
+    conversation: normalizeConversation(raw.conversation, raw.source, raw.session),
+    project_name: typeof raw.project_name === 'string' ? raw.project_name.slice(0, 100) : null,
     session: raw.session,
     parent_session: typeof raw.parent_session === 'string' ? raw.parent_session : null,
     project: raw.project,

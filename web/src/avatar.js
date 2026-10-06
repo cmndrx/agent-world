@@ -38,10 +38,11 @@ const JOINTS = ['bodyY', 'lean', 'legL', 'legR', 'kneeL', 'kneeR', 'armLx', 'arm
 
 export class Avatar {
   constructor(scene) {
-    this.parts = buildPerson(
-      { skin: 0xeebd98, hair: 0x4a2f1d, shirt: 0x5b6cf9, pants: 0x2f3747, shoes: 0xf4f1ea, hairStyle: 0, top: 'hoodie', build: 1.02 },
-      { headphones: true, backpack: true },
-    );
+    this.baseLook = { skin: 0xeebd98, hair: 0x4a2f1d, shirt: 0x5b6cf9, pants: 0x2f3747, shoes: 0xf4f1ea, hairStyle: 0, top: 'hoodie', accessory: 'headphones', build: 1.02 };
+    this.look = this.baseLook;
+    this.lookKey = '';
+    this.scene = scene;
+    this.parts = buildPerson(this.look, { backpack: true });
     this.root = this.parts.root;
     const marker = new THREE.Mesh(
       new THREE.PlaneGeometry(1.7, 1.7),
@@ -67,11 +68,32 @@ export class Avatar {
     this.nextBlink = 2;
 
     addEventListener('keydown', (e) => {
-      if (e.target.closest?.('input, textarea')) return;
+      if (e.target.closest?.('input, textarea, select, dialog')) return;
       this.keys.add(e.key.toLowerCase());
     });
     addEventListener('keyup', (e) => this.keys.delete(e.key.toLowerCase()));
     addEventListener('blur', () => this.keys.clear());
+  }
+
+  /** Wardrobe overrides (hex strings from shared/style.mjs) on top of the default look. */
+  setLook(overrides) {
+    const key = JSON.stringify(overrides || {});
+    if (key === this.lookKey) return;
+    this.lookKey = key;
+    const look = { ...this.baseLook };
+    for (const [k, v] of Object.entries(overrides || {})) look[k] = typeof v === 'string' && v.startsWith('#') ? parseInt(v.slice(1), 16) : v;
+    this.look = look;
+    const old = this.root;
+    const oldBody = this.parts.body;
+    const parts = buildPerson(look, { backpack: true });
+    for (const child of [...old.children]) if (child !== oldBody) parts.root.add(child);
+    this.scene.remove(old);
+    this.scene.add(parts.root);
+    oldBody.traverse((o) => o.isMesh && o.geometry.dispose());
+    this.parts = parts;
+    this.root = parts.root;
+    this.root.position.copy(this.pos);
+    this.root.rotation.y = this.facing;
   }
 
   teleport(x, z) {
@@ -84,7 +106,7 @@ export class Avatar {
    * @param {THREE.Vector3|null} [lookAt] something interesting nearby (e.g. the closest Sim)
    */
   update(dt, t, cameraYaw, blocked = () => false, lookAt = null) {
-    const k = this.keys;
+    const k = this.enabled === false ? new Set() : this.keys; // build mode borrows the keys for panning
     let fx = 0;
     let fz = 0;
     if (k.has('w') || k.has('arrowup')) fz -= 1;
@@ -208,11 +230,12 @@ export class CameraRig {
     this.pitch = 0.85;
     this.distance = 22;
     this.distanceTarget = 22;
+    this.maxDistance = 60;
     this.target = new THREE.Vector3();
     this.fly = null;
 
     addEventListener('keydown', (e) => {
-      if (e.target.closest?.('input, textarea')) return;
+      if (e.target.closest?.('input, textarea, select, dialog')) return;
       if (e.key === 'q' || e.key === 'Q') this.yawTarget -= Math.PI / 4;
       if (e.key === 'e' || e.key === 'E') this.yawTarget += Math.PI / 4;
     });
@@ -231,7 +254,7 @@ export class CameraRig {
     addEventListener('pointerup', () => (drag = null));
     dom.addEventListener('wheel', (e) => {
       e.preventDefault();
-      this.distanceTarget = THREE.MathUtils.clamp(this.distanceTarget * (1 + e.deltaY * 0.001), 8, 60);
+      this.distanceTarget = THREE.MathUtils.clamp(this.distanceTarget * (1 + e.deltaY * 0.001), 8, this.maxDistance);
     }, { passive: false });
   }
 

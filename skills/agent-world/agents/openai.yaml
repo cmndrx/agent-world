@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent World"
+  short_description: "Use the world, manage tasks, and prepare handoffs"
+  default_prompt: "Use $agent-world to review this project, advance its authorized tasks, and leave a verified next-pass handoff."

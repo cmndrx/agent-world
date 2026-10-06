@@ -1,9 +1,13 @@
+import {canPromptFromStatus} from '../../shared/agent-view.mjs';
+import { observedLabel } from '../../shared/freshness.mjs';
 // HTML overlays: roster, "needs you" strip, inspect drawer, toasts, dock menus, edge arrows.
 // Everything here renders truth, except the clearly marked "Simulation" card.
 
+import { conversationLabel } from '../../shared/conversations.mjs';
 import * as THREE from 'three';
 import { plumbobFor } from '../../shared/schema.mjs';
 import { appName, brandOf, resolveActivity } from './activity.js';
+import { SEASONS, WEATHERS } from './seasons.js';
 import { icon, STATE_ICON } from './icons.js';
 import { PROVIDER_COLORS } from './models.js';
 import { escapeHtml, formatDuration } from './sim.js';
@@ -123,14 +127,18 @@ export class UI {
       this.h.onSetting('roster', this.roster.classList.contains('collapsed') ? 'collapsed' : 'open');
     });
     this.rosterBody.addEventListener('click', (e) => {
-      const row = e.target.closest('[data-key]');
-      if (row) return this.h.onFocus(row.dataset.key);
+      if (e.target.closest('[data-work-home]')) return;
+      const shelf = e.target.closest('[data-conversation-home]');
+      if (shelf) return;
       const lot = e.target.closest('[data-lot]');
-      if (lot) this.h.onFocusLot(lot.dataset.lot);
+      if (lot) return this.h.onFocusLot(lot.dataset.lot);
+      const row = e.target.closest('.sim-row[data-key]');
+      if (row) return this.h.onFocus(row.dataset.key);
+
     });
     this.needsList.addEventListener('click', (e) => {
       const b = e.target.closest('[data-key]');
-      if (b) this.h.onFocus(b.dataset.key);
+      if(b){if(b.classList.contains('prompt-ready'))this.h.onPromptKey?.(b.dataset.key);else this.h.onFocus(b.dataset.key);}
     });
     this.arrows.addEventListener('click', (e) => {
       const a = e.target.closest('[data-key]');
@@ -139,7 +147,9 @@ export class UI {
 
     // Inspect drawer
     this.panel.addEventListener('click', (e) => {
+      if(e.target.closest('[data-prompt-agent]')&&this.sim)this.h.onPrompt?.(this.sim);
       if (e.target.closest('[data-close]')) this.close();
+      if (e.target.closest('[data-outfit]') && this.sim) this.h.onOutfit?.(this.sim);
     });
     this.panel.addEventListener('change', (e) => {
       if (e.target.name === 'name' && this.sim?.character) this.h.onRename(this.sim, e.target.value);
@@ -149,14 +159,26 @@ export class UI {
     });
 
     this.initDock();
+    const layoutChrome = () => {
+      const top = $('#topbar').getBoundingClientRect().bottom + 10;
+      this.needs.style.top = `${top}px`;
+      const below = this.needs.hidden ? top : this.needs.getBoundingClientRect().bottom + 10;
+      this.roster.style.top = `${below}px`;
+      this.roster.style.maxHeight = `calc(100dvh - ${below + 100}px)`;
+    };
+    new ResizeObserver(layoutChrome).observe($('#topbar'));
+    new ResizeObserver(layoutChrome).observe(this.needs);
+    layoutChrome();
   }
 
   // ---- Status, clock, intro --------------------------------------------------------
 
   setConnection(state, live = 0) {
+    this.status.title = state === 'live' ? 'Bridge connected. Agent state is the last received observation, not an adapter health check.' : 'Current activity unavailable. Received observations and your planning are preserved.';
+    this.connectionState = state;
     this.status.dataset.state = state;
     this.status.querySelector('.text').textContent =
-      state === 'live' ? (live ? `Watching ${live} session${live === 1 ? '' : 's'}` : 'Watching · no sessions yet') : state === 'connecting' ? 'Connecting…' : 'Not connected';
+      state === 'live' ? (live ? `Live · ${live} session${live === 1 ? '' : 's'}` : 'Live · no attached sessions') : state === 'connecting' ? 'Connecting…' : 'Offline · last known activity';
     if (state === 'offline') $('#intro .intro-status .text').textContent = "Can't connect yet. Is `npm run dev` still running?";
   }
 
@@ -195,6 +217,13 @@ export class UI {
     set('[data-action="rotate-left"]', 'navigation');
     dock.querySelector('[data-action="rotate-left"]').style.transform = 'scaleX(-1)';
     set('[data-action="rotate-right"]', 'navigation');
+    set('[data-action="build"]', 'hammer');
+    set('[data-action="map"]', 'map');
+    set('[data-action="wardrobe"]', 'shirt');
+    set('[data-action="photo"]', 'camera');
+    document.getElementById('conversations-open').innerHTML = icon('messageCircle');
+    document.getElementById('sources-open').innerHTML = icon('plug');
+    set('[data-action="city"]', 'building2');
     set('[data-menu="walls"]', 'layers');
     set('[data-menu="quality"]', 'sparkles');
     set('[data-menu="help"]', 'circleHelp');
@@ -241,6 +270,15 @@ export class UI {
     const snd = dock.querySelector('[data-action="sound"]');
     snd.innerHTML = icon(soundOn ? 'bell' : 'bellOff');
     snd.title = soundOn ? 'Sounds on: chime when an agent needs you' : 'Sounds off';
+    // Season + weather share one menu (ambience only; never real weather or agent-related).
+    const seasonIcon = { spring: 'flower', summer: 'sun', autumn: 'leaf', winter: 'snowflake' };
+    const weatherIcon = { auto: 'cloudSun', clear: 'sun', rain: 'cloudRain', snow: 'cloudSnow' };
+    dock.querySelector('[data-menu="weather"]').innerHTML = icon(settings.weather && settings.weather !== 'auto' ? weatherIcon[settings.weather] : seasonIcon[settings.season] || 'cloudSun');
+    const opt = (key, value, ic, label) => `<button class="opt${(settings[key] || 'auto') === value ? ' on' : ''}" data-menu="${key}" data-value="${value}">${icon(ic)}${label}</button>`;
+    dock.querySelector('.menu[data-for="weather"]').innerHTML =
+      `<h3>Season</h3>${Object.entries(SEASONS).map(([v, l]) => opt('season', v, v === 'auto' ? 'clock' : seasonIcon[v], l)).join('')}` +
+      `<h3>Weather</h3>${Object.entries(WEATHERS).map(([v, l]) => opt('weather', v, weatherIcon[v], l)).join('')}` +
+      `<p class="menu-note">Ambience only, not a forecast.</p>`;
     for (const [key, menu] of Object.entries(this.menus)) {
       const el = dock.querySelector(`.menu[data-for="${key}"]`);
       el.innerHTML = `<h3>${menu.title}</h3>` + menu.options
@@ -250,6 +288,9 @@ export class UI {
         })
         .join('');
     }
+    dock.querySelector('.menu[data-for="walls"]').innerHTML +=
+      `<h3>Street life</h3>${opt('streetLife', 'on', 'users', 'Walk to work when off duty')}${opt('streetLife', 'off', 'house', 'Stay home')}` +
+      `<p class="menu-note">Made up: only while their agent is off duty.</p>`;
   }
 
   // ---- Toasts ---------------------------------------------------------------------------
@@ -295,15 +336,18 @@ export class UI {
           <div class="where"><span style="width:9px;height:9px;border-radius:3px;flex:none;background:${lotColor}"></span>
             ${icon('house')} ${escapeHtml(sim.lot.name)}${sim.character ? ` · desk ${sim.character.slot}` : ''}</div>
         </div>
+        ${sim.character ? `<button class="icon-btn" data-outfit aria-label="Change outfit" title="Change outfit (just for fun)">${icon('shirt')}</button>` : ''}
         <button class="icon-btn close" data-close aria-label="Close">${icon('x')}</button>
       </div>
       <div class="scroll">
-        <div data-slot="hero"></div>
+        <h2 class="activity-view-title">Watch activity</h2>
+        <button data-prompt-agent>Prompt this agent</button><div data-slot="role"></div>
+        <button type="button" data-slot="hero" data-prompt-agent></button>
         <figure class="screen-wrap">
-          <canvas class="screen-preview" width="512" height="320"></canvas>
-          <figcaption>Live screen · names, files and commands are real; code and output are illustrative</figcaption>
+          <button type="button" class="screen-chat" data-prompt-agent aria-label="Open chat from activity screen"><canvas class="screen-preview" width="512" height="320"></canvas></button>
+          <figcaption title="Names, files and commands are real; the code drawn on screen is illustrative">Live screen</figcaption>
         </figure>
-        <div class="section-title">What's really happening <small data-slot="truth-src"></small></div>
+        <div class="section-title">Details <small data-slot="truth-src"></small></div>
         <dl class="facts" data-slot="facts"></dl>
         <div class="section-title" data-slot="tl-title">Recent steps</div>
         <ol class="timeline" data-slot="timeline"></ol>
@@ -332,6 +376,9 @@ export class UI {
     if (!sim) return;
     const s = sim.truth;
     const state = sim.state;
+    const role = sim.roleInfo;
+    // Role: one line; the reason is a tooltip (it describes observed activity, not skill).
+    this.slot('role', role?.title ? `<div class="role-card" style="--role:#${role.color.toString(16).padStart(6, '0')}" title="${escapeHtml(role.why)}"><b>${icon(role.intern ? 'hardHat' : 'store')} ${escapeHtml(role.title)}</b>${role.workplace ? `<small>${escapeHtml(role.workplace)}</small>` : ''}</div>` : '');
     const cls = plumbobFor(state);
 
     const input = this.panel.querySelector('input[name=name]');
@@ -348,32 +395,31 @@ export class UI {
       sub = `${sim.name} gets back to work when you start Claude Code or Codex in this folder.`;
     } else if (state === 'waiting_for_user') sub = `Waiting for you for ${formatDuration(sim.waitSeconds)}`;
     else sub = `For ${formatDuration((Date.now() - Date.parse(s.since)) / 1000)} · since ${clock(s.since)}`;
-    const label = s ? sim.activityLabel : 'Off duty';
+    if (s && this.connectionState !== 'live') sub = `Offline · ${observedLabel(s)} · last known state`;
+    const label = s ? (this.connectionState === 'live' ? sim.activityLabel : `Last known: ${sim.activityLabel}`) : 'Off duty';
     const detail = s ? sim.act.detail : `No session open in ${sim.lot.name}`;
     const prose = !s || sim.act.prose;
-    this.panel.querySelector('[data-slot="hero"]').className = `hero s-${cls}`;
+    const hero=this.panel.querySelector('[data-slot="hero"]');
+    hero.className=`hero s-${cls}`;hero.disabled=!canPromptFromStatus(s);hero.setAttribute('aria-label',canPromptFromStatus(s)?`${label} · Open chat`:label);
     this.slot('hero', `
       <span class="big-icon">${icon(STATE_ICON[state])}</span>
       <span class="label">${escapeHtml(label)}</span>
       <span class="sub">${escapeHtml(sub)}</span>
-      ${detail && !label.includes(detail) ? `<span class="target${prose ? ' prose' : ''}">${escapeHtml(detail)}</span>` : ''}`);
+      ${detail && !label.includes(detail) ? `<span class="target${prose ? ' prose' : ''}">${escapeHtml(detail)}</span>` : ''}${canPromptFromStatus(s)?'<span class="hero-chat-hint">Open chat →</span>':''}`);
 
     const mono = (v) => `<span style="font-family:var(--mono);font-size:11px">${escapeHtml(v)}</span>`;
     const facts = s
       ? [
           ['App', `<span class="provider"><i style="background:${hex(PROVIDER_COLORS[s.provider] ?? 0x98a1b2)}"></i>${escapeHtml(appName(s))}</span>`],
-          ['Folder', mono(sim.lot.project)],
-          ['Started', escapeHtml(new Date(s.startedAt).toLocaleString())],
-          ['Tool', s.detail?.tool ? `${mono(s.detail.tool)} <span class="muted">(the agent's own name for it)</span>` : '—'],
-          ['Session ID', mono(s.session)],
+          ['Started', escapeHtml(clock(s.startedAt))],
+          ['Observation', escapeHtml(observedLabel(s))],
+          ...(s.detail?.tool ? [['Tool', mono(s.detail.tool)]] : []),
         ]
-      : [
-          ['Folder', mono(sim.lot.project)],
-          ['Last seen', sim.character?.lastSeen ? escapeHtml(new Date(sim.character.lastSeen).toLocaleString()) : 'Never'],
-        ];
-    this.slot('facts', facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join(''));
+      : [['Last seen', sim.character?.lastSeen ? escapeHtml(new Date(sim.character.lastSeen).toLocaleString()) : 'Never']];
+    const ids = `<details class="ids"><summary>IDs</summary><dl class="facts"><dt>Project</dt><dd>${mono(s?.sourceProject || sim.lot.project)}</dd>${s ? `<dt>Session</dt><dd>${mono(s.session)}</dd>` : ''}</dl></details>`;
+    this.slot('facts', facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('') + `<dt></dt><dd>${ids}</dd>`);
 
-    const history = s ? [...s.history].reverse() : [];
+    const history = s ? [...s.history].reverse().slice(0, 8) : [];
     this.panel.querySelector('[data-slot="tl-title"]').hidden = !history.length;
     this.slot('timeline', history
       .map((e) => {
@@ -389,14 +435,14 @@ export class UI {
       .join(''));
 
     const flavor = sim.activity?.flavor ? sim.activity.label : null;
-    this.slot('sim', `<h4>${icon('sparkles')} Just for fun</h4>${flavor
-      ? `${escapeHtml(flavor)}: made up. The agent has nothing to do, so its Sim is taking a break.`
-      : 'Nothing made up right now. Everything this Sim does mirrors the real agent.'}`);
+    this.slot('sim', s && this.connectionState !== 'live' ? 'Last received observation · screen paused. Current activity unavailable.' : flavor ? `${icon('sparkles')} <b>${escapeHtml(flavor)}</b> is made up — the agent is idle.` : `${icon('check')} Everything shown is the real agent.`);
   }
 
   /** Mirror the inspected Sim's screen into the drawer every frame. */
   updatePreview() {
     if (!this.sim) return;
+    const caption = this.panel.querySelector('figcaption');
+    if (caption) caption.textContent = this.connectionState === 'live' ? 'Observed screen · click to chat' : 'Last known screen · paused · click to chat';
     const c = this.panel.querySelector('.screen-preview');
     if (!c) return;
     const src = this.sim.screen.canvas;
@@ -408,12 +454,13 @@ export class UI {
 
   update({ sims, lots, camera, width, height, selected }) {
     const waiting = sims.filter((s) => s.state === 'waiting_for_user').sort((a, b) => b.waitSeconds - a.waitSeconds);
-    this.updateArrows(waiting, camera, width, height);
+    this.updateArrows(this.connectionState === 'live' ? waiting : [], camera, width, height);
 
     const now = performance.now();
     if (now - this.lastRender < 400) return;
     this.lastRender = now;
 
+    this.needs.querySelector('.needs-label').lastChild.textContent = this.connectionState === 'live' ? 'Needs you' : 'Last known requests';
     this.renderNeeds(waiting);
     this.renderRoster(sims, lots, selected);
     if (this.sim) {
@@ -426,16 +473,16 @@ export class UI {
     this.needs.hidden = waiting.length === 0;
     patchList(this.needsList, waiting, {
       key: (s) => s.key,
-      className: () => 'need',
+      className: (s) => `need${s.truth?.detail?.reason==='turn_complete'?' prompt-ready':''}`,
       html: (s) => `${portrait(s.look)}
         <span style="display:grid;text-align:left;line-height:1.1"><b>${escapeHtml(s.name)}</b><span class="why">${escapeHtml(stateText(s))} · ${escapeHtml(s.lot.name)}</span></span>
-        <time>${formatDuration(s.waitSeconds)}</time>`,
+        <time>${this.connectionState === 'live' ? formatDuration(s.waitSeconds) : 'last known'}</time>`,
     });
   }
 
   renderRoster(sims, lots, selected) {
     const live = sims.filter((s) => s.truth).length;
-    $('#roster-count').textContent = lots.length ? `${lots.length} folder${lots.length === 1 ? '' : 's'} · ${live} active` : '';
+    $('#roster-count').textContent = lots.length ? `${lots.length} home${lots.length === 1 ? '' : 's'} · ${live} ${this.connectionState === 'live' ? 'attached' : 'last known sessions'}` : '';
     if (!lots.length) {
       const html = `<div class="empty">No agents yet.<br>Start Claude Code or Codex in any project folder and its agent moves in here.<br><br>Want a tour first? Run <code>npm run demo</code>.</div>`;
       if (this.html.roster !== html) this.rosterBody.innerHTML = this.html.roster = html;
@@ -447,14 +494,16 @@ export class UI {
       tag: 'div',
       key: (lot) => lot.project,
       className: () => 'lot-group',
-      html: () => '<button class="lot-title"></button><div class="rows"></div>',
+      html: () => '<button class="lot-title"></button><div class="rows"></div><button class="roster-shelf">Conversation shelf</button><button class="work-home-button">Plan & briefing</button>',
     });
     for (const lot of lots) {
       const group = [...this.rosterBody.children].find((g) => g.dataset.key === lot.project);
+      group.querySelector('.roster-shelf').dataset.conversationHome = lot.project;
+      group.querySelector('.work-home-button').dataset.workHome = lot.project;
       const here = sims.filter((s) => s.lot === lot);
       const waitingHere = here.filter((s) => s.state === 'waiting_for_user').length;
       const activeHere = here.filter((s) => s.truth).length;
-      const meta = waitingHere ? `${waitingHere} need${waitingHere === 1 ? 's' : ''} you` : activeHere ? `${activeHere} working` : 'no sessions';
+      const meta = this.connectionState !== 'live' && activeHere ? `${activeHere} last known` : waitingHere ? `${waitingHere} need${waitingHere === 1 ? 's' : ''} you` : activeHere ? `${activeHere} working` : 'no sessions';
       const title = group.querySelector('.lot-title');
       const titleHtml = `<span class="swatch" style="background:${hex(lot.exterior)}"></span>${icon('house')}${escapeHtml(lot.name)}<span class="lot-meta">${meta}</span>`;
       if (title._html !== titleHtml) {
@@ -477,12 +526,13 @@ export class UI {
   rosterRow(s) {
     const cls = plumbobFor(s.state);
     const detail = s.truth ? s.act.detail : '';
-    const right = s.state === 'waiting_for_user' ? formatDuration(s.waitSeconds) : '';
+    const right = this.connectionState === 'live' && s.state === 'waiting_for_user' ? formatDuration(s.waitSeconds) : '';
     return `${portraitWithRing(s)}
       <span class="who"><b>${escapeHtml(s.name)} ${s.isVisitor ? '' : appChip(s.truth)}</b>
-        <span class="what">${icon(STATE_ICON[s.state])}${escapeHtml(stateText(s))}</span>
+        ${s.truth?.conversation ? `<span class="t conversation-title">${escapeHtml(conversationLabel(s.truth.conversation))}</span>` : ''}
+        <span class="what">${icon(STATE_ICON[s.state])}${escapeHtml(this.connectionState === 'live' || !s.truth ? stateText(s) : `Last known: ${stateText(s)}`)}</span>
         ${detail && !s.act.prose && !stateText(s).includes(detail) ? `<span class="t">${escapeHtml(detail)}</span>` : ''}</span>
-      ${right ? `<span class="state-pill s-${cls}">${right}</span>` : ''}`;
+      ${s.truth ? `<small class="observation-age">${escapeHtml(observedLabel(s.truth))}</small>` : ''}${right ? `<span class="state-pill s-${cls}">${right}</span>` : ''}`;
   }
 
   updateArrows(waiting, camera, width, height) {

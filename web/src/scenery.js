@@ -1,10 +1,12 @@
 // The neighborhood around the lots: terrain, hills, streets, lamps, grass, flowers, clouds.
 
 import * as THREE from 'three';
+import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { LOT_D, LOT_W } from './lot.js';
-import { PALETTE, box, buildLampPost, buildTree, ico, mergeStatic, rng } from './models.js';
+import { PALETTE, box, buildLampPost, buildTree, ico, mat, mergeStatic, rng } from './models.js';
 
 const wind = { value: 0 };
+export const DEFAULT_STREETS = ['Main Street', 'Oak Avenue', 'Maple Lane', 'Cedar Road', 'Willow Way', 'Birch Boulevard', 'Elm Court'];
 
 /** Inject a gentle wind sway into a material's vertex shader (higher vertices move more). */
 function addWind(material, strength = 0.12) {
@@ -31,6 +33,10 @@ function addWind(material, strength = 0.12) {
 export class Scenery {
   constructor(scene) {
     this.scene = scene;
+    // Surface detail for shared ground materials (fx.js): mottled grass and paving, worn asphalt.
+    mat(PALETTE.grassLot).userData.mottle = 0.16;
+    mat(PALETTE.sidewalk).userData.mottle = 0.07;
+    mat(PALETTE.asphalt, { roughness: 0.9 }).userData.asphalt = true;
     this.group = new THREE.Group();
     scene.add(this.group);
     this.rows = 0;
@@ -59,7 +65,7 @@ export class Scenery {
       const x = pos.getX(i);
       const z = pos.getZ(i);
       const dist = Math.hypot(x - cx, z - cz);
-      const rolling = THREE.MathUtils.smoothstep(dist, 70, 160);
+      const rolling = THREE.MathUtils.smoothstep(dist, 100, 180); // flat through the groves and pond, hills beyond
       pos.setY(i, -0.06 + n(x, z) * 2.4 * rolling);
     }
     // Color per triangle (flat facets).
@@ -132,8 +138,8 @@ export class Scenery {
   buildRow(row) {
     const r = rng(100 + row);
     const z = row * LOT_D + LOT_D / 2;
-    const x0 = -LOT_W / 2 - 14;
-    const x1 = LOT_W * 2.5 + 14;
+    const x0 = -LOT_W * 1.5 - 14; // reaches past the town square on the left
+    const x1 = LOT_W * 4.5 + 14; // reaches past downtown on the right
     const len = x1 - x0;
     const cx = (x0 + x1) / 2;
     const street = new THREE.Group();
@@ -182,9 +188,11 @@ export class Scenery {
       // Avoid rooms (in every lot of this row), the street, and the paths.
       const lx = ((x % LOT_W) + LOT_W) % LOT_W;
       const inLot = (lx < 8.2 || lx > LOT_W - 8.2) && Math.abs(zz - row * LOT_D) < 6.2;
-      const onStreet = Math.abs(zz - z) < 4.5;
+      // This row's street, and the previous row's (the band between rows overlaps it).
+      const onStreet = Math.abs(zz - z) < 4.5 || Math.abs(zz - (z - LOT_D)) < 4.5;
       const onPath = (lx < 1.4 || lx > LOT_W - 1.4) && zz - row * LOT_D > 4.5 && zz - row * LOT_D < 11;
-      return !inLot && !onStreet && !onPath;
+      const inDowntown = row === 0 && x > LOT_W * 2.5 - 1 && x < LOT_W * 4.5 + 1 && zz < 10.2;
+      return !inLot && !onStreet && !onPath && !inDowntown;
     };
     let placed = 0;
     for (let tries = 0; placed < count && tries < count * 6; tries++) {
@@ -216,6 +224,24 @@ export class Scenery {
       const left = i % 2 === 0;
       const t = buildTree(500 + row * 20 + i, left ? x0 - 2 - r() * 10 : x1 + 2 + r() * 10, row * LOT_D + (r() - 0.5) * 20);
       this.group.add(t);
+    }
+  }
+
+  /** Street name signs at the start of each row (names are the user's, from map mode). */
+  setStreetNames(names) {
+    this.streetLabels ??= [];
+    for (let row = 0; row < this.rows; row++) {
+      let label = this.streetLabels[row];
+      if (!label) {
+        const el = document.createElement('div');
+        el.className = 'street-sign';
+        label = new CSS2DObject(el);
+        label.position.set(-LOT_W / 2 + 0.5, 2.6, row * LOT_D + LOT_D / 2 - 3.2);
+        this.group.add(label);
+        this.streetLabels[row] = label;
+      }
+      const name = names[row] || DEFAULT_STREETS[row % DEFAULT_STREETS.length];
+      if (label.element.textContent !== name) label.element.textContent = name;
     }
   }
 

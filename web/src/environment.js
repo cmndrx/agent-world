@@ -5,16 +5,16 @@ import * as THREE from 'three';
 
 /** Palette keyframes by hour (0–24). Colors are interpolated between neighbors. */
 const KEYS = [
-  { h: 0, top: '#0a1230', horizon: '#223061', sun: '#a9bcff', sunI: 0.75, hemiSky: '#5668a8', hemiGround: '#24304a', hemiI: 1.0, exposure: 1.3 },
-  { h: 5.2, top: '#121c42', horizon: '#45406e', sun: '#a9bcff', sunI: 0.7, hemiSky: '#5a6aa8', hemiGround: '#28304a', hemiI: 1.0, exposure: 1.25 },
-  { h: 6.4, top: '#3b5a99', horizon: '#f2a38a', sun: '#ffb27a', sunI: 1.2, hemiSky: '#9fb6e8', hemiGround: '#6b5a52', hemiI: 0.9, exposure: 1.0 },
-  { h: 8, top: '#5b9be0', horizon: '#ffe0c2', sun: '#ffe2c0', sunI: 2.2, hemiSky: '#cfe2ff', hemiGround: '#8fa978', hemiI: 0.75, exposure: 1.0 },
-  { h: 12.5, top: '#4f9ae8', horizon: '#d6ecfb', sun: '#fff6e8', sunI: 2.5, hemiSky: '#e3f0ff', hemiGround: '#9cbf86', hemiI: 0.8, exposure: 1.0 },
-  { h: 16.5, top: '#5394dc', horizon: '#ffe6c8', sun: '#ffe7c4', sunI: 2.35, hemiSky: '#dbe8ff', hemiGround: '#9cb780', hemiI: 0.75, exposure: 1.0 },
-  { h: 18.4, top: '#4c6fb5', horizon: '#ffad72', sun: '#ffa262', sunI: 2.2, hemiSky: '#b9c3f0', hemiGround: '#7d7458', hemiI: 0.62, exposure: 1.02 },
-  { h: 19.6, top: '#26305f', horizon: '#e5717a', sun: '#ff6f5e', sunI: 0.9, hemiSky: '#7c74b8', hemiGround: '#3c3346', hemiI: 0.75, exposure: 1.05 },
-  { h: 20.8, top: '#0c1433', horizon: '#2c3166', sun: '#a9bcff', sunI: 0.7, hemiSky: '#5668a8', hemiGround: '#24304a', hemiI: 0.95, exposure: 1.25 },
-  { h: 24, top: '#0a1230', horizon: '#223061', sun: '#a9bcff', sunI: 0.75, hemiSky: '#5668a8', hemiGround: '#24304a', hemiI: 1.0, exposure: 1.3 },
+  { h: 0, top: '#081030', horizon: '#1d2a5c', sun: '#9fb4ff', sunI: 1.0, hemiSky: '#3d4f8f', hemiGround: '#1a2033', hemiI: 0.62, exposure: 1.18, gTint: '#e2e8ff', gSat: 1.05, gCon: 1.1 },
+  { h: 5.2, top: '#101a40', horizon: '#3f3b6a', sun: '#a9bcff', sunI: 0.9, hemiSky: '#4a5a98', hemiGround: '#221f33', hemiI: 0.62, exposure: 1.15, gTint: '#dfe2ff', gSat: 1.05, gCon: 1.08 },
+  { h: 6.4, top: '#3b5a99', horizon: '#f6a586', sun: '#ffaa70', sunI: 1.7, hemiSky: '#8fa6e0', hemiGround: '#7a5a48', hemiI: 0.6, exposure: 1.0, gTint: '#fff0e4', gSat: 1.12, gCon: 1.08 },
+  { h: 8, top: '#5598e2', horizon: '#ffe0c2', sun: '#ffe0b8', sunI: 2.9, hemiSky: '#a9c8f5', hemiGround: '#8a8a5e', hemiI: 0.5, exposure: 0.98, gTint: '#fff8ee', gSat: 1.16, gCon: 1.1 },
+  { h: 12.5, top: '#4a94e6', horizon: '#cfe7fa', sun: '#fff4e2', sunI: 3.1, hemiSky: '#a8c9f4', hemiGround: '#8fa86a', hemiI: 0.52, exposure: 0.95, gTint: '#fbfcff', gSat: 1.14, gCon: 1.12 },
+  { h: 16.5, top: '#4f8fda', horizon: '#ffe3c2', sun: '#ffe2b8', sunI: 2.9, hemiSky: '#a6c3f0', hemiGround: '#90a06a', hemiI: 0.5, exposure: 0.97, gTint: '#fff6ea', gSat: 1.15, gCon: 1.1 },
+  { h: 18.4, top: '#4a66b0', horizon: '#ffa565', sun: '#ffaa6c', sunI: 2.8, hemiSky: '#9ca8e2', hemiGround: '#7f7458', hemiI: 0.52, exposure: 1.05, gTint: '#fff1e2', gSat: 1.15, gCon: 1.1 },
+  { h: 19.6, top: '#24305f', horizon: '#e5717a', sun: '#ff6a58', sunI: 1.4, hemiSky: '#6a62a8', hemiGround: '#3a2c40', hemiI: 0.58, exposure: 1.06, gTint: '#ffdcd8', gSat: 1.15, gCon: 1.1 },
+  { h: 20.8, top: '#0b1333', horizon: '#26306a', sun: '#9fb4ff', sunI: 1.0, hemiSky: '#3d4f8f', hemiGround: '#1a2033', hemiI: 0.62, exposure: 1.16, gTint: '#e2e8ff', gSat: 1.05, gCon: 1.1 },
+  { h: 24, top: '#081030', horizon: '#1d2a5c', sun: '#9fb4ff', sunI: 1.0, hemiSky: '#3d4f8f', hemiGround: '#1a2033', hemiI: 0.62, exposure: 1.18, gTint: '#e2e8ff', gSat: 1.05, gCon: 1.1 },
 ];
 
 export const TIME_PRESETS = {
@@ -40,6 +40,7 @@ const SKY_FRAG = /* glsl */ `
   uniform vec3 sunColor;
   uniform vec3 sunDir;
   uniform float night;
+  uniform vec3 moonDir;
   varying vec3 vDir;
 
   float hash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
@@ -54,6 +55,10 @@ const SKY_FRAG = /* glsl */ `
     float disk = smoothstep(0.9993, 0.9997, s);
     float glow = pow(s, 12.0) * 0.45 + pow(s, 160.0) * 0.6;
     col += sunColor * (glow * (1.0 - night * 0.6) + disk * (1.0 - night * 0.7) * 2.5);
+
+    // The moon: a soft disc with a faint halo, up while the sun is down.
+    float m = max(dot(d, normalize(moonDir)), 0.0);
+    col += vec3(0.85, 0.9, 1.0) * (smoothstep(0.99955, 0.99975, m) * 1.6 + pow(m, 90.0) * 0.18) * night;
 
     // Stars at night.
     vec3 cell = floor(d * 220.0);
@@ -91,6 +96,9 @@ function sample(hour) {
     hemiGround: mixC('hemiGround'),
     hemiI: mixN('hemiI'),
     exposure: mixN('exposure'),
+    gTint: mixC('gTint'),
+    gSat: mixN('gSat'),
+    gCon: mixN('gCon'),
   };
 }
 
@@ -109,6 +117,8 @@ export class Environment {
       sunColor: { value: new THREE.Color() },
       sunDir: { value: new THREE.Vector3(0, 1, 0) },
       night: { value: 0 },
+      // Low over the far side of the neighborhood, where the camera usually looks.
+      moonDir: { value: new THREE.Vector3(0.3, 0.3, -0.9).normalize() },
     };
     const skyMat = new THREE.ShaderMaterial({
       uniforms: this.skyUniforms,
@@ -177,7 +187,8 @@ export class Environment {
 
     // Sun arcs east → west; at night the key light becomes a cool moon high in the sky.
     const sunDir = this.sunDir.set(-Math.cos(theta) * 0.85, Math.max(elevation, -0.2) * 1.25, 0.55).normalize();
-    const lightDir = elevation > 0.05 ? sunDir : new THREE.Vector3(0.35, 1, 0.55).normalize();
+    // At night the key light is the moon, low enough to model shapes and throw soft blue shadows.
+    const lightDir = elevation > 0.05 ? sunDir : new THREE.Vector3(0.45, 0.85, 0.5).normalize();
 
     this.skyUniforms.topColor.value.copy(p.top);
     this.skyUniforms.horizonColor.value.copy(p.horizon);
@@ -194,7 +205,20 @@ export class Environment {
     this.sun.target.position.copy(focus);
     this.scene.fog.color.copy(p.horizon).lerp(p.top, 0.35);
     this.renderer.toneMappingExposure = p.exposure;
+    this.grade = { tint: p.gTint, saturation: p.gSat, contrast: p.gCon };
     this.sky.position.copy(focus);
+
+    // Weather ambience (seasons.js): overcast skies go gray, the sun dims, the air thickens a little.
+    const o = this.overcast || 0;
+    if (o > 0.001) {
+      const gray = new THREE.Color(0x9aa6b4).multiplyScalar(1 - this.night * 0.75);
+      this.skyUniforms.topColor.value.lerp(gray, 0.65 * o);
+      this.skyUniforms.horizonColor.value.lerp(gray, 0.5 * o);
+      this.sun.intensity *= 1 - 0.6 * o;
+      this.hemi.intensity *= 1 - 0.15 * o;
+      this.scene.fog.color.lerp(gray, 0.6 * o);
+    }
+    this.scene.fog.density = (0.0032 + 0.007 * o) * (this.fogScale ?? 1);
 
     // Regenerate image-based lighting when the sky has changed noticeably.
     if (Math.abs(this.hour - this.lastEnvHour) > 0.25) {

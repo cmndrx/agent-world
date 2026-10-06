@@ -44,3 +44,12 @@ test('can start inside furniture (standing up from the couch)', () => {
   const path = nav.findPath({ x: 2, z: 3.8 }, { x: -5, z: 0 });
   assert.ok(path.length > 1);
 });
+
+test('reachableFrom finds what a wall cuts off', () => {
+  const nav = new NavGrid({ x0: 0, z0: 0, x1: 10, z1: 10 }, 0.25, 0.25);
+  nav.addRect([4.8, 0, 5.2, 10]); // a full-height wall at x≈5
+  const reach = nav.reachableFrom({ x: 1, z: 5 });
+  const at = (x, z) => { const [i, j] = nav.toCell(x, z); return reach[j * nav.w + i]; };
+  assert.equal(at(2, 2), 1);
+  assert.equal(at(8, 8), 0);
+});

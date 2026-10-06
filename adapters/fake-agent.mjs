@@ -57,7 +57,8 @@ async function agent(i) {
   const { source, provider, app } = PROVIDERS[i % PROVIDERS.length];
   const project = PROJECTS[i % PROJECTS.length];
   const session = `fake-${Date.now().toString(36)}-${i}`;
-  const base = { source, provider, app, project, session };
+  // x_synthetic: these are not real agents, so they never grow the city outside demo mode.
+  const base = { source, provider, app, project, session, x_synthetic: true };
   const state = (s, detail) => emit({ ...base, kind: 'state', state: s, detail });
 
   emit({ ...base, kind: 'session_start' });

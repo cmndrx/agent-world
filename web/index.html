@@ -23,6 +23,12 @@
     <header id="topbar">
       <div class="brand glass"><span class="gem small"></span><span>Agent World</span></div>
       <div id="status" class="chip glass" data-state="connecting"><span class="dot"></span><span class="text">Connecting…</span></div>
+      <button id="work-open" class="chip glass">Work</button>
+      <div id="focus-status" class="chip glass"><button id="focus-home">All homes</button><button id="focus-clear" hidden aria-label="Clear project focus">×</button></div>
+      <button id="play-open" class="chip glass">Play</button>
+      <button id="conversations-open" class="chip glass icon-chip" title="Conversations" aria-label="Conversations"></button>
+      <button id="sources-open" class="chip glass icon-chip" title="Connections & getting started" aria-label="Connections & getting started"></button>
+      <button id="bricks-open" class="chip glass" title="Bricks and home levels: earned from your decisions, never from agent activity"></button>
       <div id="clock" class="chip glass" title="Time of day"></div>
       <div id="demo-chip" class="chip glass" hidden title="These agents are simulated. Run npm run dev to watch your real Claude Code and Codex sessions.">Demo<span class="long"> · simulated agents</span></div>
     </header>
@@ -60,26 +66,38 @@
         <div class="menu glass" data-for="walls" hidden></div>
       </div>
       <div class="menu-wrap">
+        <button class="icon-btn" data-menu="weather" title="Season and weather (ambience only)"></button>
+        <div class="menu glass" data-for="weather" hidden></div>
+      </div>
+      <div class="menu-wrap">
         <button class="icon-btn" data-menu="quality" title="Graphics quality"></button>
         <div class="menu glass" data-for="quality" hidden></div>
       </div>
       <button class="icon-btn" data-action="sound" title="Sounds"></button>
       <span class="sep"></span>
+      <button class="icon-btn" data-action="build" title="Build mode: decorate homes (B)"></button>
+      <button class="icon-btn" data-action="map" title="Neighborhood map: move houses, name streets (M)"></button>
+      <button class="icon-btn" data-action="city" title="City census: downtown grows from the kinds of work your agents do"></button>
+      <button class="icon-btn" data-action="wardrobe" title="Change your outfit"></button>
+      <button class="icon-btn" data-action="photo" title="Photo mode: take pictures of your world (P)"></button>
+      <span class="sep"></span>
       <div class="menu-wrap">
         <button class="icon-btn" data-menu="help" title="Controls"></button>
         <div class="menu glass help" data-for="help" hidden>
-          <h3>Controls</h3>
+          <h3>Keys</h3>
           <dl>
-            <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Walk (hold <kbd>Shift</kbd> to run)</dd>
-            <dt><kbd>Q</kbd><kbd>E</kbd> or right-drag</dt><dd>Rotate camera</dd>
-            <dt>Scroll</dt><dd>Zoom</dd>
-            <dt>Click / <kbd>Space</kbd></dt><dd>Inspect a Sim</dd>
-            <dt><kbd>Esc</kbd></dt><dd>Close panel</dd>
+            <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Walk · <kbd>Shift</kbd> runs</dd>
+            <dt><kbd>Q</kbd><kbd>E</kbd></dt><dd>Turn camera · scroll zooms</dd>
+            <dt><kbd>Space</kbd></dt><dd>Inspect nearest Sim</dd>
+            <dt><kbd>B</kbd> <kbd>M</kbd> <kbd>P</kbd></dt><dd>Build · Map · Photo</dd>
+            <dt><kbd>Esc</kbd></dt><dd>Close</dd>
           </dl>
-          <h3 style="margin-top:14px">What you're looking at</h3>
-          <p><b>Each house is a project folder.</b> Each Sim is a Claude Code or Codex session working in it. A Sim with a laptop is a helper (sub-agent) that its agent started.</p>
-          <p><b>Bubbles, screens and the diamond above each head are real</b>: they show what the agent is doing right now, with the actual files and commands. A yellow diamond means it needs you.</p>
-          <p>Coffee breaks and couch time are just for fun while an agent is idle.</p>
+          <h3 style="margin-top:12px">What you see</h3>
+          <ul class="legend">
+            <li><span class="lg house"></span>A house is a project</li>
+            <li><span class="lg gem"></span>Yellow diamond: needs you</li>
+            <li><span class="lg fun"></span>Coffee, couch, pets: just for fun</li>
+          </ul>
         </div>
       </div>
     </nav>

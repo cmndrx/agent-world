@@ -2,6 +2,7 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { patchCharacterMaterial } from './fx.js';
 
 export const PALETTE = {
   grass: 0x86c06a,
@@ -118,6 +119,39 @@ const HAIR = [0x2b2118, 0x4a2f1d, 0x8b4a24, 0xd8b26a, 0xb9bec7, 0x23314f, 0xc056
 const SHIRT = [0xef8354, 0x4f86c6, 0x5fbf73, 0xe6c84f, 0x9b7ede, 0xe56b8a, 0x3fb7b0, 0xf2a65a, 0xf4f1ea, 0x334155];
 const PANTS = [0x34405a, 0x5b4636, 0x2f3b2f, 0x4b4b63, 0x6b5b4b, 0x22252e, 0x7b8fa6];
 
+// ---- Light pools ------------------------------------------------------------------
+
+/**
+ * Warm light spilling onto the ground at night (windows, doors, shop fronts). One shared additive
+ * material; `setLightPools(night)` fades them all in and out.
+ */
+let poolMat = null;
+function lightPoolMaterial() {
+  if (poolMat) return poolMat;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.45, 'rgba(255,255,255,0.45)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  poolMat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), color: 0xff9440, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+  return poolMat;
+}
+export function buildLightPool(w, d, x, y, z) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), lightPoolMaterial());
+  m.rotation.x = -Math.PI / 2;
+  m.position.set(x, y, z);
+  m.renderOrder = 2;
+  m.userData.dynamic = true;
+  return m;
+}
+export function setLightPools(night) {
+  lightPoolMaterial().opacity = Math.max(0, night - 0.15) * 0.6;
+}
+
 // ---- Materials and primitives ----------------------------------------------------
 
 const materials = new Map();
@@ -189,9 +223,61 @@ export function rng(seed) {
   };
 }
 
+// ---- Merging helpers ----------------------------------------------------------------
+//
+// Plain single-color materials are merged across colors: each mesh's color is baked into a vertex color
+// and the result shares one material per (roughness, metalness, shading). Anything special keeps its own
+// material: textures, transparency, glow, surface-detail flags (fx.js), and seasonal foliage/ground
+// colors (seasons.js recolors those materials in place).
+
+export const SEASONAL_COLORS = new Set([
+  PALETTE.leaf, PALETTE.leafLight, PALETTE.leafDark, 0x4c9a59, 0x9bd06b, 0x7fb866, 0x6aa65a, 0x8fc477, 0x5f9b57, 0x6fb257,
+  PALETTE.grassLot, 0x8fca70,
+]);
+const vcMaterials = new Map();
+function bakeable(m) {
+  if (!m?.isMeshStandardMaterial || m.isMeshPhysicalMaterial || m.map || m.transparent || m.vertexColors || m.opacity !== 1) return false;
+  if (m.emissive.getHex() !== 0 || m.envMap || m.normalMap) return false;
+  const u = m.userData;
+  if (u.mottle || u.asphalt || u.siding || u.bands || u.sway || u.noBake || u.skyline) return false;
+  return !SEASONAL_COLORS.has(u.baseColor ?? m.color.getHex());
+}
+function vcMaterial(m) {
+  const key = `${m.roughness}|${m.metalness}|${m.flatShading}|${m.userData.rim ? 1 : 0}`;
+  let vc = vcMaterials.get(key);
+  if (!vc) {
+    vc = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: m.roughness, metalness: m.metalness, flatShading: m.flatShading });
+    if (m.userData.rim) patchCharacterMaterial(vc);
+    vcMaterials.set(key, vc);
+  }
+  return vc;
+}
+/** Bucket key and target material for a mesh being merged. */
+function bucketFor(o) {
+  if (bakeable(o.material)) {
+    const material = vcMaterial(o.material);
+    return { key: `vc|${material.uuid}|${o.castShadow}`, material, color: o.material.color };
+  }
+  return { key: `${o.material.uuid}|${o.castShadow}`, material: o.material, color: null };
+}
+/** A non-indexed copy of a geometry in a target space, with only the attributes merging needs. */
+function prepGeometry(geometry, matrix, color) {
+  const g = geometry.index ? geometry.toNonIndexed() : geometry.clone();
+  for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
+  if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+  g.applyMatrix4(matrix);
+  if (color) {
+    const n = g.attributes.position.count;
+    const c = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) c.set([color.r, color.g, color.b], i * 3);
+    g.setAttribute('color', new THREE.BufferAttribute(c, 3));
+  }
+  return g;
+}
+
 /**
- * Merge every static mesh under `group` into one mesh per material (fewer draw calls).
- * Meshes flagged `userData.dynamic` are left alone.
+ * Merge every static mesh under `group` into as few meshes as possible (fewer draw calls).
+ * Meshes flagged `userData.dynamic` (or under a dynamic parent) are left alone.
  */
 export function mergeStatic(group) {
   group.updateMatrixWorld(true);
@@ -203,13 +289,11 @@ export function mergeStatic(group) {
     let dyn = false;
     for (let p = o.parent; p && p !== group; p = p.parent) if (p.userData.dynamic) dyn = true;
     if (dyn) return;
-    const g = (o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone());
-    for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
-    if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
-    g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld));
-    const key = `${o.material.uuid}|${o.castShadow}`;
-    if (!buckets.has(key)) buckets.set(key, { material: o.material, cast: o.castShadow, geos: [] });
-    buckets.get(key).geos.push(g);
+    if (o.userData.keep) return;
+    const b = bucketFor(o);
+    const g = prepGeometry(o.geometry, new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld), b.color);
+    if (!buckets.has(b.key)) buckets.set(b.key, { material: b.material, cast: o.castShadow, geos: [] });
+    buckets.get(b.key).geos.push(g);
     remove.push(o);
   });
   for (const o of remove) o.parent.remove(o);
@@ -252,20 +336,19 @@ export function lookFromSeed(seed) {
 function mergeDirect(group) {
   const buckets = new Map();
   for (const o of [...group.children]) {
-    if (!o.isMesh || o.userData.keep) continue;
-    const key = o.material.uuid;
-    if (!buckets.has(key)) buckets.set(key, []);
-    buckets.get(key).push(o);
+    if (!o.isMesh || o.userData.keep || o.children.length) continue;
+    const b = bucketFor(o);
+    if (!buckets.has(b.key)) buckets.set(b.key, { material: b.material, items: [] });
+    buckets.get(b.key).items.push({ o, color: b.color });
   }
-  for (const meshes of buckets.values()) {
-    if (meshes.length < 2) continue;
-    const geos = meshes.map((m) => {
-      m.updateMatrix();
-      const g = (m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone()).applyMatrix4(m.matrix);
-      for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
-      return g;
+  for (const { material, items } of buckets.values()) {
+    if (items.length < 2 && !items[0]?.color) continue;
+    const meshes = items.map((i) => i.o);
+    const geos = items.map(({ o, color }) => {
+      o.updateMatrix();
+      return prepGeometry(o.geometry, o.matrix, color);
     });
-    const merged = new THREE.Mesh(mergeGeometries(geos), meshes[0].material);
+    const merged = new THREE.Mesh(mergeGeometries(geos), material);
     merged.castShadow = true;
     merged.receiveShadow = true;
     for (const m of meshes) group.remove(m);
@@ -273,15 +356,29 @@ function mergeDirect(group) {
   }
 }
 
+/** Merge every joint's direct meshes in an articulated model (pets, props) without breaking the rig. */
+export function mergeRig(root) {
+  const groups = [];
+  root.traverse((o) => (o.isGroup || o === root) && !o.userData.dynamic && groups.push(o));
+  for (const g of groups) mergeDirect(g);
+  return root;
+}
+
 /**
  * A stylized "toy" person facing +z: soft capsules and spheres, big friendly head, expressive face.
  * The skeleton (hip 0.9, shoulders 0.62 above the hip, arm 0.31 + 0.30) is fixed: desk IK in sim.js
  * and seating depend on it. Returns the root plus articulated parts.
  *
- * Extra options: hat (beanie color), headphones, backpack.
+ * Extra options: hat (beanie color), headphones, backpack. `look.accessory` (wardrobe) may add
+ * glasses, a cap, a beanie, headphones or a hair flower.
  */
 export function buildPerson(look, { scale = 1, hat = null, headphones = false, backpack = false } = {}) {
-  const soft = (color, roughness = 0.62) => mat(color, { roughness, flat: false });
+  const soft = (color, roughness = 0.62) => patchCharacterMaterial(mat(color, { roughness, flat: false }));
+  const accessory = look.accessory || 'none';
+  const accent = new THREE.Color(look.shirt).multiplyScalar(0.72).getHex();
+  if (accessory === 'beanie' && hat == null) hat = accent;
+  if (accessory === 'headphones') headphones = true;
+  const cap = accessory === 'cap' && hat == null;
   const skin = soft(look.skin, 0.5);
   const skinShade = soft(new THREE.Color(look.skin).multiplyScalar(0.86).getHex(), 0.5);
   const shirt = soft(look.shirt, 0.7);
@@ -400,25 +497,21 @@ export function buildPerson(look, { scale = 1, hat = null, headphones = false, b
   const eyes = new THREE.Group();
   eyes.position.set(0, 0.3, 0.262);
   head.add(eyes);
+  // Both eyes live directly in `eyes` (blinks scale the group), so they merge into one draw.
+  const cheekMat = soft(0xff8f8f, 0.8).clone();
+  cheekMat.transparent = true;
+  cheekMat.opacity = 0.45;
   for (const s of [1, -1]) {
-    const e = new THREE.Group();
-    e.position.x = s * 0.1;
-    e.add(sphere(0.046, dark, 0, 0, 0, 0.82, 1.12, 0.5));
-    const glint = sphere(0.014, white, 0.012, 0.02, 0.022);
-    glint.userData.keep = true;
-    e.add(glint);
-    eyes.add(e);
+    eyes.add(sphere(0.046, dark, s * 0.1, 0, 0, 0.82, 1.12, 0.5));
+    eyes.add(sphere(0.014, white, s * 0.1 + 0.012, 0.02, 0.022));
     const brow = capsule(0.013, 0.05, hair, s * 0.1, 0.385, 0.27);
     brow.rotation.z = Math.PI / 2 + s * 0.12;
     head.add(brow);
-    const cheek = sphere(0.045, soft(0xff8f8f, 0.8), s * 0.17, 0.21, 0.245, 1, 0.6, 0.3);
-    cheek.material = cheek.material.clone();
-    cheek.material.transparent = true;
-    cheek.material.opacity = 0.45;
+    const cheek = sphere(0.045, cheekMat, s * 0.17, 0.21, 0.245, 1, 0.6, 0.3);
     cheek.castShadow = false;
-    cheek.userData.keep = true;
     head.add(cheek);
   }
+  mergeDirect(eyes);
   // Mouth: a smile, plus an open "o" used for waving/cheering.
   const mouthMat = soft(0x6b2a2a, 0.4);
   const smile = mesh(new THREE.TorusGeometry(0.038, 0.009, 6, 14, Math.PI), mouthMat, 0, 0.185, 0.283);
@@ -437,7 +530,17 @@ export function buildPerson(look, { scale = 1, hat = null, headphones = false, b
     head.add(m);
     return m;
   };
-  if (hat) {
+  if (cap) {
+    // Baseball cap: a crown over the skull and a brim facing forward.
+    const crown = mesh(new THREE.SphereGeometry(0.325, 24, 14, 0, Math.PI * 2, 0, Math.PI * 0.46), soft(accent, 0.7), 0, 0.32, -0.01);
+    crown.rotation.x = -0.12;
+    head.add(crown);
+    const brim = mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.025, 20, 1, false, -Math.PI / 2, Math.PI), soft(accent, 0.7), 0, 0.42, 0.2);
+    brim.scale.set(1, 1, 1.3);
+    brim.rotation.x = 0.12;
+    head.add(brim);
+    head.add(sphere(0.03, soft(accent, 0.7), 0, 0.64, -0.02));
+  } else if (hat) {
     dome(0.325, -0.18, 0.5);
     const band = mesh(new THREE.TorusGeometry(0.31, 0.04, 8, 28), soft(new THREE.Color(hat).multiplyScalar(0.8).getHex(), 0.8), 0, 0.36, -0.03);
     band.rotation.x = Math.PI / 2 - 0.18;
@@ -477,6 +580,28 @@ export function buildPerson(look, { scale = 1, hat = null, headphones = false, b
       head.add(sphere(0.1, hair, -0.1, 0.5, 0.17, 1.5, 0.6, 0.9));
     }
   }
+  if (accessory === 'glasses') {
+    const frame = soft(0x1f2430, 0.3);
+    for (const s of [1, -1]) {
+      const ring = mesh(new THREE.TorusGeometry(0.062, 0.012, 8, 20), frame, s * 0.1, 0.3, 0.3);
+      ring.userData.keep = true;
+      head.add(ring);
+      const arm = capsule(0.008, 0.2, frame, s * 0.24, 0.31, 0.16);
+      arm.rotation.x = Math.PI / 2;
+      head.add(arm);
+    }
+    const bridge = capsule(0.008, 0.05, frame, 0, 0.31, 0.305);
+    bridge.rotation.z = Math.PI / 2;
+    head.add(bridge);
+  }
+  if (accessory === 'flower') {
+    const petal = soft(0xff8fab, 0.6);
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      head.add(sphere(0.035, petal, 0.24 + Math.cos(a) * 0.04, 0.5 + Math.sin(a) * 0.04, 0.12));
+    }
+    head.add(sphere(0.025, soft(0xffd166, 0.6), 0.24, 0.5, 0.135));
+  }
   if (headphones) {
     const band = mesh(new THREE.TorusGeometry(0.33, 0.025, 8, 24, Math.PI), soft(0x2a2f3c, 0.4), 0, 0.33, 0);
     head.add(band);
@@ -494,6 +619,7 @@ export function buildPerson(look, { scale = 1, hat = null, headphones = false, b
   badge.rotation.z = Math.PI / 2;
   badge.position.set(0.11, 0.5, 0.19);
   badge.visible = false;
+  badge.userData.keep = true; // recolored per provider and shown/hidden at runtime
   spine.add(badge);
 
   root.scale.setScalar(scale);
@@ -516,6 +642,52 @@ export function buildPerson(look, { scale = 1, hat = null, headphones = false, b
     elbowL: AL.elbow,
     elbowR: AR.elbow,
   };
+}
+
+/**
+ * Work clothes on the spine (play layer): an apron in the workplace color for a role, or a lanyard with an
+ * ID card for an intern. Sits below the provider badge so that stays visible.
+ */
+export function buildUniform(kind, color, build = 1, shirt = null) {
+  const g = new THREE.Group();
+  const soft = (c) => patchCharacterMaterial(mat(c, { roughness: 0.7, flat: false }));
+  // Keep the apron readable against a similar shirt: darken it when the colors are close.
+  if (shirt != null) {
+    const a = new THREE.Color(color);
+    const b = new THREE.Color(shirt);
+    if (Math.abs(a.r - b.r) + Math.abs(a.g - b.g) + Math.abs(a.b - b.b) < 0.45) color = a.multiplyScalar(0.55).getHex();
+  }
+  if (kind === 'apron') {
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(0.32 * build, 0.3, 0.025), soft(color));
+    panel.position.set(0, 0.27, 0.215 * build);
+    const trim = new THREE.Mesh(new THREE.BoxGeometry(0.33 * build, 0.022, 0.03), soft(0xfbfbfb));
+    trim.position.set(0, 0.415, 0.216 * build);
+    g.add(trim);
+    const pocket = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.07, 0.01), soft(new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.35).getHex()));
+    pocket.position.set(0.05, 0.23, 0.232 * build);
+    g.add(panel, pocket);
+    for (const s of [1, -1]) {
+      const strap = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.3, 0.02), soft(color));
+      strap.position.set(s * 0.1 * build, 0.55, 0.19 * build);
+      strap.rotation.z = s * 0.25;
+      g.add(strap);
+    }
+  } else if (kind === 'lanyard') {
+    for (const s of [1, -1]) {
+      const strap = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.24, 0.012), soft(color));
+      strap.position.set(-0.04 + s * 0.045, 0.56, 0.2 * build);
+      strap.rotation.z = s * 0.35;
+      g.add(strap);
+    }
+    const card = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.012), soft(0xfbfbfb));
+    card.position.set(-0.05, 0.42, 0.222 * build);
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.025, 0.014), soft(color));
+    stripe.position.set(-0.05, 0.455, 0.223 * build);
+    g.add(card, stripe);
+  }
+  g.traverse((o) => o.isMesh && (o.castShadow = true));
+  mergeDirect(g);
+  return g;
 }
 
 /** The classic floating diamond. Emissive so the bloom pass makes it glow. */

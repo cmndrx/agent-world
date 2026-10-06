@@ -1,3 +1,5 @@
+import {canPromptFromStatus} from '../../shared/agent-view.mjs';
+import { observedLabel } from '../../shared/freshness.mjs';
 // A Sim: one persistent character (or a visiting sub-agent) in a lot.
 //
 // Truth drives *where* a Sim is, *what* is on its screen, and *how* it moves. Agent work happens at
@@ -11,7 +13,8 @@ import { plumbobFor } from '../../shared/schema.mjs';
 import { activityKey, appName, resolveActivity } from './activity.js';
 import { buildLaptop } from './furniture.js';
 import { icon, STATE_ICON } from './icons.js';
-import { buildContactShadow, buildPerson, buildPlumbob, lookFromSeed, PLUMBOB_COLORS, PROVIDER_COLORS } from './models.js';
+import { buildContactShadow, buildPerson, buildPlumbob, lookFromSeed, PLUMBOB_COLORS, PROVIDER_COLORS, buildUniform } from './models.js';
+import { conversationLabel } from '../../shared/conversations.mjs';
 import { Screen } from './screens.js';
 
 const SPEED = 2.5;
@@ -109,7 +112,9 @@ export class Sim {
     this.parent = parent;
     this.isVisitor = !!parent;
     this.hash = hashStr(key);
-    this.look = lookFromSeed(seed);
+    this.baseLook = lookFromSeed(seed);
+    this.look = this.baseLook;
+    this.lookKey = '';
 
     this.parts = buildPerson(this.look, this.isVisitor ? { scale: 0.8, hat: 0xf2b134 } : {});
     this.root = this.parts.root;
@@ -178,7 +183,34 @@ export class Sim {
 
   get name() {
     if (this.character) return this.character.name;
-    return this.roleName ? `${this.roleName} helper` : 'Helper';
+    const helper = this.roleName ? `${this.roleName} helper` : 'Helper';
+    // Hired helper types get a staff name; the observed helper type always stays visible.
+    return this.roleInfo?.staffName ? `${this.roleInfo.staffName} · ${helper}` : helper;
+  }
+
+  /**
+   * Work role (play layer, derived from kinds of observed work; shared/city.mjs): an apron in the workplace
+   * color, or an intern's lanyard. `info` = { title, color, kind: 'apron'|'lanyard'|null, staffName, why, intern }.
+   */
+  setRole(info) {
+    const key = JSON.stringify(info || null);
+    if (key === this.roleKey) return;
+    this.roleKey = key;
+    this.roleInfo = info;
+    this.applyUniform();
+  }
+
+  applyUniform() {
+    if (this.uniform) {
+      this.uniform.parent?.remove(this.uniform);
+      this.uniform.traverse((o) => o.isMesh && o.geometry.dispose());
+      this.uniform = null;
+    }
+    const info = this.roleInfo;
+    if (!info?.kind || this.look.uniform === false) return;
+    this.uniform = buildUniform(info.kind, info.color, this.look.build || 1, this.look.shirt);
+    this.uniform.traverse((o) => (o.userData.simKey = this.key));
+    this.parts.spine.add(this.uniform);
   }
 
   /** Truth state, or `off_duty` when no session is attached. */
@@ -208,10 +240,7 @@ export class Sim {
     m.color.setHex(color);
     m.emissive.setHex(color);
 
-    const badge = this.parts.badge;
-    const providerColor = session && PROVIDER_COLORS[session.provider];
-    badge.visible = !!providerColor;
-    if (providerColor) badge.material.color.setHex(providerColor);
+    this.applyBadge();
 
     // What the agent is doing → screen + pose.
     this.act = resolveActivity(session);
@@ -220,7 +249,7 @@ export class Sim {
       this.actKey = key;
       this.actT0 = performance.now() / 1000;
     }
-    this.screen.set(this.act, { project: this.lot.name, provider: session?.provider, source: session?.source, app: appName(session) });
+    this.screen.set(this.act, { project: this.lot.name, provider: session?.provider, source: session?.source, app: appName(session), conversation: session?.conversation ? conversationLabel(session.conversation) : null });
 
     if (this.state === 'waiting_for_user' && session.detail?.reason === 'turn_complete' && prevState !== 'off_duty' && session.since !== prevSince) {
       this.cheerUntil = performance.now() / 1000 + 1.8;
@@ -304,6 +333,7 @@ export class Sim {
   // ---- Per frame ------------------------------------------------------------
 
   update(dt, t) {
+    if (this.truth && this.observationConnected === false) { this.plumbob.userData.material.color.setHex(0x9299a5); this.plumbob.userData.material.emissive.setHex(0x9299a5); this.plumbob.userData.material.emissiveIntensity = 0.25; this.updateLabel(); return; }
     if (!this.activity) this.decide();
     const now = performance.now() / 1000;
     this.needs.energy = Math.max(0, this.needs.energy - dt * 0.012);
@@ -647,27 +677,70 @@ export class Sim {
 
   updateLabel() {
     const state = this.state;
-    let text = this.act.label;
-    if (state === 'waiting_for_user') text = `${text} · ${formatDuration(this.waitSeconds)}`;
+    let text = this.observationConnected === false && this.truth ? `Last known: ${this.act.label} · ${observedLabel(this.truth)}` : this.act.label;
+    if (this.observationConnected !== false && state === 'waiting_for_user') text = `${text} · ${formatDuration(this.waitSeconds)}`;
     const target = this.act.detail;
     const showDetail = (this.expanded || this.selected || this.hovered) && target && state !== 'off_duty' && !text.includes(target);
-    const compact = this.labelMode === 'compact' && !this.selected && !this.hovered && state !== 'waiting_for_user';
+    const compact = this.observationConnected !== false && this.labelMode === 'compact' && !this.selected && !this.hovered && state !== 'waiting_for_user';
+    // A chip keeps the truth (state icon and color) plus a name; the full bubble adds what and where.
+    const chip = this.observationConnected !== false && this.labelMode === 'chip' && !compact;
     const html = compact
       ? `<span class="b-icon">${icon(STATE_ICON[state])}</span>`
-      : `<span class="b-icon">${icon(STATE_ICON[state])}</span>` +
-        `<span class="b-text"><b>${escapeHtml(this.name)}</b><span class="b-state">${escapeHtml(text)}</span>` +
+      : chip
+        ? `<span class="b-icon">${icon(STATE_ICON[state])}</span><span class="b-text"><b>${escapeHtml(this.name)}</b></span>`
+        : `<span class="b-icon">${icon(STATE_ICON[state])}</span>` +
+        `<span class="b-text"><b>${escapeHtml(this.name)}</b>${canPromptFromStatus(this.truth)?`<button type="button" class="b-state" data-prompt-sim aria-label="${escapeHtml(text)} · Open chat">${escapeHtml(text)}</button>`:`<span class="b-state">${escapeHtml(text)}</span>`}` +
+        (this.truth?.conversation ? `<span class="b-conversation">${escapeHtml(conversationLabel(this.truth.conversation))}</span>` : '') +
         (showDetail ? `<span class="b-target${this.act.prose ? ' prose' : ''}">${escapeHtml(target)}</span>` : '') +
         `</span>`;
     if (html !== this.labelHtml) {
       this.bubbleEl.innerHTML = html;
       this.labelHtml = html;
+      this.labelSize = null; // re-measured by the declutter pass
     }
-    const cls = `bubble s-${plumbobFor(state)}${this.isVisitor ? ' visitor' : ''}${this.selected ? ' selected' : ''}${compact ? ' compact' : ''}${this.labelMode === 'hidden' ? ' hidden' : ''}`;
-    if (this.bubbleEl.className !== cls) this.bubbleEl.className = cls;
+    const cls = `bubble${this.observationConnected === false && this.truth ? ' observation-stale' : ''} s-${plumbobFor(state)}${this.isVisitor ? ' visitor' : ''}${this.selected ? ' selected' : ''}${compact ? ' compact' : ''}${chip ? ' chip' : ''}${this.labelMode === 'hidden' ? ' hidden' : ''}${this.crowded ? ' crowded' : ''}${this.labelDy > 2 ? ' shifted' : ''}`;
+    if (this.bubbleEl.className !== cls) {
+      this.bubbleEl.className = cls;
+      this.labelSize = null;
+    }
   }
 
   worldPosition() {
     return this.lot.toWorld(this.pos.x, this.pos.y);
+  }
+
+  /** Provider badge on the chest (cosmetic): shown while a session is attached. */
+  applyBadge() {
+    const badge = this.parts.badge;
+    const providerColor = this.truth && PROVIDER_COLORS[this.truth.provider];
+    badge.visible = !!providerColor;
+    if (providerColor) badge.material.color.setHex(providerColor);
+  }
+
+  /**
+   * Apply wardrobe overrides (hex colors and options from shared/style.mjs) on top of the seeded look.
+   * Rebuilds the body in place; position, pose, plumbob, label and laptop carry over.
+   */
+  setLook(overrides) {
+    const key = JSON.stringify(overrides || {});
+    if (key === this.lookKey) return;
+    this.lookKey = key;
+    this.look = { ...this.baseLook, ...lookFromOverrides(overrides) };
+    const old = this.root;
+    const oldBody = this.parts.body;
+    const parts = buildPerson(this.look, this.isVisitor ? { scale: 0.8, hat: 0xf2b134 } : {});
+    parts.root.position.copy(old.position);
+    parts.root.rotation.copy(old.rotation);
+    for (const child of [...old.children]) if (child !== oldBody) parts.root.add(child);
+    parts.spine.add(this.plumbob);
+    this.lot.group.remove(old);
+    this.lot.group.add(parts.root);
+    oldBody.traverse((o) => o.isMesh && o.geometry.dispose());
+    this.parts = parts;
+    this.root = parts.root;
+    this.root.traverse((o) => (o.userData.simKey = this.key));
+    this.applyBadge();
+    this.applyUniform();
   }
 
   dispose() {
@@ -678,6 +751,13 @@ export class Sim {
       this.screen.material.dispose();
     }
   }
+}
+
+/** Wardrobe overrides use hex strings; the model builder uses numbers. */
+export function lookFromOverrides(overrides = {}) {
+  const out = {};
+  for (const [k, v] of Object.entries(overrides || {})) out[k] = typeof v === 'string' && v.startsWith('#') ? parseInt(v.slice(1), 16) : v;
+  return out;
 }
 
 export function escapeHtml(s) {

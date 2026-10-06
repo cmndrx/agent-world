@@ -1,0 +1,47 @@
+{
+  "verifiedMarker": "one-card runner verified\\n",
+  "verifiedByteCount": 25,
+  "runCount": 1,
+  "run": {
+    "id": "5ac3f491-979e-4eeb-9ef5-57cbf7dbc725",
+    "proposalId": "4d78585d-3788-490d-ad08-7a45c650cdae",
+    "project": "/var/folders/3h/wb93q4v54jlfpmxtccn90zm00000gn/T/aw-one-card-qa-ee4m82oo/project",
+    "executionProject": "/private/var/folders/3h/wb93q4v54jlfpmxtccn90zm00000gn/T/aw-one-card-qa-ee4m82oo/project",
+    "slot": 1,
+    "title": "Verify one approved pass",
+    "instruction": "Create only marker.txt in this isolated project containing exactly one-card runner verified followed by a newline. Verify its exact content with an actual file read. Report the actual check and any limitations. Propose a next pass to inspect marker.txt, but do not perform that follow-up. Do not change any other files.",
+    "provider": "codex",
+    "status": "completed",
+    "startedAt": "2026-10-06T04:02:43.208Z",
+    "approvalVersion": 2,
+    "childPid": 79407,
+    "finishedAt": "2026-10-06T04:02:59.497Z",
+    "result": {
+      "summary": "Created only marker.txt containing exactly one-card runner verified followed by a newline. Stopped after this pass.",
+      "checks": [
+        "Read AGENTS.md.",
+        "Read marker.txt as bytes and confirmed exact equality with b'one-card runner verified\\n' (25 bytes)."
+      ],
+      "limitations": [
+        "Git status could not be checked because this directory is not a Git repository."
+      ],
+      "next": {
+        "title": "Inspect marker.txt",
+        "instruction": "In a separately authorized pass, inspect marker.txt without changing any files. This follow-up was not executed."
+      }
+    },
+    "error": ""
+  },
+  "followup": {
+    "id": "bf14980d-d6df-4ccf-9f64-b6fa7ce404bd",
+    "project": "/var/folders/3h/wb93q4v54jlfpmxtccn90zm00000gn/T/aw-one-card-qa-ee4m82oo/project",
+    "slot": 1,
+    "title": "Inspect marker.txt",
+    "instruction": "In a separately authorized pass, inspect marker.txt without changing any files. This follow-up was not executed.",
+    "provider": "codex",
+    "recordedBy": "Codex runner",
+    "status": "paused",
+    "version": 6,
+    "createdAt": "2026-10-06T04:02:59.497Z"
+  }
+}

@@ -1,3 +1,5 @@
+import { Catalog } from './catalog.mjs';
+import { normalizeConversation } from '../shared/conversations.mjs';
 // The truth model. Folds canonical events into households (persistent characters per project)
 // and live sessions. Contains no flavor: everything here was observed.
 
@@ -27,8 +29,9 @@ export class World extends EventEmitter {
    * @param {object} [opts.households] persisted households, keyed by project path
    * @param {number} [opts.staleAfterMs] a session with no events for this long counts as gone
    */
-  constructor({ households = {}, staleAfterMs = 3 * 60 * 60 * 1000 } = {}) {
+  constructor({ households = {}, catalog = {}, staleAfterMs = 3 * 60 * 60 * 1000 } = {}) {
     super();
+    this.catalog = new Catalog(catalog);
     this.households = households;
     this.sessions = new Map();
     this.staleAfterMs = staleAfterMs;
@@ -76,6 +79,16 @@ export class World extends EventEmitter {
   }
 
   apply(event) {
+    const sourceProject = event.project;
+    const linked = this.catalog.projects.get(sourceProject);
+    event = { ...event, sourceProject, project: linked?.home || sourceProject,
+      conversation: normalizeConversation(event.conversation, event.source, event.session) };
+    const c = this.catalog.observe(event);
+    if (c) this.emit('change', { type: 'catalog', ...this.catalog.snapshot() });
+    if (!this.households[event.project] && !event.parent_session) {
+      const h = this.household(event.project);
+      if (event.project_name || linked?.name) h.name = event.project_name || linked.name;
+    }
     const at = Date.parse(event.ts);
     let s = this.sessions.get(event.session);
 
@@ -92,6 +105,8 @@ export class World extends EventEmitter {
         provider: event.provider,
         app: event.app,
         project: event.project,
+        sourceProject,
+        conversation: c || (event.parent_session ? this.sessions.get(event.parent_session)?.conversation || null : event.conversation),
         parent_session: event.parent_session,
         slot: isVisitor ? null : this.assignSlot(event.project, at),
         state: 'idle',
@@ -107,6 +122,7 @@ export class World extends EventEmitter {
       this.sessions.set(s.session, s);
     }
 
+    if (c) s.conversation = c;
     s.lastEventAt = Math.max(s.lastEventAt, at);
     if (event.app && !s.app) s.app = event.app;
 
@@ -167,6 +183,7 @@ export class World extends EventEmitter {
 
   snapshot(now = Date.now()) {
     return {
+      ...this.catalog.snapshot(),
       households: Object.values(this.households),
       sessions: [...this.sessions.values()].filter((s) => this.isLive(s, now)).map((s) => this.publicSession(s)),
     };

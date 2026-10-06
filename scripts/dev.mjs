@@ -10,6 +10,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const demo = process.argv.includes('--demo');
 const prod = process.argv.includes('--prod');
 const env = { ...process.env };
+env.AGENT_WORLD_RUNNER = demo ? '0' : (process.env.AGENT_WORLD_RUNNER || '1');
 if (demo) {
   env.AGENT_WORLD_HOME = path.join(root, '.demo-home');
   env.AGENT_WORLD_DEMO = '1';

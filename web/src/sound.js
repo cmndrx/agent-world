@@ -17,7 +17,13 @@ const CUES = {
   ],
   // Still waiting: one low, gentle ping.
   reminder: [{ f: 440, at: 0, dur: 0.6, type: 'sine', gain: 0.1 }],
+  // Photo mode (play layer, never a truth signal): a quick, dry camera click.
+  shutter: [
+    { f: 2200, at: 0, dur: 0.03, type: 'square', gain: 0.05 },
+    { f: 1400, at: 0.06, dur: 0.04, type: 'square', gain: 0.04 },
+  ],
 };
+const PLAY_CUES = new Set(['shutter']);
 
 export class Sound {
   constructor() {
@@ -40,12 +46,15 @@ export class Sound {
     return this.enabled;
   }
 
-  /** @param {'permission'|'turn_complete'|'reminder'} cue */
+  /** @param {'permission'|'turn_complete'|'reminder'|'shutter'} cue */
   play(cue, { force = false } = {}) {
     if (!this.enabled || !this.ctx || this.ctx.state !== 'running') return;
-    const now = performance.now();
-    if (!force && now - this.lastAt < 1500) return; // several agents at once → one chime
-    this.lastAt = now;
+    // Play-layer sounds never take part in (or swallow) the "needs you" debounce.
+    if (!PLAY_CUES.has(cue)) {
+      const now = performance.now();
+      if (!force && now - this.lastAt < 1500) return; // several agents at once → one chime
+      this.lastAt = now;
+    }
 
     const t0 = this.ctx.currentTime + 0.02;
     for (const n of CUES[cue] || CUES.permission) {

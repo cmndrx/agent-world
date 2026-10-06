@@ -1,0 +1,108 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {PassStore,passResult} from '../bridge/passes.mjs';
+import {PassRunner} from '../bridge/pass-runner.mjs';
+function fixture(t){const dir=fs.mkdtempSync(path.join(os.tmpdir(),'aw-pass-test-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));return {dir,store:new PassStore(path.join(dir,'passes.json')),homes:{[fs.realpathSync(dir)]:{}},project:fs.realpathSync(dir)};}
+test('specific version approval claims once and next proposal never inherits approval',t=>{
+ const {store,homes,project}=fixture(t);const p=store.propose({project,slot:1,title:'One',instruction:'Do one'},homes);
+ assert.throws(()=>store.decide({id:p.id,version:p.version,action:'approve'},homes),/Confirm/);
+ const changed=store.propose({project,slot:1,title:'Changed',instruction:'New instruction',version:p.version},homes);
+ assert.throws(()=>store.decide({id:p.id,version:p.version,action:'approve',confirmed:true},homes),/changed/);
+ store.decide({id:changed.id,version:changed.version,action:'approve',confirmed:true},homes);
+ const run=store.claim();assert.ok(run);assert.equal(store.claim(),null);
+ assert.throws(()=>store.propose({project,slot:1,title:'Other',instruction:'Other',version:4},homes),/already queued/);
+ store.finish(run.id,'completed',passResult({summary:'Reported result',checks:['actual command'],limitations:['not verified'],next:{title:'Two',instruction:'Do two'}}));
+ assert.equal(store.snapshot().proposals[0].status,'proposed');assert.equal(store.claim(),null);assert.equal(store.snapshot().runs.length,1);
+ const restored=new PassStore(store.file);assert.equal(restored.snapshot().runs[0].result.summary,'Reported result');
+});
+test('paused, interrupted and invalid outputs do not run or silently retry',t=>{
+ const {store,homes,project}=fixture(t);const p=store.propose({project,slot:1,title:'One',instruction:'Do one'},homes);
+ const paused=store.decide({id:p.id,version:p.version,action:'pause'},homes);assert.equal(store.claim(),null);
+ store.decide({id:paused.id,version:paused.version,action:'approve',confirmed:true},homes);const run=store.claim();store.interrupt();assert.equal(store.claim(),null);
+ const next=store.propose({project,slot:1,title:'Another',instruction:'Another',version:store.snapshot().proposals[0].version},homes);
+ assert.throws(()=>store.decide({id:next.id,version:next.version,action:'approve',confirmed:true},homes),/interrupted/);
+ store.child(run.id,process.pid); // child() only updates running records, so use recorded fixture directly below
+ store.change(d=>{d.runs[0].childPid=process.pid;});assert.throws(()=>store.resolve({id:run.id,confirmed:true}),/still active/);
+ store.change(d=>{delete d.runs[0].childPid;});store.resolve({id:run.id,confirmed:true});assert.equal(store.snapshot().runs[0].status,'failed');
+ for(const v of [{summary:'Missing fields'},{summary:'x',checks:[{}],limitations:[],next:null},{summary:'x',checks:[],limitations:[],next:{title:'',instruction:''}}])assert.throws(()=>passResult(v));
+});
+test('runner failure persists once; a second runner cannot claim the same home',async t=>{
+ const {store,homes,project}=fixture(t);const p=store.propose({project,slot:1,title:'One',instruction:'Do one'},homes);store.decide({id:p.id,version:p.version,action:'approve',confirmed:true},homes);
+ const runner=new PassRunner(store,{enabled:true,command:path.join(project,'missing-cli')});runner.start();t.after(()=>runner.stop());
+ const other=new PassRunner(store,{enabled:true});other.start();assert.equal(other.enabled,false);
+ while(runner.busy)await new Promise(r=>setTimeout(r,10));
+ assert.equal(store.snapshot().runs[0].status,'failed');await runner.tick();assert.equal(store.snapshot().runs.length,1);
+});
+
+
+test('approval pins a resolved directory and queued pauses revoke execution',t=>{
+ const {store,homes,project,dir}=fixture(t);const alias=path.join(dir,'alias');const target=path.join(dir,'target');fs.mkdirSync(target);fs.symlinkSync(target,alias);homes[alias]={};
+ const p=store.propose({project:alias,slot:1,title:'Inspect alias',instruction:'Read the local marker'},homes);
+ const approved=store.decide({id:p.id,version:p.version,action:'approve',confirmed:true},homes);assert.equal(approved.executionProject,fs.realpathSync(target));
+ store.decide({id:p.id,version:approved.version,action:'pause'},homes);assert.equal(store.claim(),null);
+});
+
+test('interrupted execution blocks other projects until inspected and result next is strict',t=>{
+ const {store,homes,project,dir}=fixture(t);const other=path.join(dir,'other');fs.mkdirSync(other);homes[other]={};
+ const p=store.propose({project,slot:1,title:'One',instruction:'Do one'},homes);store.decide({id:p.id,version:p.version,action:'approve',confirmed:true},homes);const first=store.claim();store.child(first.id,process.pid);
+ const q=store.propose({project:other,slot:1,title:'Two',instruction:'Do two'},homes);store.decide({id:q.id,version:q.version,action:'approve',confirmed:true},homes);
+ store.interrupt();assert.equal(store.claim(),null);assert.throws(()=>store.resolve({id:first.id,confirmed:true}),/still active/);
+ store.change(d=>{delete d.runs[0].childPid;});store.resolve({id:first.id,confirmed:true});assert.equal(store.claim().project,other);
+ for(const next of [false,0,'',[],undefined])assert.throws(()=>passResult({summary:'x',checks:[],limitations:[],next}));
+});
+
+test('runner captures exact thread identity without saving event contents',async t=>{
+ const {store,homes,project}=fixture(t);const cli=path.join(project,'mock-cli');const id='12345678-1234-1234-1234-123456789abc';
+ fs.writeFileSync(cli,`#!/usr/bin/env node\nconst fs=require('fs');const args=process.argv;process.stdin.resume();process.stdin.on('end',()=>{console.log(JSON.stringify({type:'thread.started',thread_id:'${id}'}));console.log(JSON.stringify({type:'item.completed',text:'private content'}));fs.writeFileSync(args[args.indexOf('--output-last-message')+1],JSON.stringify({summary:'Reported',checks:[],limitations:[],next:null}));});`,{mode:0o700});
+ const p=store.propose({project,slot:1,title:'One',instruction:'Do one'},homes);store.decide({id:p.id,version:p.version,action:'approve',confirmed:true},homes);
+ const runner=new PassRunner(store,{enabled:true,command:cli});runner.start();t.after(()=>runner.stop());while(runner.busy)await new Promise(r=>setTimeout(r,10));
+ const run=store.snapshot().runs[0];assert.equal(run.status,'completed');assert.equal(run.conversationSession,id);assert.equal(fs.readFileSync(store.file,'utf8').includes('private content'),false);
+});
+
+test('continued prompts pin the conversation through approval, execution and follow-up',t=>{
+ const {store,homes,project}=fixture(t);const id='12345678-1234-1234-1234-123456789abc';
+ const p=store.propose({project,slot:1,title:'Continue',instruction:'Follow up',resumeSession:id},homes);store.decide({id:p.id,version:p.version,action:'approve',confirmed:true},homes);
+ assert.equal(store.claim(()=>false),null);const run=store.claim();assert.equal(run.resumeSession,id);store.conversation(run.id,id);store.finish(run.id,'completed',passResult({summary:'Done',checks:[],limitations:[],next:{title:'Next',instruction:'One more'}}));assert.equal(store.snapshot().proposals[0].resumeSession,id);
+ assert.throws(()=>store.propose({project,slot:2,title:'x',instruction:'x',resumeSession:'--last'},homes),/valid Codex/);
+});
+
+test('resume CLI preserves explicit identity and never uses last or fresh fallback',async t=>{
+ const {store,homes,project}=fixture(t);const id='12345678-1234-1234-1234-123456789abc';const cli=path.join(project,'resume-cli');
+ fs.writeFileSync(cli,`#!/usr/bin/env node\nconst fs=require('fs');const a=process.argv.slice(2);fs.writeFileSync('args.json',JSON.stringify(a));process.stdin.resume();process.stdin.on('end',()=>{console.log(JSON.stringify({type:'thread.started',thread_id:'${id}'}));fs.writeFileSync(a[a.indexOf('--output-last-message')+1],JSON.stringify({summary:'Continued',checks:[],limitations:[],next:null}));});`,{mode:0o700});
+ const p=store.propose({project,slot:1,title:'Continue',instruction:'Follow up',resumeSession:id},homes);store.decide({id:p.id,version:p.version,action:'approve',confirmed:true},homes);const runner=new PassRunner(store,{enabled:true,command:cli});runner.start();t.after(()=>runner.stop());while(runner.busy)await new Promise(r=>setTimeout(r,10));const a=JSON.parse(fs.readFileSync(path.join(project,'args.json')));assert.deepEqual(a.slice(0,4),['exec','--sandbox','workspace-write','resume']);assert.equal(a.at(-2),id);assert.equal(a.includes('--last'),false);assert.equal(store.snapshot().runs[0].conversationSession,id);
+});
+
+test('desktop writer conflicts are actionable, private and never retried',async t=>{
+ const {store,homes,project}=fixture(t);const id='12345678-1234-1234-1234-123456789abc',cli=path.join(project,'locked-cli');
+ fs.writeFileSync(cli,`#!/usr/bin/env node\nprocess.stdin.resume();process.stdin.on('end',()=>{process.stderr.write('thread-store conflict: thread already has an active writer; private-secret');process.exit(1);});`,{mode:0o700});
+ const p=store.propose({project,slot:1,title:'Prompt',instruction:'Do work',resumeSession:id},homes);store.decide({id:p.id,version:p.version,action:'approve',confirmed:true},homes);const runner=new PassRunner(store,{enabled:true,command:cli});runner.start();t.after(()=>runner.stop());while(runner.busy)await new Promise(r=>setTimeout(r,10));const run=store.snapshot().runs[0];assert.equal(run.status,'failed');assert.equal(run.result,null);assert.match(run.error,/Codex currently owns/);assert.equal(run.error.includes('private-secret'),false);await runner.tick();assert.equal(store.snapshot().runs.length,1);
+});
+
+test('selected model stays pinned to the approved run and CLI resume',async t=>{
+ const {store,homes,project}=fixture(t);const cli=path.join(project,'model-cli'),id='12345678-1234-1234-1234-123456789abc';fs.writeFileSync(cli,`#!/usr/bin/env node\nconst fs=require('fs');const a=process.argv.slice(2);fs.writeFileSync('args.json',JSON.stringify(a));process.stdin.resume();process.stdin.on('end',()=>{console.log(JSON.stringify({type:'thread.started',thread_id:'${id}'}));fs.writeFileSync(a[a.indexOf('--output-last-message')+1],JSON.stringify({summary:'Done',checks:[],limitations:[],next:null}));});`,{mode:0o700});const p=store.propose({project,slot:1,title:'x',instruction:'x',model:'gpt-6.1-sol',resumeSession:id},homes);store.decide({id:p.id,version:p.version,action:'approve',confirmed:true},homes);const runner=new PassRunner(store,{enabled:true,command:cli});runner.start();t.after(()=>runner.stop());while(runner.busy)await new Promise(r=>setTimeout(r,10));const args=JSON.parse(fs.readFileSync(path.join(project,'args.json')));assert.equal(args[args.indexOf('--model')+1],'gpt-6.1-sol');assert.equal(store.snapshot().runs[0].model,'gpt-6.1-sol');assert.throws(()=>store.propose({project,slot:2,title:'x',instruction:'x',model:'--inject'},homes),/valid model/);
+});
+
+test('runner streams public summaries, updates items, and drops raw/unrelated content',async t=>{
+ const {store,homes,project}=fixture(t),cli=path.join(project,'summary-cli'),thread='12345678-1234-1234-1234-123456789abc';
+ fs.writeFileSync(cli,`#!/usr/bin/env node
+const fs=require('fs'),args=process.argv;
+process.stdin.resume();process.stdin.on('end',()=>{
+ console.log(JSON.stringify({type:'item.completed',item:{id:'early',type:'reasoning',text:'Before thread identity'}}));
+ console.log(JSON.stringify({type:'thread.started',thread_id:'${thread}'}));
+ const events=[{type:'item.updated',item:{id:'r1',type:'reasoning',text:'Checking the',raw_content:'RAW_SECRET'}},{type:'item.completed',item:{id:'r1',type:'reasoning',text:'Checking the public result.'}},{type:'item.completed',item:{id:'raw',type:'reasoning',raw_content:'RAW_SECRET'}},{type:'item.completed',item:{id:'message',type:'agent_message',text:'OTHER_SECRET'}}];
+ const payload=events.map(e=>JSON.stringify(e)).join('\\n')+'\\n';process.stdout.write(payload.slice(0,20));setTimeout(()=>{process.stdout.write(payload.slice(20));fs.writeFileSync(args[args.indexOf('--output-last-message')+1],JSON.stringify({summary:'Done',checks:[],limitations:[],next:null}));},20);
+});`,{mode:0o700});
+ const p=store.propose({project,slot:1,title:'Test',instruction:'Test'},homes);store.decide({id:p.id,version:p.version,action:'approve',confirmed:true},homes);
+ const updates=[];const runner=new PassRunner(store,{enabled:true,command:cli,onChange:()=>updates.push(store.snapshot())});runner.start();t.after(()=>runner.stop());while(runner.busy)await new Promise(r=>setTimeout(r,10));
+ const run=store.snapshot().runs[0];assert.equal(run.status,'completed');assert.deepEqual(run.reasoningSummaries,[{id:'r1',text:'Checking the public result.'}]);assert.ok(updates.some(s=>s.runs[0]?.status==='running'&&s.runs[0]?.reasoningSummaries?.length));assert.doesNotMatch(fs.readFileSync(store.file,'utf8'),/RAW_SECRET|OTHER_SECRET|Before thread/);
+ assert.equal(store.reasoning(run.id,{id:'late',type:'reasoning',text:'Late'}),false);
+});
+test('public summary storage is bounded and never belongs to a different run',t=>{
+ const {store,homes,project}=fixture(t);const p=store.propose({project,slot:1,title:'x',instruction:'x'},homes);store.decide({id:p.id,version:p.version,action:'approve',confirmed:true},homes);const run=store.claim();store.conversation(run.id,'12345678-1234-1234-1234-123456789abc');
+ assert.equal(store.reasoning('other',{id:'x',type:'reasoning',text:'Wrong run'}),false);
+ for(let i=0;i<100;i++)store.reasoning(run.id,{id:String(i),type:'reasoning',text:'x'.repeat(5000)});
+ const summaries=store.snapshot().runs[0].reasoningSummaries;assert.ok(summaries.length<=32);assert.ok(summaries.reduce((n,s)=>n+s.text.length,0)<=64000);assert.equal(summaries.at(-1).text.length,4000);
+});

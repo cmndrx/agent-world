@@ -12,9 +12,14 @@ export function homeDir() {
 
 export const eventsDir = () => path.join(homeDir(), 'events');
 export const householdsFile = () => path.join(homeDir(), 'households.json');
+export const catalogFile = () => path.join(homeDir(), 'conversations.json');
+export const productivityFile = () => path.join(homeDir(), 'productivity.json');
+export const styleFile = () => path.join(homeDir(), 'style.json');
+export const photosDir = () => path.join(homeDir(), 'photos');
+export const cityFile = () => path.join(homeDir(), 'city.json');
 export const configFile = () => path.join(homeDir(), 'config.json');
 
-const DEFAULT_CONFIG = { privacy: 'targets', staleAfterMinutes: 180 };
+const DEFAULT_CONFIG = { privacy: 'targets', conversationTitles: false, staleAfterMinutes: 180 };
 
 export function readConfig() {
   try {

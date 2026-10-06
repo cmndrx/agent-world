@@ -87,6 +87,34 @@ export class NavGrid {
     return true;
   }
 
+  /** Every cell reachable on foot from `from` (flood fill, no corner cutting). Indexed j * w + i. */
+  reachableFrom(from) {
+    const seen = new Uint8Array(this.w * this.h);
+    const start = this.nearestFree(...this.toCell(from.x, from.z));
+    if (!start) return seen;
+    const queue = [start[1] * this.w + start[0]];
+    seen[queue[0]] = 1;
+    for (let q = 0; q < queue.length; q++) {
+      const ci = queue[q] % this.w;
+      const cj = (queue[q] / this.w) | 0;
+      for (let dj = -1; dj <= 1; dj++) {
+        for (let di = -1; di <= 1; di++) {
+          if (!di && !dj) continue;
+          const ni = ci + di;
+          const nj = cj + dj;
+          if (this.isBlocked(ni, nj)) continue;
+          if (di && dj && (this.isBlocked(ci + di, cj) || this.isBlocked(ci, cj + dj))) continue;
+          const n = nj * this.w + ni;
+          if (!seen[n]) {
+            seen[n] = 1;
+            queue.push(n);
+          }
+        }
+      }
+    }
+    return seen;
+  }
+
   /**
    * Path from `from` to `to` as a list of waypoints (excluding `from`, ending exactly at `to`).
    * Start/goal may sit inside furniture (a chair, the couch): we route via the nearest free cell.

@@ -33,11 +33,69 @@ import users from 'lucide-static/icons/users.svg?raw';
 import wifiOff from 'lucide-static/icons/wifi-off.svg?raw';
 import x from 'lucide-static/icons/x.svg?raw';
 import zap from 'lucide-static/icons/zap.svg?raw';
+import hammer from 'lucide-static/icons/hammer.svg?raw';
+import shirt from 'lucide-static/icons/shirt.svg?raw';
+import paintRoller from 'lucide-static/icons/paint-roller.svg?raw';
+import trash from 'lucide-static/icons/trash-2.svg?raw';
+import rotateCw from 'lucide-static/icons/rotate-cw.svg?raw';
+import armchair from 'lucide-static/icons/armchair.svg?raw';
+import trees from 'lucide-static/icons/trees.svg?raw';
+import check from 'lucide-static/icons/check.svg?raw';
+import palette from 'lucide-static/icons/palette.svg?raw';
+import brickWall from 'lucide-static/icons/brick-wall.svg?raw';
+import trophy from 'lucide-static/icons/trophy.svg?raw';
+import star from 'lucide-static/icons/star.svg?raw';
+import lock from 'lucide-static/icons/lock.svg?raw';
+import lockOpen from 'lucide-static/icons/lock-open.svg?raw';
+import partyPopper from 'lucide-static/icons/party-popper.svg?raw';
+import mapIcon from 'lucide-static/icons/map.svg?raw';
+import cloudSun from 'lucide-static/icons/cloud-sun.svg?raw';
+import cloudRain from 'lucide-static/icons/cloud-rain.svg?raw';
+import cloudSnow from 'lucide-static/icons/cloud-snow.svg?raw';
+import snowflake from 'lucide-static/icons/snowflake.svg?raw';
+import leaf from 'lucide-static/icons/leaf.svg?raw';
+import flower from 'lucide-static/icons/flower.svg?raw';
+import cat from 'lucide-static/icons/cat.svg?raw';
+import dog from 'lucide-static/icons/dog.svg?raw';
+import rabbit from 'lucide-static/icons/rabbit.svg?raw';
+import gem from 'lucide-static/icons/gem.svg?raw';
+import sprout from 'lucide-static/icons/sprout.svg?raw';
+import clover from 'lucide-static/icons/clover.svg?raw';
+import treeDeciduous from 'lucide-static/icons/tree-deciduous.svg?raw';
+import landmark from 'lucide-static/icons/landmark.svg?raw';
+import camera from 'lucide-static/icons/camera.svg?raw';
+import images from 'lucide-static/icons/images.svg?raw';
+import arrowLeft from 'lucide-static/icons/arrow-left.svg?raw';
+import shovel from 'lucide-static/icons/shovel.svg?raw';
+import flower2 from 'lucide-static/icons/flower-2.svg?raw';
+import store from 'lucide-static/icons/store.svg?raw';
+import building2 from 'lucide-static/icons/building-2.svg?raw';
+import hardHat from 'lucide-static/icons/hard-hat.svg?raw';
+import info from 'lucide-static/icons/info.svg?raw';
+
+import briefcase from 'lucide-static/icons/briefcase.svg?raw';
+import inbox from 'lucide-static/icons/inbox.svg?raw';
+import copy from 'lucide-static/icons/copy.svg?raw';
+import externalLink from 'lucide-static/icons/external-link.svg?raw';
+import messageCircle from 'lucide-static/icons/message-circle.svg?raw';
+import gamepad from 'lucide-static/icons/gamepad-2.svg?raw';
+import plug from 'lucide-static/icons/plug.svg?raw';
+import plus from 'lucide-static/icons/plus.svg?raw';
+import listChecks from 'lucide-static/icons/list-checks.svg?raw';
+import target from 'lucide-static/icons/target.svg?raw';
+import arrowRight from 'lucide-static/icons/arrow-right.svg?raw';
+import circleAlert from 'lucide-static/icons/circle-alert.svg?raw';
+import flag from 'lucide-static/icons/flag.svg?raw';
 
 const RAW = {
   bellOff, bell, blocks, bookOpen, brain, chevronDown, circleCheck, circleHelp, clock, coffee, cpu, eye, gauge,
   globe, hand, hourglass, house, keyboard, layers, moon, navigation, panelLeft, pencil, sparkles, sun, sunrise,
   sunset, terminal, triangleAlert, users, wifiOff, x, zap,
+  hammer, shirt, paintRoller, trash, rotateCw, armchair, trees, check, palette,
+  brickWall, trophy, star, lock, lockOpen, partyPopper,
+  map: mapIcon, cloudSun, cloudRain, cloudSnow, snowflake, leaf, flower, cat, dog, rabbit, gem, sprout, clover, treeDeciduous, landmark,
+  camera, images, arrowLeft, shovel, flower2, store, building2, hardHat, info,
+  briefcase, inbox, copy, externalLink, messageCircle, gamepad, plug, plus, listChecks, target, arrowRight, circleAlert, flag,
 };
 
 const cache = {};

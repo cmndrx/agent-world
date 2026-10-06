@@ -1,0 +1,7 @@
+{
+  "test": "Actual signed-in Codex CLI; isolated CODEX_HOME and temporary project",
+  "sameConversation": true,
+  "rememberedPreviousTurn": true,
+  "threadId": "01a10fad-47f8-7b10-9ab3-43a9a3f339c1",
+  "summary": "cobalt-orchard-742"
+}

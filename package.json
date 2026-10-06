@@ -13,7 +13,8 @@
     "start": "vite build && node scripts/dev.mjs --prod",
     "test": "node --test test/",
     "hooks:claude": "node adapters/claude-code/install.mjs",
-    "codex": "node adapters/codex/tail.mjs"
+    "codex": "node adapters/codex/tail.mjs",
+    "world": "node skills/agent-world/scripts/platform.mjs"
   },
   "engines": {
     "node": ">=18"

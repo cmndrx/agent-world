@@ -82,7 +82,7 @@ export class Screen {
    * @param {{project?: string, provider?: string, source?: string}} meta
    */
   set(activity, meta = {}) {
-    const key = activityKey(activity);
+    const key = activityKey(activity) + '|' + (meta.conversation || '');
     this.meta = meta;
     if (key !== this.key) {
       this.key = key;
@@ -120,7 +120,13 @@ export class Screen {
     const a = this.activity;
     const fn = this[`app_${a.app}`] || this.app_chat;
     fn.call(this, g, e, a);
-    if (a.app !== 'off' && a.app !== 'idle') this.badge(g);
+    if (a.app !== 'off' && a.app !== 'idle') {
+      this.badge(g);
+      if (this.meta.conversation) {
+        this.rect(g, 0, H - 22, W, 22, THEME.panel);
+        this.text(g, this.meta.conversation, 12, H - 11, { size: 11, color: THEME.text, max: W - 24 });
+      }
+    }
     g.restore();
   }
 
@@ -208,7 +214,7 @@ export class Screen {
     return s.slice(0, n);
   }
   badge(g) {
-    const p = PROVIDER[this.meta.provider];
+    const p = (this.meta.source === 'chatgpt' ? { name: 'ChatGPT', color: '#10a37f' } : PROVIDER[this.meta.provider]);
     if (!p) return;
     const w = this.text(g, p.name, -100, -100, { size: 10 }) + 18;
     this.rect(g, W - w - 8, H - 22, w, 16, 'rgba(0,0,0,0.45)', 8);
@@ -582,7 +588,7 @@ export class Screen {
   }
 
   app_chat(g, e, a) {
-    const p = PROVIDER[this.meta.provider] || { name: 'Agent', color: THEME.accent };
+    const p = (this.meta.source === 'chatgpt' ? { name: 'ChatGPT', color: '#10a37f' } : PROVIDER[this.meta.provider]) || { name: 'Agent', color: THEME.accent };
     this.window(g, `${p.name} — ${this.meta.project || ''}`, { accent: p.color });
     const r = seeded(this.seed);
     // Earlier conversation (abstract), then the model's current reasoning streaming in.
@@ -597,7 +603,7 @@ export class Screen {
   }
 
   app_plan(g, e) {
-    const p = PROVIDER[this.meta.provider] || { color: THEME.accent };
+    const p = (this.meta.source === 'chatgpt' ? { name: 'ChatGPT', color: '#10a37f' } : PROVIDER[this.meta.provider]) || { color: THEME.accent };
     this.window(g, `Plan — ${this.meta.project || ''}`, { accent: p.color });
     this.text(g, 'Plan', 24, 46, { size: 15 });
     const r = seeded(this.seed);
@@ -628,7 +634,7 @@ export class Screen {
   }
 
   app_delegate(g, e, a) {
-    const p = PROVIDER[this.meta.provider] || { color: THEME.accent };
+    const p = (this.meta.source === 'chatgpt' ? { name: 'ChatGPT', color: '#10a37f' } : PROVIDER[this.meta.provider]) || { color: THEME.accent };
     this.window(g, `Sub-agent — ${this.meta.project || ''}`, { accent: p.color });
     this.rect(g, 30, 46, W - 60, 92, THEME.panel2, 12);
     this.rect(g, 48, 64, 56, 56, '#f2b134', 28);
@@ -666,7 +672,7 @@ export class Screen {
   }
 
   app_yourturn(g, e) {
-    const p = PROVIDER[this.meta.provider] || { name: 'Agent', color: THEME.accent };
+    const p = (this.meta.source === 'chatgpt' ? { name: 'ChatGPT', color: '#10a37f' } : PROVIDER[this.meta.provider]) || { name: 'Agent', color: THEME.accent };
     this.window(g, `${p.name} — ${this.meta.project || ''}`, { accent: p.color });
     this.rect(g, 18, 46, 18, 18, p.color, 9);
     this.bars(g, 44, 50, 400, 6, { seed: this.seed, colors: ['#a3abc4'], indent: false });

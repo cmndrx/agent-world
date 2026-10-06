@@ -91,6 +91,7 @@ export class CodexSession {
         provider: p.model_provider || 'openai',
         app: codexApp(p),
         session: p.id || p.session_id,
+        conversation: { id: p.id || p.session_id },
         project: this.root,
         ...(parent ? { parent_session: parent } : {}),
       };

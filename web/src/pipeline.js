@@ -17,9 +17,10 @@ import { HorizontalTiltShiftShader } from 'three/addons/shaders/HorizontalTiltSh
 import { VerticalTiltShiftShader } from 'three/addons/shaders/VerticalTiltShiftShader.js';
 
 const PRESETS = {
-  high: { dpr: 2, msaa: 4, ao: true, bloom: true, tilt: true, outline: true, shadow: 4096 },
-  medium: { dpr: 1.5, msaa: 4, ao: false, bloom: true, tilt: false, outline: true, shadow: 2048 },
-  low: { dpr: 1, msaa: 0, ao: false, bloom: false, tilt: false, outline: false, shadow: 1024 },
+  // maxPixels caps the render size (dynamic resolution), so Retina screens don't render 4× the pixels.
+  high: { dpr: 2, maxPixels: 3.7e6, msaa: 4, ao: true, bloom: true, tilt: true, outline: true, shadow: 2048 },
+  medium: { dpr: 1.5, maxPixels: 2.4e6, msaa: 4, ao: false, bloom: true, tilt: false, outline: true, shadow: 1536 },
+  low: { dpr: 1, maxPixels: 1.4e6, msaa: 0, ao: false, bloom: false, tilt: false, outline: false, shadow: 1024 },
 };
 
 /** Final color grade in display space: gentle saturation lift, warmth, and a soft vignette. */
@@ -30,6 +31,9 @@ const GradeShader = {
     contrast: { value: 1.08 },
     vignette: { value: 0.32 },
     tint: { value: new THREE.Color(1.02, 1.0, 0.97) },
+    look: { value: 0 }, // photo-mode filter: 0 natural, 1 warm, 2 cool, 3 mono, 4 film
+    grain: { value: 0 },
+    seed: { value: 0 },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -37,15 +41,24 @@ const GradeShader = {
   `,
   fragmentShader: /* glsl */ `
     uniform sampler2D tDiffuse;
-    uniform float saturation, contrast, vignette;
+    uniform float saturation, contrast, vignette, look, grain, seed;
     uniform vec3 tint;
     varying vec2 vUv;
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233)) + seed) * 43758.5453); }
     void main() {
       vec4 c = texture2D(tDiffuse, vUv);
       float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
       c.rgb = mix(vec3(l), c.rgb, saturation);
       c.rgb = (c.rgb - 0.5) * contrast + 0.5;
       c.rgb *= tint;
+      if (look > 0.5 && look < 1.5) { c.rgb *= vec3(1.08, 1.0, 0.86); c.rgb = mix(vec3(l), c.rgb, 1.08); }
+      else if (look > 1.5 && look < 2.5) { c.rgb *= vec3(0.9, 1.0, 1.12); }
+      else if (look > 2.5 && look < 3.5) { float m = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722)); c.rgb = (vec3(m) - 0.5) * 1.12 + 0.5; c.rgb *= vec3(1.02, 1.0, 0.96); }
+      else if (look > 3.5) {
+        vec3 sep = vec3(dot(c.rgb, vec3(0.393, 0.769, 0.189)), dot(c.rgb, vec3(0.349, 0.686, 0.168)), dot(c.rgb, vec3(0.272, 0.534, 0.131)));
+        c.rgb = mix(c.rgb, sep, 0.28) * 0.9 + 0.055;
+      }
+      c.rgb += (hash(gl_FragCoord.xy) - 0.5) * grain;
       vec2 d = vUv - 0.5;
       c.rgb *= 1.0 - vignette * smoothstep(0.35, 0.85, length(d * vec2(1.1, 1.0)));
       gl_FragColor = c;
@@ -76,7 +89,7 @@ export class Pipeline {
   build() {
     const p = PRESETS[this.level];
     const { x: w, y: h } = this.size;
-    const dpr = Math.min(devicePixelRatio, p.dpr);
+    const dpr = Math.max(0.75, Math.min(devicePixelRatio, p.dpr, Math.sqrt(p.maxPixels / Math.max(1, w * h))));
     this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(w, h);
     this.env.setShadowQuality(p.shadow, 34);
@@ -88,13 +101,15 @@ export class Pipeline {
     composer.setSize(w, h);
     composer.addPass(new RenderPass(this.scene, this.camera));
 
+    this.ao = null;
     if (p.ao) {
       const ao = new GTAOPass(this.scene, this.camera, w, h);
       ao.output = GTAOPass.OUTPUT.Default;
       ao.blendIntensity = 0.9;
-      ao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.4, thickness: 1.2, scale: 1.1, samples: 12 });
-      ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 12 });
+      ao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.4, thickness: 1.2, scale: 1.1, samples: 10 });
+      ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 8 });
       composer.addPass(ao);
+      this.ao = ao;
     }
 
     this.outlinePass = null;
@@ -123,8 +138,13 @@ export class Pipeline {
     }
 
     composer.addPass(new OutputPass());
-    composer.addPass(new ShaderPass(GradeShader));
+    // Ambient occlusion is soft and low-frequency: computing it at half resolution looks the same and
+    // costs about a quarter (it's upsampled when blended).
+    if (this.ao) this.ao.setSize(Math.round((w * dpr) / 2), Math.round((h * dpr) / 2));
+    this.grade = new ShaderPass(GradeShader);
+    composer.addPass(this.grade);
     this.composer = composer;
+    this.setLook(this.lookState || {});
   }
 
   setSize(w, h) {
@@ -143,12 +163,36 @@ export class Pipeline {
     t.hBlur.enabled = t.vBlur.enabled = k > 0.02;
   }
 
+  /** Photo-mode look: { look: 0–4, vignette: 0–1 }. Applied in the final grade, so photos match the screen. */
+  setLook({ look = 0, vignette = 0.32 } = {}) {
+    this.lookState = { look, vignette };
+    if (!this.grade) return;
+    const u = this.grade.uniforms;
+    u.look.value = look;
+    u.vignette.value = vignette;
+    u.grain.value = look === 4 ? 0.045 : 0;
+  }
+
   setOutlined(objects) {
     this.outlined = objects;
-    if (this.outlinePass) this.outlinePass.selectedObjects = objects;
+    if (this.outlinePass) {
+      this.outlinePass.selectedObjects = objects;
+      this.outlinePass.enabled = objects.length > 0; // skip the pass entirely when nothing is outlined
+    }
   }
 
   render(dt) {
+    if (this.grade) {
+      const u = this.grade.uniforms;
+      u.seed.value = (u.seed.value + 0.6180339) % 1;
+      // Time-of-day color grade from the environment (warm mornings and golden hour, cool nights).
+      const g = this.env.grade;
+      if (g) {
+        u.tint.value.copy(g.tint);
+        u.saturation.value = g.saturation;
+        u.contrast.value = g.contrast;
+      }
+    }
     this.composer.render(dt);
     this.adapt(dt);
   }

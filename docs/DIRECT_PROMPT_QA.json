@@ -1,0 +1,16 @@
+{
+  "test": "Isolated mock CLI and Demo synthetic observations; not a provider run",
+  "instruction": "Test direct prompt submission and observed activity switching.",
+  "runCount": 1,
+  "status": "completed",
+  "conversationSession": "11111111-2222-3333-4444-555555555555",
+  "verifiedUI": [
+    "Agent click opens blank prompt",
+    "Send creates one approved exact instruction",
+    "Automatic observed activity drawer",
+    "Reading screen and tool details",
+    "Prompt this agent",
+    "Busy Send disabled",
+    "Completed result in secondary view"
+  ]
+}
