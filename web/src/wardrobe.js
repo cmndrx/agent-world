@@ -1,4 +1,4 @@
-// Wardrobe: restyle a resident (or your own avatar) with live preview. Cosmetic only.
+// Wardrobe: restyle a resident (or your own picture) with live preview. Cosmetic only.
 // Saves through POST /api/style as { kind: 'resident', key: '<project>#<slot>' } or { kind: 'player' }.
 
 import { WARDROBE } from '../../shared/style.mjs';
@@ -12,7 +12,7 @@ export class Wardrobe {
   constructor({ save, onClose }) {
     this.save = save;
     this.onClose = onClose;
-    this.target = null; // { name, model (Sim or Avatar), change: { kind, key } , saved }
+    this.target = null; // { name, model (Sim or Player), change: { kind, key }, saved, preview? }
     this.panel = document.createElement('section');
     this.panel.id = 'wardrobe';
     this.panel.className = 'glass panel';
@@ -71,6 +71,7 @@ export class Wardrobe {
     this.panel.innerHTML = `<header><div><small>WARDROBE · JUST FOR FUN</small><h2>${icon('shirt')} ${escapeHtml(t.name)}</h2></div>
         <button class="icon-btn" data-cancel aria-label="Close without saving">${icon('x')}</button></header>
       <div class="ward-body">
+        ${t.preview ? t.preview() : ''}
         ${colors('skin', 'Skin tone')}
         ${chips('hairStyle', 'Hair', WARDROBE.hairStyle.map((n, i) => [i, n]))}
         ${colors('hair', 'Hair color')}

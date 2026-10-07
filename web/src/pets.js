@@ -1,5 +1,5 @@
 // Pets (phase 3): a cat, dog or bunny per home. Pure flavor: they wander, nap, and come say hi when your
-// avatar is near. They never stand in for, or say anything about, agents.
+// camera is zoomed in nearby. They never stand in for, or say anything about, agents.
 
 import * as THREE from 'three';
 import { buildContactShadow, mat, rng, mergeRig } from './models.js';
@@ -152,11 +152,11 @@ export class Pet {
   /**
    * @param {number} dt
    * @param {number} t elapsed seconds
-   * @param {THREE.Vector3|null} avatar the player's world position
+   * @param {THREE.Vector3|null} avatar where the camera is looking, when zoomed in close
    */
   update(dt, t, avatar) {
     const speed = this.kind === 'dog' ? 2.6 : this.kind === 'bunny' ? 1.8 : 2.1;
-    // Come say hi when the avatar is close by (same lot).
+    // Come say hi when you zoom in close by (same lot).
     let greet = null;
     if (avatar) {
       const lx = avatar.x - this.lot.group.position.x;

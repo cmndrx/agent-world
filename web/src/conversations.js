@@ -48,7 +48,6 @@ export class ConversationLibrary {
       </form>
       <p class="library-message" role="status"></p>`;
     document.body.append(this.dialog);
-    document.getElementById('conversations-open').addEventListener('click', () => this.open());
     this.dialog.querySelector('input[type=search]').addEventListener('input', () => this.renderChats());
     this.dialog.addEventListener('click', e => {
       if (e.target.closest('[data-close]')) this.dialog.close();

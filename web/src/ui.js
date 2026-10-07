@@ -29,15 +29,23 @@ export function portrait(look, cls = '') {
       ? `<g fill="${hex(look.hair)}"><circle cx="13" cy="13" r="4"/><circle cx="19" cy="10" r="4.5"/><circle cx="25.5" cy="12.5" r="4"/><circle cx="28" cy="17" r="3"/><circle cx="12" cy="17" r="3"/></g>`
       : `<path d="M11 17.5a9 9 0 0 1 18 0c-2.6-2.8-5.6-4-9-4s-6.4 1.2-9 4z" fill="${hex(look.hair)}"/>`;
   const bun = look.hairStyle === 2 ? `<circle cx="20" cy="7.5" r="3.6" fill="${hex(look.hair)}"/>` : '';
+  const acc = {
+    glasses: '<g fill="none" stroke="#1d1f27" stroke-width="1.1"><circle cx="16.6" cy="19.5" r="2.6"/><circle cx="23.4" cy="19.5" r="2.6"/><path d="M19.2 19.3h1.6"/></g>',
+    cap: `<path d="M11 15.5a9 9 0 0 1 18 0z" fill="${hex(look.shirt)}"/><path d="M27 15.2h6.5q-.5 1.8-3 1.8H27z" fill="${hex(look.shirt)}"/>`,
+    beanie: `<path d="M10.8 16.5a9.2 9.2 0 0 1 18.4 0z" fill="${hex(look.shirt)}"/><rect x="10.4" y="15" width="19.2" height="3" rx="1.5" fill="#fff" opacity=".55"/>`,
+    headphones: '<path d="M10.5 19a9.5 9.5 0 0 1 19 0" fill="none" stroke="#2b3040" stroke-width="1.8"/><rect x="8.6" y="17" width="3.6" height="6" rx="1.6" fill="#2b3040"/><rect x="27.8" y="17" width="3.6" height="6" rx="1.6" fill="#2b3040"/>',
+    flower: '<g transform="translate(27 12)"><circle r="2.4" fill="#ff8fb1"/><circle r="1" fill="#ffd166"/></g>',
+  }[look.accessory] || '';
+  const collar = look.top === 'hoodie' ? `<path d="M14 30.5q6 4 12 0" stroke="#000" stroke-opacity=".18" stroke-width="1.6" fill="none"/>` : look.top === 'collar' ? '<path d="M16.5 29l3.5 3 3.5-3" stroke="#fff" stroke-opacity=".75" stroke-width="1.4" fill="none"/>' : '';
   return `<svg class="portrait ${cls}" viewBox="0 0 40 40" aria-hidden="true">
     <rect width="40" height="40" fill="${hex(look.shirt)}" opacity=".28"/>
-    ${hairBack}
-    <path d="M6 41c1.2-8.5 7-12.5 14-12.5S32.8 32.5 34 41z" fill="${hex(look.shirt)}"/>
-    <rect x="17.5" y="24" width="5" height="5" rx="2" fill="${hex(look.skin)}"/>
+    <g class="p-body"><path d="M6 41c1.2-8.5 7-12.5 14-12.5S32.8 32.5 34 41z" fill="${hex(look.shirt)}"/>${collar}
+    <rect x="17.5" y="24" width="5" height="5" rx="2" fill="${hex(look.skin)}"/></g>
+    <g class="p-head">${hairBack}
     <circle cx="20" cy="18.5" r="9" fill="${hex(look.skin)}"/>
     ${bun}${hairTop}
-    <circle cx="16.6" cy="19.5" r="1.25" fill="#1d1f27"/><circle cx="23.4" cy="19.5" r="1.25" fill="#1d1f27"/>
-    <path d="M17.6 23q2.4 1.9 4.8 0" stroke="#7a3b3b" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+    <g class="p-eyes"><circle cx="16.6" cy="19.5" r="1.25" fill="#1d1f27"/><circle cx="23.4" cy="19.5" r="1.25" fill="#1d1f27"/></g>
+    <path d="M17.6 23q2.4 1.9 4.8 0" stroke="#7a3b3b" stroke-width="1.2" fill="none" stroke-linecap="round"/>${acc}</g>
   </svg>`;
 }
 
@@ -221,7 +229,6 @@ export class UI {
     set('[data-action="map"]', 'map');
     set('[data-action="wardrobe"]', 'shirt');
     set('[data-action="photo"]', 'camera');
-    document.getElementById('conversations-open').innerHTML = icon('messageCircle');
     document.getElementById('sources-open').innerHTML = icon('plug');
     set('[data-action="city"]', 'building2');
     set('[data-menu="walls"]', 'layers');
@@ -494,12 +501,10 @@ export class UI {
       tag: 'div',
       key: (lot) => lot.project,
       className: () => 'lot-group',
-      html: () => '<button class="lot-title"></button><div class="rows"></div><button class="roster-shelf">Conversation shelf</button><button class="work-home-button">Plan & briefing</button>',
+      html: () => '<button class="lot-title"></button><div class="rows"></div>',
     });
     for (const lot of lots) {
       const group = [...this.rosterBody.children].find((g) => g.dataset.key === lot.project);
-      group.querySelector('.roster-shelf').dataset.conversationHome = lot.project;
-      group.querySelector('.work-home-button').dataset.workHome = lot.project;
       const here = sims.filter((s) => s.lot === lot);
       const waitingHere = here.filter((s) => s.state === 'waiting_for_user').length;
       const activeHere = here.filter((s) => s.truth).length;
@@ -531,8 +536,9 @@ export class UI {
       <span class="who"><b>${escapeHtml(s.name)} ${s.isVisitor ? '' : appChip(s.truth)}</b>
         ${s.truth?.conversation ? `<span class="t conversation-title">${escapeHtml(conversationLabel(s.truth.conversation))}</span>` : ''}
         <span class="what">${icon(STATE_ICON[s.state])}${escapeHtml(this.connectionState === 'live' || !s.truth ? stateText(s) : `Last known: ${stateText(s)}`)}</span>
-        ${detail && !s.act.prose && !stateText(s).includes(detail) ? `<span class="t">${escapeHtml(detail)}</span>` : ''}</span>
-      ${s.truth ? `<small class="observation-age">${escapeHtml(observedLabel(s.truth))}</small>` : ''}${right ? `<span class="state-pill s-${cls}">${right}</span>` : ''}`;
+        ${detail && !s.act.prose && !stateText(s).includes(detail) ? `<span class="t">${escapeHtml(detail)}</span>` : ''}
+        ${s.truth ? `<small class="observation-age">${escapeHtml(observedLabel(s.truth))}</small>` : ''}</span>
+      ${right ? `<span class="state-pill s-${cls}">${right}</span>` : ''}`;
   }
 
   updateArrows(waiting, camera, width, height) {

@@ -1,3 +1,4 @@
+import {codexCommand} from './providers.mjs';
 import { spawn } from 'node:child_process';
 import { usageSnapshot } from '../shared/usage.mjs';
 
@@ -18,7 +19,7 @@ export function readCodexRpc(method, params, normalize, { spawnChild = spawn, ti
     const unavailable = () => finish({ status: 'unavailable', capturedAt: null, buckets: [] });
     const send = message => { if (!finished) child.stdin.write(JSON.stringify(message) + '\n'); };
     try {
-      child = spawnChild('codex', ['app-server', '--listen', 'stdio://'], { stdio: ['pipe', 'pipe', 'ignore'] });
+      child = spawnChild(codexCommand(), ['app-server', '--listen', 'stdio://'], { stdio: ['pipe', 'pipe', 'ignore'] });
       child.on('error', unavailable);
       child.on('close', () => { clearTimeout(forceTimer); unavailable(); });
       child.stdin.on('error', unavailable);

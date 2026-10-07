@@ -40,3 +40,9 @@ test('saved chat names follow exact project/source/thread identity without alter
  assert.equal(chatConversation(conversations,'/sample','unstarted'),null);
  assert.equal(chatConversation(conversations,'/missing',one),null);
 });
+
+test('provider identity separates same UUID chats, titles and replies',()=>{
+ const runs=[run('codex',one),run('claude',one,{provider:'claude'})];
+ const conversations=[{source:'codex',project:'/sample',id:one,title:'Codex title'},{source:'claude-code',project:'/sample',id:one,title:'Claude title'}];
+ assert.equal(chatThreads(runs,'/sample',1,conversations)[0].title,'Codex title');assert.equal(chatThreads(runs,'/sample',1,conversations,'claude')[0].title,'Claude title');assert.equal(chatMessages([runs[1]])[1].provider,'claude');
+});

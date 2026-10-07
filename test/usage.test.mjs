@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {codexCommand} from '../bridge/providers.mjs';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
@@ -33,7 +34,7 @@ function fakeChild(onMessage) {
 test('reader sends only initialization and quota read, handles fragmented RPC, closes child',async()=>{
   const messages=[];let kills=0;
   const result=await readCodexUsage({spawnChild:(command,args,options)=>{
-    assert.equal(command,'codex');assert.deepEqual(args,['app-server','--listen','stdio://']);assert.equal(options.stdio[2],'ignore');
+    assert.equal(command,codexCommand());assert.deepEqual(args,['app-server','--listen','stdio://']);assert.equal(options.stdio[2],'ignore');
     const c=fakeChild((msg,child)=>{messages.push(msg);if(msg.id)queueMicrotask(()=>{const answer=JSON.stringify({id:msg.id,result:msg.id===1?{}:{rateLimits:bucket}})+'\n';child.stdout.write(answer.slice(0,9));child.stdout.write(answer.slice(9));});});
     const kill=c.kill;c.kill=()=>{kills++;return kill();};return c;
   }});

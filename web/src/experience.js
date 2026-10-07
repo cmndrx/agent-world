@@ -4,8 +4,9 @@ import { icon } from './icons.js';
 
 // Navigation preferences are local UI choices, separate from planning and observed activity.
 export class Experience {
-  constructor({ work, action, pets, leavePlay }) {
+  constructor({ work, action, pets, leavePlay, onConversations }) {
     this.usage = new ConnectedUsage();
+    this.onConversations = onConversations;
     this.work = work; this.action = action; this.pets = pets; this.leavePlay = leavePlay;
     this.dialog = document.createElement('dialog');
     this.dialog.className = 'experience-panel glass';
@@ -21,7 +22,7 @@ export class Experience {
       if (b.dataset.go) {
         this.dialog.close();
         if (b.dataset.go === 'work') { this.setMode('work'); this.work.open(); }
-        else if (b.dataset.go === 'conversations') document.getElementById('conversations-open').click();
+        else if (b.dataset.go === 'conversations') this.onConversations();
         else if (b.dataset.go === 'bricks') document.getElementById('bricks-open').click();
         else if (b.dataset.go === 'pets') this.pets();
         else this.action(b.dataset.go);

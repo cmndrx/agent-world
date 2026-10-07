@@ -1,3 +1,7 @@
+> The main overlay omits the chat, Prompt agent and All homes buttons. Open chat from an agent's activity view; open the conversation library through Connections → Chats or a home's shelf.
+
+> Project cards show the project title and agent rows. Their Conversation shelf and Plan & briefing footer buttons have been removed.
+
 > **Watch activity:** shows status, the animated screen, details and recent steps. The conversation card with Open in Codex and Shelf buttons has been removed from this view.
 
 > **Rename chats:** use Rename beside a recorded chat in the prompter, edit its name and choose Save name (or press Enter). Cancel/Escape discards the edit. Names are saved locally in Agent World and shared with the conversation shelf; the original Codex app title is unchanged.
@@ -34,6 +38,21 @@ Codex needs no setup. `npm run dev` tails `~/.codex/sessions` automatically (`np
 
 Remove the hooks any time with `npm run hooks:claude -- --remove`.
 
+## Desktop app (Electron)
+
+The same build as `npm start`, in its own window. The app starts the bridge (serving `dist/`) and the Codex tailer with Electron's bundled Node, so it doesn't need a separate Node install, and it stops them when you quit.
+
+```bash
+npm run app        # build the client and open the app from this checkout
+npm run app:demo   # same, with fake agents in an isolated home (~/Library/Application Support/Agent World/demo-home)
+npm run app:build  # package release/mac-arm64/Agent World.app (ad-hoc signed, not notarized)
+```
+
+- It uses `~/.agent-world` and port 4777 like `npm run dev`. If Agent World is already running (`npm run dev` or `npm start`), the app opens that instead of starting a second bridge over the same data.
+- Opened from Finder, it borrows your login shell's `PATH` so approved passes can find `codex` and `claude`.
+- Links to other apps and sites open outside the window. Logs are in `~/Library/Logs/Agent World/agent-world.log`.
+- Electron is pinned to 39.x and electron-builder to 26.8.0 because newer releases need Node 20+ to install.
+
 ## Look and feel
 
 - **Rendering:** ACES tone mapping, ambient occlusion (GTAO), bloom on emissive things only (plumbobs, lamps, screens), a tilt-shift "miniature" blur that grows as you zoom out, and a final color grade.
@@ -45,10 +64,13 @@ Remove the hooks any time with `npm run hooks:claude -- --remove`.
 
 | Input | Action |
 |---|---|
-| `W` `A` `S` `D` / arrows | Walk your avatar (hold `Shift` to run) |
+| Drag | Move around the map (there's no walking avatar) |
+| `W` `A` `S` `D` / arrows | Pan (hold `Shift` for faster) |
 | `Q` / `E`, dock arrows, or right-drag | Rotate (drag up and down to tilt) |
-| Scroll | Zoom |
-| Click a Sim, or `Space` when near | Inspect: truth (observed events) vs. simulation (flavor) |
+| Scroll | Zoom. The home in the middle of the screen lifts its roof as you get close; cutaway walls do the rest |
+| Double-click a home | Glide in and look inside |
+| Click a Sim, or `Space` for the one in view | Inspect: truth (observed events) vs. simulation (flavor) |
+| **You** (top bar) | Your picture; click it to change your look |
 | "Needs you" list / edge arrows | Fly to agents waiting on you |
 | Neighborhood panel | Every home and Sim with live status; click to fly there |
 | Dock | Time of day, walls, graphics quality, sounds, help |
@@ -62,7 +84,7 @@ Everything here is cosmetic and never changes what is shown as true about agents
 
 - **Build mode** (`B` or the hammer in the dock): choose a home, then place decor from the catalog (plants, lighting, rugs, seating, furniture, fun stuff, garden). Click to place, `R` to rotate, right-click or `Esc` to stop. Click a placed item to move, rotate or remove it. WASD pans the camera while building. Placement keeps every desk, waiting spot and doorway reachable; blocked spots show red with a reason.
 - **Paint** (build mode, Paint tab): outside walls, wallpaper and floor style per home.
-- **Wardrobe:** the shirt button in a resident's inspect drawer, or the shirt in the dock for your own avatar. Skin tone, hair, top, colors, shoes and an accessory, with a live preview.
+- **Wardrobe:** the shirt button in a resident's inspect drawer, or the **You** picture in the top bar (or the shirt in the dock) for your own look. Skin tone, hair, top, colors, shoes and an accessory, with a live preview.
 
 Style is saved in `~/.agent-world/style.json`, separate from observed events and your task board.
 
@@ -87,7 +109,7 @@ Style is saved in `~/.agent-world/style.json`, separate from observed events and
   - Pick a look with `1`–`5`, toggle tilt-shift with `T`, and press `Space` to take a photo.
   - Photos are saved locally in `~/.agent-world/photos`.
   - In the album you can download photos, delete them, or hang up to four on a home's wall.
-- **Gardens:** place a garden bed in Build mode (Garden), then walk up to it to plant tomatoes, sunflowers or, with a found seed packet, pumpkins.
+- **Gardens:** place a garden bed in Build mode (Garden), then zoom in on it to plant tomatoes, sunflowers or, with a found seed packet, pumpkins.
   - Crops grow over real hours and never wilt.
   - Your first harvest of each crop unlocks a decor item in the Harvest catalog.
 - **Weather you can see:** trees sway in the wind, roads get wet and shiny in rain, snow drifts build up outdoors, footprints show in snow, and ponds ripple.
@@ -99,11 +121,11 @@ Style is saved in `~/.agent-world/style.json`, separate from observed events and
 - **Town square** (west of the first street): the park, café, plaza fountain and town hall open as your homes reach outcomes and you accept tasks with review notes. The Progress panel shows what each one needs.
 - **Pets:** Build mode, Paint tab. Each home can have a cat, a dog or a bunny.
 - **Seasons and weather** (cloud button in the dock): follow the calendar or pick a season, plus clear, rain or snow. Ambience only.
-- **Finds:** a few collectibles sparkle in yards each day. Walk up to one to pick it up. Your first of each kind unlocks a special decor item in the Found catalog. Finds never give bricks.
+- **Finds:** a few collectibles sparkle in yards each day. Click one to pick it up. Your first of each kind unlocks a special decor item in the Found catalog. Finds never give bricks.
 
 ## Projects and conversations
 
-Click **Conversations** in the top bar, or **Conversation shelf** on a home. Search by title, app or conversation ID; **Find resident** takes you to the person currently working on a conversation. Earlier observed conversations remain saved after their sessions end. The same residents pick up later conversations.
+Open **Connections → Chats**, or click **Conversation shelf** on a home. Search by title, app or conversation ID; **Find resident** takes you to the person currently working on a conversation. Earlier observed conversations remain saved after their sessions end. The same residents pick up later conversations.
 
 Expand **Add an app project or saved chat** to:
 
@@ -119,7 +141,7 @@ Custom observers can include `conversation: { id, title, url }` and `project_nam
 
 ## Work
 
-Open **Work** in the top bar, click a house sign, or choose **Plan & briefing** in the roster. Pick a home from the chips at the top.
+Open **Work** in the top bar or click a house sign. Pick a home from the chips at the top.
 
 - **Now:** the home's outcome and next step (✎ Edit, ⚑ Reached), then **Needs you** (one row per request with its one useful action: Open the chat, Copy ID, Show the resident, or Review), **Up next** when nothing needs you, and **Changed since last check** (collapsed). The footer counts accepted, in-review and blocked tasks; **Mark caught up** acknowledges what's shown and never dismisses open requests. Requests in other homes are one tap away. No uncollected chat content is summarized.
 - **Tasks:** **Planned → In progress → Needs review → Accepted**, with counts on one line and lists only for stages that have tasks. Stages are your decisions; an agent finishing a turn never advances a task.
@@ -202,7 +224,25 @@ Reviews show a recorded summary, outputs, reported checks and limitations; full 
 
 ### Approved pass runner
 
-`npm run dev` enables the local runner; demo mode disables it. Use `AGENT_WORLD_RUNNER=0 npm run dev` to keep execution disabled. Installed, signed-in Codex CLI is required. Runs use `workspace-write`, a fresh conversation and a 30-minute limit. They preserve project instructions and uncommitted work, stop after one pass and return structured reported results. New proposals require fresh confirmation; approval does not accept previous work. Failed/interrupted runs require inspection rather than automatic retry. `passes.json` and private `pass-runs/` outputs live under AGENT_WORLD_HOME; no prompts are written to canonical activity events. API routes retain local-origin/JSON guards but are not an authenticated human-identity boundary.
+`npm run dev` enables the local runner; demo mode disables it. Use `AGENT_WORLD_RUNNER=0 npm run dev` to keep execution disabled. An installed, signed-in CLI for the selected provider is required. Codex uses `workspace-write`; Claude Code uses its configured permissions. Runs create a new conversation or resume the exact selected game chat, with a 30-minute limit. They preserve project instructions and uncommitted work, stop after one pass and return structured reported results. New proposals require fresh confirmation; approval does not accept previous work. Failed/interrupted runs require inspection rather than automatic retry. `passes.json` and private `pass-runs/` outputs live under AGENT_WORLD_HOME; no prompts are written to canonical activity events. API routes retain local-origin/JSON guards but are not an authenticated human-identity boundary.
+
+### Prompting Claude Code
+
+In an agent's chat, choose **Claude Code** beside the model control, type your instruction and select **Send**. Switching provider starts a new chat and preserves unsent text. Follow-up messages in a game-created Claude chat resume its exact Claude session; Codex and Claude histories remain separate. This routes to Claude Code CLI, not ordinary Claude desktop/web conversations. Existing external Claude sessions are not resumed.
+
+The official Claude Code CLI is installed locally at `~/.agent-world/tools/claude-code/node_modules/.bin/claude`. Complete sign-in once in your terminal:
+
+```sh
+~/.agent-world/tools/claude-code/node_modules/.bin/claude auth login
+```
+
+The bridge discovers this local install or `claude` on PATH. Set `AGENT_WORLD_CLAUDE_COMMAND` before starting the bridge to use another executable. CLI detection confirms installation only, not sign-in. Claude uses its configured model; Claude model switching, quota reads and reasoning summaries are not implemented. Its usage control explicitly shows unavailable.
+
+Claude runs use `dontAsk`: existing approved tool permissions apply, and tools requiring an interactive permission prompt are denied. The game never bypasses permissions. Inspect reported denials and configure required permissions in Claude Code before retrying explicitly. Replies and errors return to the same game chat. Existing Claude hooks supply observed scene activity; absent hooks mean activity is unavailable, not invented. New recommended passes remain unapproved.
+
+### Codex CLI discovery
+
+The runner and read-only model/usage APIs use the same Codex executable discovery: `AGENT_WORLD_CODEX_COMMAND`, executable on PATH, then known official macOS Codex/ChatGPT app bundles. This supports Finder launches with a minimal PATH. Explicit overrides never silently fall back. Restart the bridge after installation or override changes. Missing executables disable Send and return an installation/path error before approving work; sign-in is a separate check. Failed prompts are not automatically replayed.
 
 ### Codex desktop ownership
 

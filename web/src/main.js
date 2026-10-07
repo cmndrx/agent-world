@@ -1,10 +1,10 @@
 import { PassCard } from './pass-card.js';
-import { focusState } from '../../shared/freshness.mjs';
 import { Experience } from './experience.js';
 import '@fontsource-variable/nunito';
 import * as THREE from 'three';
 import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
-import { Avatar, CameraRig } from './avatar.js';
+import { CameraRig } from './camera.js';
+import { Player } from './player.js';
 import { Environment } from './environment.js';
 import { Lot } from './lot.js';
 import { Pipeline } from './pipeline.js';
@@ -218,10 +218,10 @@ function applySnapshot({ households: hs, sessions, projects = [], conversations 
     // Start at the lot that most needs attention, else the busiest, else the first.
     const all = [...sims.values()];
     const pick = all.find((s) => s.state === 'waiting_for_user') || all.find((s) => s.truth) || all[0];
-    if (pick) placeAvatarNear(pick.lot);
+    if (pick) camFocus.copy(pick.lot.toWorld(0, 2)).setY(0.12);
     setTimeout(() => {
       ui.hideIntro();
-      rig.flyTo(avatar.pos, { distance: 24, duration: 2.4 });
+      lookAt(camFocus, { distance: 24, duration: 2.4 });
     }, 250);
   }
 }
@@ -230,22 +230,6 @@ function hashStr(s) {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) | 0;
   return h >>> 0;
-}
-
-/** Collision test for the avatar, in world coordinates. */
-function blockedAt(x, z) {
-  const square = commons.blockedAt(x, z);
-  if (square !== null) return square;
-  const town = downtown.blockedAt(x, z);
-  if (town !== null) return town;
-  if (landscape.blockedAt(x, z)) return true;
-  for (const lot of lots.values()) {
-    const nav = lot.getNav();
-    const lx = x - lot.group.position.x;
-    const lz = z - lot.group.position.z;
-    if (nav.inBounds(lx, lz)) return !nav.walkable(lx, lz);
-  }
-  return false;
 }
 
 // ---- Bridge connection -----------------------------------------------------------------
@@ -444,7 +428,7 @@ function applyStyleAll() {
   }
   garden?.setStyle(style);
   for (const [key, sim] of sims) if (sim.character && wardrobe?.target?.model !== sim) sim.setLook(style.residents?.[key]);
-  if (wardrobe?.target?.model !== avatar) avatar.setLook(style.player);
+  if (wardrobe?.target?.model !== player) player.setLook(style.player);
 }
 
 async function saveStyle(change) {
@@ -456,17 +440,39 @@ async function saveStyle(change) {
 
 // ---- Player, camera, UI ---------------------------------------------------------------------
 
-const avatar = new Avatar(scene);
-const rig = new CameraRig(camera, renderer.domElement);
+// You're a picture in the top bar, not a character in the world: the camera is how you get around.
+const player = new Player({ onOpen: () => openWardrobe(null) });
+const camFocus = new THREE.Vector3(0, 0.12, 0); // what the free camera looks at
+const rig = new CameraRig(camera, renderer.domElement, {
+  // Dragging moves whatever the current mode is looking at; grabbing the map stops following a Sim.
+  panTarget: () => {
+    if (mapMode?.active) return mapFocus;
+    if (build?.active) return buildFocus;
+    if (followSelected) {
+      followSelected = false;
+      camFocus.copy(rig.target).setY(0.12);
+    }
+    return camFocus;
+  },
+});
 rig.distance = rig.distanceTarget = 80; // intro starts high; flies in on the first snapshot
 rig.pitch = 1.0;
 let selected = null;
 let hovered = null;
 
-function placeAvatarNear(lot) {
-  const p = lot.toWorld(0, 12.2);
-  avatar.teleport(p.x, p.z);
-  avatar.facing = Math.PI;
+/** Where the camera may pan: homes, the square and downtown, plus a little margin. */
+const worldBounds = new THREE.Box3();
+function updateWorldBounds() {
+  worldBounds.makeEmpty();
+  for (const g of [...[...lots.values()].map((l) => l.group), commons?.group, downtown?.group]) if (g) worldBounds.expandByObject(g);
+  if (!worldBounds.isEmpty()) worldBounds.expandByVector(new THREE.Vector3(6, 0, 6));
+}
+
+/** Glide the free camera to a point (and stay there). */
+function lookAt(point, { distance = rig.distanceTarget, duration } = {}) {
+  followSelected = false;
+  camFocus.copy(point).setY(0.12);
+  rig.flyTo(camFocus, { distance, duration });
 }
 
 const ui = new UI({
@@ -483,8 +489,7 @@ const ui = new UI({
   onFocusLot: (project) => {
     const lot = lots.get(project);
     if (!lot) return;
-    placeAvatarNear(lot);
-    rig.flyTo(lot.toWorld(0, 2).setY(0.12), { distance: Math.max(rig.distanceTarget, 30) });
+    lookAt(lot.toWorld(0, 2), { distance: Math.min(Math.max(rig.distanceTarget, 24), 34) });
   },
   onClose: () => select(null),
   onSetting: (key, value) => {
@@ -519,6 +524,8 @@ pipeline.onDowngrade = () => ui.renderDock(settings, sound.enabled, pipeline.lev
 let followSelected = false;
 function select(sim) {
   if (selected) selected.selected = false;
+  // Letting go of a Sim leaves the camera where it is.
+  if (!sim && followSelected) camFocus.copy(rig.target).setY(0.12);
   selected = sim;
   followSelected = !!sim;
   document.body.classList.toggle('inspecting', !!sim);
@@ -551,33 +558,21 @@ function updateViewOffset(dt) {
   else camera.setViewOffset(w, h, viewShift, viewShiftY, w, h);
 }
 
-/** Stand the avatar beside a Sim, to the camera's right for `yaw`, so it doesn't block the view. */
-function placeAvatarBeside(sim, yaw) {
-  const nav = sim.lot.getNav();
-  const rx = Math.cos(yaw);
-  const rz = -Math.sin(yaw);
-  const [i, j] = nav.nearestFree(...nav.toCell(sim.pos.x + rx * 1.6, sim.pos.y + rz * 1.6)) || nav.toCell(sim.pos.x, sim.pos.y);
-  const spot = nav.center(i, j);
-  const dest = sim.lot.toWorld(spot.x, spot.z).setY(0.12);
-  avatar.teleport(dest.x, dest.z);
-  avatar.facing = Math.atan2(sim.pos.x - spot.x, sim.pos.y - spot.z);
-  return dest;
-}
-
 function focusSim(key) {
   const sim = sims.get(key);
   if (!sim) return;
-  const dest = placeAvatarBeside(sim, rig.yawTarget);
-  rig.flyTo(dest, { distance: Math.min(rig.distanceTarget, 15) });
+  rig.flyTo(sim.worldPosition().setY(0.12), { distance: Math.min(rig.distanceTarget, 15) });
   select(sim);
 }
 
 const tmpV = new THREE.Vector3();
+/** The Sim nearest the middle of the screen, when zoomed in close enough to mean it. */
 function nearestSim(maxDist) {
+  if (rig.distance > 30 || build.active || mapMode.active) return null;
   let best = null;
   let bestD = maxDist;
   for (const sim of sims.values()) {
-    const d = sim.worldPosition().distanceTo(tmpV.set(avatar.pos.x, 0, avatar.pos.z));
+    const d = sim.worldPosition().distanceTo(tmpV.set(rig.target.x, 0, rig.target.z));
     if (d < bestD) {
       bestD = d;
       best = sim;
@@ -603,28 +598,63 @@ addEventListener('keydown', (e) => {
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2(9, 9);
 let pointerDirty = false;
-renderer.domElement.addEventListener('pointermove', (e) => {
+const lastClient = { x: -1, y: -1 };
+function setPointer(e) {
+  lastClient.x = e.clientX;
+  lastClient.y = e.clientY;
   const rect = renderer.domElement.getBoundingClientRect();
   pointer.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
   pointerDirty = true;
+}
+renderer.domElement.addEventListener('pointermove', setPointer);
+renderer.domElement.addEventListener('pointerleave', () => {
+  pointer.set(9, 9);
+  lastClient.x = -1;
+  pointerDirty = true;
 });
-renderer.domElement.addEventListener('pointerleave', () => pointer.set(9, 9));
 function pick() {
   raycaster.setFromCamera(pointer, camera);
   const hit = raycaster.intersectObjects([...sims.values()].map((s) => s.root), true)[0];
   return hit ? sims.get(hit.object.userData.simKey) : null;
+}
+function pickFind() {
+  raycaster.setFromCamera(pointer, camera);
+  return raycaster.intersectObjects(explore.hitTargets(), false)[0]?.object.userData.findId || null;
+}
+/** The home whose lot is under a screen point, if any. */
+function lotAt(clientX, clientY) {
+  const p = rig.groundAt(clientX, clientY);
+  if (!p) return null;
+  for (const lot of lots.values()) if (lot.getNav().inBounds(p.x - lot.group.position.x, p.z - lot.group.position.z)) return lot;
+  return null;
 }
 function pickDecor() {
   if (!build.lot) return null;
   raycaster.setFromCamera(pointer, camera);
   return raycaster.intersectObjects(build.lot.decor.group.children, true)[0]?.object || null;
 }
-renderer.domElement.addEventListener('click', () => {
-  if (mapMode.active) return;
+renderer.domElement.addEventListener('click', (e) => {
+  if (rig.suppressClick || mapMode.active) return;
+  setPointer(e);
   if (build.active) return build.click(pickDecor());
+  const find = !photo.active && pickFind();
+  if (find) return explore.collect(find);
   const sim = pick();
   if (sim) select(sim);
   else ui.close();
+});
+// Double-click a home to glide in and look inside (the roof lifts as you get close).
+renderer.domElement.addEventListener('dblclick', (e) => {
+  if (mapMode.active || build.active || photo.active) return;
+  setPointer(e);
+  const sim = pick();
+  if (sim) return focusSim(sim.key);
+  const lot = lotAt(e.clientX, e.clientY);
+  if (lot) lookAt(lot.toWorld(0, 1.5), { distance: 22 });
+  else {
+    const p = rig.groundAt(e.clientX, e.clientY);
+    if (p) lookAt(p, { distance: Math.max(16, rig.distanceTarget * 0.7) });
+  }
 });
 labels.domElement.addEventListener('click', (e) => {
   const b = e.target.closest('.bubble');
@@ -655,30 +685,32 @@ function frame() {
   const dt = Math.min(clock.getDelta(), 0.1);
   const t = clock.elapsedTime;
 
-  const lookTarget = nearestSim(6);
-  avatar.update(dt, t, rig.yaw, blockedAt, lookTarget ? lookTarget.worldPosition() : null);
-  // While inspecting, the camera follows the Sim; walking hands it back to the avatar.
-  if (avatar.moving) followSelected = false;
-  if (build.active) panBuildFocus(dt);
-  if (mapMode.active) panMapFocus(dt);
-  const focus = mapMode.active ? mapFocus : build.active ? buildFocus : followSelected && selected ? selected.worldPosition().setY(0.12) : avatar.pos;
+  rig.keyPan(dt);
+  // Panning stays over the neighborhood instead of drifting off into empty fields.
+  if (rig.panned && !worldBounds.isEmpty()) for (const v of [camFocus, buildFocus, mapFocus]) {
+    v.x = THREE.MathUtils.clamp(v.x, worldBounds.min.x, worldBounds.max.x);
+    v.z = THREE.MathUtils.clamp(v.z, worldBounds.min.z, worldBounds.max.z);
+  }
+  rig.panned = false;
+  const focus = mapMode.active ? mapFocus : build.active ? buildFocus : followSelected && selected ? selected.worldPosition().setY(0.12) : camFocus;
   rig.update(dt, focus);
   build.update();
   celebrations.update(dt);
   commons.update(dt, t, env.night, rig.target);
   downtown.update(dt, t, env.night, rig.target);
-  landscape.update(dt, t, env.night, avatar.pos);
+  landscape.update(dt, t, env.night, null);
   streetLife.enabled = settings.streetLife !== 'off' && !mapMode.active && !build.active;
   streetLife.update(dt, t, sims.values(), city, rig.target);
   if (t - lastRoleCheck > 2) {
     lastRoleCheck = t;
+    updateWorldBounds();
     applyRoles(); // helpers learn their type from their first observed step
   }
   seasons.update(dt, t, rig.target);
-  if (!mapMode.active && !build.active) explore.update(dt, t, avatar.pos);
+  if (!mapMode.active && !build.active) explore.update(dt, t);
   garden.enabled = !mapMode.active && !build.active && !photo.active;
-  garden.update(dt, t, avatar.pos);
-  weatherFx.update(dt, t, seasons.current(), rig.target, avatar);
+  garden.update(dt, t, rig.target, rig.distance < 34);
+  weatherFx.update(dt, t, seasons.current(), rig.target, null);
   if (mapMode.active) mapMode.place();
   updateViewOffset(dt);
   env.update(rig.target);
@@ -699,12 +731,15 @@ function frame() {
   } else if (pointerDirty) {
     pointerDirty = false;
     const h = pick();
+    // The home under the pointer nudges its roof up (a hint that double-click looks inside).
+    const hoverLot = !photo.active && !mapMode.active && lastClient.x >= 0 ? lotAt(lastClient.x, lastClient.y) : null;
+    for (const lot of lots.values()) lot.hovered = lot === hoverLot;
     if (h !== hovered) {
       if (hovered) hovered.hovered = false;
       hovered = h;
       if (h) h.hovered = true;
-      renderer.domElement.style.cursor = h ? 'pointer' : '';
     }
+    renderer.domElement.style.cursor = h || (!photo.active && pickFind()) ? 'pointer' : '';
   }
   pipeline.setOutlined(build.active ? [build.hoverDecor, build.selectedObject].filter(Boolean) : [selected, hovered].filter(Boolean).map((s) => s.root));
 
@@ -735,10 +770,15 @@ function frame() {
       sims.delete(key);
     }
   }
+  // The home you're looking at (middle of the screen) lifts its roof from farther out, so you can peek in.
+  const centerLot = mapMode.active ? null : [...lots.values()].find((l) => l.getNav().inBounds(rig.target.x - l.group.position.x, rig.target.z - l.group.position.z));
+  const petFocus = rig.distance < 26 ? rig.target : null;
   for (const lot of lots.values()) {
     // Roofs never cover the home you're decorating or inspecting.
     lot.roofAllowed = !build.active && selected?.lot !== lot;
-    lot.update(dt, t, { camera, night: env.night, busy: busyLots.has(lot), avatar: avatar.pos });
+    lot.peek = lot === centerLot;
+    if (build.active || mapMode.active || photo.active) lot.hovered = false;
+    lot.update(dt, t, { camera, night: env.night, busy: busyLots.has(lot), avatar: petFocus });
   }
   ui.updatePreview();
 
@@ -748,7 +788,6 @@ function frame() {
     lastClockLabel = t;
     ui.setClock(env.label(), env.hour, settings.time);
     ui.setNight(env.night > 0.55);
-    refreshFocusChip();
     if (ui.status.dataset.state === 'live') ui.setConnection('live', liveCount());
   }
   declutter(sims.values(), camera, app.clientWidth, app.clientHeight);
@@ -778,16 +817,6 @@ const work = new WorkCenter({
 function openAgentChat(sim){if(sim){select(sim);passCard.open(sim,{observedThread:true});}}
 const passCard=new PassCard({onActivity:(run,sim)=>{const target=run? sims.get(sessionToSim.get(run.conversationSession)):sim;if(!target)return false;if(selected)selected.selected=false;selected=target;target.selected=true;followSelected=true;document.body.classList.add('inspecting');ui.open(target);return true;},residentName:(project,slot)=>households.get(project)?.characters.find(c=>c.slot===slot)?.name,onClose:()=>{if(selected)ui.open(selected);}});
 document.body.classList.add('pass-workflow');
-const passOpen=document.createElement('button');passOpen.className='chip glass';passOpen.id='pass-open';passOpen.textContent='Prompt agent';document.getElementById('work-open').after(passOpen);
-passOpen.addEventListener('click',()=>{const sim=selected || [...sims.values()].find(s=>!s.isVisitor);if(sim)passCard.open(sim);else {const home=[...households.keys()][0];if(home)passCard.openHome(home);}});
-function refreshFocusChip() {
-  const f = focusState(settings.focusProject, [...households.values()]);
-  document.getElementById('focus-home').textContent = f.label;
-  document.getElementById('focus-status').title = f.effective ? 'Routine pings from other homes are quiet. Questions, approvals and errors still show.' : f.saved ? 'Saved home is unavailable. Notifications are not filtered.' : 'No project focus; notifications from all homes.';
-  document.getElementById('focus-clear').hidden = !f.saved;
-}
-document.getElementById('focus-home').addEventListener('click', () => passOpen.click());
-document.getElementById('focus-clear').addEventListener('click', () => { work.setFocus(''); refreshFocusChip(); });
 function allowRoutine(session) {
   return shouldNotify(session, households.has(settings.focusProject) ? settings.focusProject : '');
 }
@@ -822,13 +851,12 @@ build = new BuildMode({
     let best = null;
     let bestD = Infinity;
     for (const lot of lots.values()) {
-      const d = lot.toWorld(0, 0).distanceTo(avatar.pos);
+      const d = lot.toWorld(0, 0).distanceTo(rig.target);
       if (d < bestD) [best, bestD] = [lot, d];
     }
     return best;
   },
   onToggle: (active, lot) => {
-    avatar.enabled = !active;
     if (active) {
       ui.close();
       for (const l of lots.values()) l.wallMode = 'down';
@@ -842,7 +870,7 @@ build = new BuildMode({
       mapReturnYaw = null;
       rig.maxDistance = 60;
       env.fogScale = 1;
-      rig.flyTo(avatar.pos, { distance: 22 });
+      rig.flyTo(camFocus, { distance: 22 });
     }
   },
 });
@@ -868,7 +896,6 @@ mapMode = new MapMode({
   save: saveStyle,
   camera,
   onToggle: (active, center, distance) => {
-    avatar.enabled = !active;
     if (active) {
       if (build.active) build.exit();
       ui.close();
@@ -887,25 +914,10 @@ mapMode = new MapMode({
       mapReturnYaw = null;
       rig.maxDistance = 60;
       env.fogScale = 1;
-      rig.flyTo(avatar.pos, { distance: 22 });
+      rig.flyTo(camFocus, { distance: 22 });
     }
   },
 });
-
-function panMapFocus(dt) {
-  const k = avatar.keys;
-  let fx = 0;
-  let fz = 0;
-  if (k.has('w') || k.has('arrowup')) fz -= 1;
-  if (k.has('s') || k.has('arrowdown')) fz += 1;
-  if (k.has('a') || k.has('arrowleft')) fx -= 1;
-  if (k.has('d') || k.has('arrowright')) fx += 1;
-  if (!fx && !fz) return;
-  const sin = Math.sin(rig.yaw);
-  const cos = Math.cos(rig.yaw);
-  mapFocus.x += (fx * cos + fz * sin) * 30 * dt;
-  mapFocus.z += (-fx * sin + fz * cos) * 30 * dt;
-}
 
 progressPanel = new ProgressPanel({
   onPlan: (project) => work.open(project),
@@ -957,31 +969,10 @@ photo.onError = (message) => cheer(escapeHtml(message), '!');
 
 census = new Census({
   people: cityPeople,
-  onVisit: () => {
-    // Stand on main street's sidewalk; the camera follows the avatar.
-    avatar.teleport(DOWNTOWN_X - 4, 8.6);
-    avatar.facing = Math.PI;
-    rig.flyTo(avatar.pos, { distance: 34 });
-  },
+  onVisit: () => lookAt(new THREE.Vector3(DOWNTOWN_X - 4, 0.12, 8.6), { distance: 34 }),
 });
 census.setCity(city, demoMode && city.demo);
 refreshProgress();
-
-function panBuildFocus(dt) {
-  const k = avatar.keys;
-  let fx = 0;
-  let fz = 0;
-  if (k.has('w') || k.has('arrowup')) fz -= 1;
-  if (k.has('s') || k.has('arrowdown')) fz += 1;
-  if (k.has('a') || k.has('arrowleft')) fx -= 1;
-  if (k.has('d') || k.has('arrowright')) fx += 1;
-  if (!fx && !fz) return;
-  const sin = Math.sin(rig.yaw);
-  const cos = Math.cos(rig.yaw);
-  const speed = 12 * dt;
-  buildFocus.x += (fx * cos + fz * sin) * speed;
-  buildFocus.z += (-fx * sin + fz * cos) * speed;
-}
 
 wardrobe = new Wardrobe({ save: saveStyle });
 function openWardrobe(sim) {
@@ -992,20 +983,17 @@ function openWardrobe(sim) {
     wardrobe.open({ name: sim.name, model: sim, change: { kind: 'resident', key }, saved: style.residents?.[key] || null });
     rig.yawTarget = sim.facing;
     rig.distanceTarget = 7;
-    placeAvatarBeside(sim, sim.facing);
   } else {
     ui.close();
-    wardrobe.open({ name: 'You', model: avatar, change: { kind: 'player' }, saved: style.player || null });
-    rig.yawTarget = avatar.facing;
-    rig.flyTo(avatar.pos, { distance: 6 });
+    wardrobe.open({ name: 'You', model: player, change: { kind: 'player' }, saved: style.player || null, preview: () => player.previewHtml() });
   }
 }
 
-const experience = new Experience({ work, leavePlay: () => { if (build.active) build.exit(); if (mapMode.active) mapMode.exit(); if (photo.active) photo.exit(); }, action: name => ui.h.onAction(name), pets: () => { if (!build.active) build.enter(selected?.lot); build.tab = 'pets'; build.render(); } });
+const experience = new Experience({ work, onConversations: () => library.open(), leavePlay: () => { if (build.active) build.exit(); if (mapMode.active) mapMode.exit(); if (photo.active) photo.exit(); }, action: name => ui.h.onAction(name), pets: () => { if (!build.active) build.enter(selected?.lot); build.tab = 'pets'; build.render(); } });
 
 // Debug handle for the console.
 window.agentWorld = {
-  garden, photo, album, weatherFx, downtown, census, streetLife, landscape, city: () => city, sims, lots, avatar, rig, sound, env, pipeline, focusSim, library, work, build, wardrobe, style: () => style, commons, seasons, explore, mapMode };
+  garden, photo, album, weatherFx, downtown, census, streetLife, landscape, city: () => city, sims, lots, player, rig, worldBounds, lookAt, sound, env, pipeline, focusSim, library, work, build, wardrobe, style: () => style, commons, seasons, explore, mapMode };
 
 connect();
 frame();

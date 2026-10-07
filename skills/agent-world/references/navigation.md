@@ -18,17 +18,18 @@ Typing, code bars and ambient poses are illustrative. Observed labels, file/comm
 
 ## Controls
 
-- `W A S D` or arrow keys: walk; hold `Shift` to run.
+- Left-drag: pan the map (there is no walking avatar; the player is a picture in the top bar). `W A S D` or arrow keys also pan; `Shift` pans faster.
+- Double-click a home: glide in. The home in the middle of the screen lifts its roof as you zoom in; cutaway walls face the camera.
 - `Q / E`, dock arrows, or right-drag: rotate; vertical right-drag tilts.
 - Scroll: zoom.
-- Click a resident, or `Space` nearby: open Watch activity. Its inactive status and animated screen open chat for the exact observed Codex conversation. Finished-turn attention opens chat directly; this sends nothing.
+- Click a resident, or `Space` for the one in the middle of the view: open Watch activity. Its inactive status and animated screen open chat for the exact observed Codex conversation. Finished-turn attention opens chat directly; this sends nothing.
 - “Needs you” entries and edge arrows: navigate to an attached resident that needs attention.
 - House sign or **Plan & briefing**: open that home’s agent card.
 - **Conversation shelf** or the top-bar chat icon (**Chats**): search conversations and find their current resident. **Open in…** opens a known original chat link, not a prompt composer under the game's control. Coding conversation links may be unavailable.
 - `Esc`: close menus/drawers; native dialogs can be dismissed through their close control or Escape.
 - Dock: graphics, cutaway/up/down walls, local-clock ambience or time preview, sounds, help.
 
-Use current accessible controls and page state when automating the UI. Typing in forms must not move the avatar. Test scene appearance as well as DOM controls for visual changes. The optional debug handle `window.agentWorld` is diagnostic, not a way to forge truth or bypass task acceptance.
+Use current accessible controls and page state when automating the UI. Typing in forms must not pan the camera. Test scene appearance as well as DOM controls for visual changes. The optional debug handle `window.agentWorld` is diagnostic, not a way to forge truth or bypass task acceptance.
 
 ## Work (formerly the command center)
 
@@ -58,3 +59,6 @@ Reviews show a recorded summary, outputs, reported checks and limitations; full 
 ## Current primary workflow
 
 Agent selection opens Watch activity. The inactive status, animated screen and Prompt this agent open its chat; closing chat returns to activity. The chat retains local recorded prompt/response pairs and exact conversation identity. Its thinking/activity details show observed tool/file steps, not private reasoning. Earlier app messages are not imported. Only the human selecting Send approves that one typed instruction. Do not approve, retry, resolve interrupted work or accept tasks on the human's behalf. See the README and latest handoff for verified coverage.
+
+
+The composer provider control chooses Codex or Claude Code for a new chat and retains the draft. Each provider has its own recorded chats. Follow-ups resume the exact selected session; Claude resumes only sessions created by Agent World, not external Claude app/CLI sessions. Claude requires a signed-in CLI and configured tool permissions, uses its configured model, and has no verified quota or reasoning-summary source. Installation detection does not establish sign-in. Do not send a test prompt without human authorization for the actual work.

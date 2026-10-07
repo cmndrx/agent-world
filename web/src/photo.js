@@ -102,7 +102,7 @@ export class PhotoMode {
         <button class="chip-btn" data-album>${icon('images')} Album</button>
         <button class="icon-btn" data-exit aria-label="Exit photo mode (Esc)">${icon('x')}</button>
       </div>
-      <p class="photo-hint">Drag to orbit · scroll to zoom · WASD to walk · Space takes a photo · 1–5 change the look · Esc exits</p>`;
+      <p class="photo-hint">Drag to move · right-drag to orbit · scroll to zoom · Space takes a photo · 1–5 change the look · Esc exits</p>`;
   }
 
   shoot() {
@@ -212,10 +212,12 @@ export class Album {
       body = this.photos.length
         ? `<div class="album-grid">${this.photos.map((p) => `<button class="album-thumb${this.hungIn(p.id).length ? ' hung' : ''}" data-view="${esc(p.id)}" aria-label="Open photo from ${esc(new Date(p.at).toLocaleString())}">
             <img loading="lazy" src="/api/photos/${esc(p.id)}.jpg" alt="" /></button>`).join('')}</div>`
-        : `<p class="empty-note">No photos yet. Press <kbd>P</kbd> or the camera in the dock, frame a shot and press <kbd>Space</kbd>.</p>`;
+        : `<p class="empty-note">No photos yet. Press <kbd>P</kbd>, frame a shot, then <kbd>Space</kbd>.</p>`;
     }
-    this.dialog.innerHTML = `<header><div><small>PHOTO ALBUM · ${this.photos.length} PHOTO${this.photos.length === 1 ? '' : 'S'}</small>
-        <h2>${this.viewing ? `<button class="icon-btn" data-back aria-label="Back to all photos">${icon('arrowLeft')}</button>` : ''}${icon('images')} Your neighborhood album</h2></div>
+    const n = this.photos.length;
+    this.dialog.classList.toggle('empty', !n && !this.viewing);
+    this.dialog.innerHTML = `<header class="panel-head">${this.viewing ? `<button class="icon-btn" data-back aria-label="Back to all photos">${icon('arrowLeft')}</button>` : `<span class="panel-icon photo">${icon('images')}</span>`}
+        <div><h2>Album</h2><small>${n ? `${n} photo${n === 1 ? '' : 's'}` : 'Your neighborhood snapshots'}</small></div>
         <button class="icon-btn" data-close aria-label="Close">${icon('x')}</button></header>${body}`;
   }
 

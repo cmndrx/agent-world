@@ -6,3 +6,9 @@ test('resident continuity prefers its own latest run and busy states block conti
  for(const state of ['reading','editing','running','thinking','error'])assert.equal(threadBusy([{session:a,state}],a),true);
  for(const state of ['waiting_for_user','done','idle'])assert.equal(threadBusy([{session:a,state}],a),false);
 });
+
+test('Claude continuity uses only its own game sessions, never Codex or desktop sessions',()=>{
+ const a='11111111-2222-3333-4444-555555555555',b='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+ const runs=[{project:'/p',slot:1,provider:'claude',conversationSession:a},{project:'/p',slot:1,provider:'codex',conversationSession:b}];
+ assert.equal(residentThread(runs,'/p',1,null,'claude'),a);assert.equal(residentThread(runs,'/p',1,null,'codex'),b);assert.equal(residentThread([],'/p',1,{source:'claude-code',session:a},'claude'),null);
+});

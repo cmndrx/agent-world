@@ -2,11 +2,175 @@
 
 As of 2026-10-06. This is a development handoff, not proof of release readiness. Recheck Git, listeners and live state when resuming.
 
+## Git checkpoint: Electron app and accumulated updates (2026-10-06)
+
+The human authorized committing and pushing the current project, including the Electron conversion, to the configured GitHub origin/main. This checkpoint includes the Electron wrapper/config/icons, accumulated visual and navigation changes, Claude prompt routing, Codex executable discovery, related tests and docs. Generated release/, dist/, node_modules/ and runtime/demo data remain excluded. All prior work preserved.
+
+Fresh checks: explicit Node 18.16.0 test run passed 125/125; production build passed with the existing large-chunk warning; Electron main syntax and git diff --check passed. Credential/key-pattern scan of changed text files returned no matches. Existing mac-arm64 packaged app passed codesign --verify --deep (no new package generated or app relaunched during this checkpoint). Verified origin/main matched local HEAD before committing. Current bridge listener belongs to the Electron app; it was not interrupted. Prior authenticated-provider, browser and notarization limitations remain scoped as recorded; this checkpoint does not claim a new real prompt test, notarization or release readiness.
+
+## Previous pass: remove main-overlay buttons (2026-10-06)
+
+Scoped human instruction: remove the chat, Prompt agent and All homes buttons from the main overlay. Removed the Conversations icon and focus chip from `web/index.html`, the generated Prompt agent button and focus-chip refresh/listeners from `web/src/main.js`, and their obsolete CSS/icon/listener references. Connections → Chats now calls the conversation library directly through an Experience callback instead of clicking the removed overlay control. Resident activity-view prompting, world-space shelves and the existing focus preference/notification logic remain. README documents the entry points. Prior uncommitted work preserved.
+
+Checks actually run: syntax checks for main.js, experience.js, conversations.js and ui.js passed; `git diff --check` passed. `node --test test/chat.test.mjs test/freshness.test.mjs` passed 8/8. `npm run build` passed (170 modules; inherited large-chunk warning, 1,014.33 KB JS). Source-reference scan found no remaining references to the removed IDs/handlers (the unrelated `.focus-status` class remains).
+
+Runtime: lsof identified existing Vite :5177 and bridge :4777 listeners, PIDs 58563/61106, and verified both cwd paths are this checkout. Shell HTTP probe returned connection failure (000); process command inspection was denied. Computer-use inventory timed out twice, so no browser/desktop visual verification or screenshot was obtained. Build/tests do not establish live rendering or interaction behavior. Existing servers were not restarted. Full suite not run for this narrow UI removal.
+
+Changed this pass: web/index.html, web/src/main.js, web/src/conversations.js, web/src/experience.js, web/src/ui.js, web/src/style.css, README.md and this handoff. No queue/task changes, prompt submission, acceptance, spending, messages to other chats, future pass approval/execution, commit, push or publishing. Stop after this single pass; no next pass is proposed.
+
+## Previous pass: Codex startup from a minimal PATH (2026-10-06)
+
+Human reported Nell's prompt failed with `Codex CLI could not start`. Live runner capability was codex.installed=false, although the signed-in Codex CLI existed inside ChatGPT.app. Root cause: bridge used the literal `codex` executable and its startup environment could not resolve it. Verified the official bundled binary with `--version` (0.160.0) and read-only `login status` (logged in using ChatGPT).
+
+Added shared Codex discovery: explicit `AGENT_WORLD_CODEX_COMMAND`, executable on PATH, then known official macOS app bundle paths. PassRunner and model/usage app-server RPCs share it; overrides remain pinned even if missing. Missing CLI now disables Send and rejects proposals before approval. Startup errors distinguish a missing executable from executable permissions and no longer imply an authentication failure. Provider, history and all other uncommitted changes preserved. Skill's stale Claude-continuation sentence corrected to the already-implemented game-owned-session rule.
+
+Restarted only the API bridge after confirming zero approved/running/interrupted work; existing Vite and tailer remain. New bridge runner reports both providers installed. No failed prompt replayed, queue modified, new inference sent, task accepted or commit/push performed. Existing failed chat messages remain historical evidence. Human can explicitly resend the instruction. Desktop conversation ownership constraints remain separate from this resolved executable lookup failure.
+
+Checks: new minimal-PATH/override/executable-permission discovery test plus runner/usage regressions passed 21/21 on Node 18.16.0. Full suite passed 124/125; its one planning-helper integration failure (catalog-api seen action) passed on a targeted rerun, without changing planning code. Production build passed with the existing chunk warning. Syntax checks and git diff --check passed. A minimal-PATH read-only launch verified Codex version and sign-in; live bridge capability confirmed installed=true after restart. No real prompt or actual Nell inference was sent as a test. Live read-only endpoints also returned usage available (one quota bucket) and models available (eight models). Initial model probe without a project correctly returned 400; retried with the recorded project key.
+
+## Previous pass: remove project-card footer buttons (2026-10-06)
+
+Scoped human instruction: remove Plan & briefing and shelf buttons from the project card. Removed Conversation shelf and Plan & briefing from the roster's `.lot-group` template and removed their dataset assignments in `web/src/ui.js`. Removed CSS used only by those footer controls while retaining shared shelf styling elsewhere. Project title, live counts and resident/visitor rows remain. World-space shelf and other existing library/planning entry points are outside this card and unchanged. README and CONCEPT reflect the reduced card. All prior visual/navigation/provider edits and other uncommitted work preserved.
+
+Checks actually run:
+- `node --check web/src/ui.js` and `git diff --check` passed.
+- `npm run build` passed, with inherited large-chunk warning (1,015.37 KB JS).
+- `node --test test/*.test.mjs`: 124 tests, 120 passed, four catalog API integration tests failed at bridge startup (`Bridge exited: 1`). A separate loopback listen probe returned EPERM; exact child diagnostics remain unavailable. Used the explicit glob because the recorded Node 22 npm-script discovery limitation remains; no package/test-runner change was made.
+- In-app browser was unavailable. Used the existing user Chrome Agent World tab: verified one project card, zero footer controls matching `.roster-shelf`/`.work-home-button`, and all three real agent rows present. Selecting Nell opened Watch activity; closed the drawer afterward. No console errors reported. No prompt submission or metadata mutation. User tab remains open.
+- Screenshot: `docs/screenshots/project-card-no-footer-buttons.png` (live page, project card at upper left).
+
+Runtime: lsof verified bridge PID 45933 on :4777 and Vite PID 45934 on :5177, with cwd this checkout; Chrome loaded the live page. No backend restart or synthetic data needed. Changed ui.js, style.css, README, CONCEPT, this handoff and screenshot only. No queue/task writes, approvals, acceptance, future pass approval/execution, spend, messages to other chats, publishing, commit or push. No mobile/device or exhaustive accessibility audit. This single pass stops here; no next pass is proposed or executed.
+
+## Previous pass: Claude Code prompt routing (2026-10-06)
+
+Human authorized adding Claude routing after grounding in all new visual/navigation changes. Preserved the existing visual pass, player/camera split and other uncommitted work. Composer now offers Codex / Claude Code, preserves unsent drafts on switch, starts a separate provider chat, and filters chat history, rename metadata and continuation by provider. Claude has an explicit unavailable usage control and configured-model label; no false Codex model, quota or reasoning claims. Send pins provider on the proposal/run; next recommendations inherit it but remain unapproved. Claude resumes only exact game-created sessions in the same project. Ordinary Claude desktop/web chats and external Claude Code sessions are not resumed.
+
+`bridge/providers.mjs` discovers the official local Claude CLI or PATH (override `AGENT_WORLD_CLAUDE_COMMAND`). Installed Anthropic's official npm CLI outside the repo at `~/.agent-world/tools/claude-code`, version 2.1.292. Read-only auth status reported loggedIn=false. The human was asked to complete `~/.agent-world/tools/claude-code/node_modules/.bin/claude auth login`; no real inference or sign-in was performed by this pass. Binary presence in runner capabilities is not auth readiness.
+
+Runner uses print-mode stream JSON, structured output, exact UUID validation on init/result and `dontAsk` permission mode, never bypass flags. Errors, permission denials and identity mismatch cannot be successful results; no automatic retries or provider fallback. Claude thinking/raw messages are not imported. Existing hooks supply actual observed activity. Tool permissions requiring interaction must be configured in Claude Code by the human before an explicit retry.
+
+Checks: explicit `node --test test/*.test.mjs` passed 124/124, including isolated mock Claude success/continuation, denied tools, wrong session identity and provider history separation. Build passed with the existing chunk warning. Live browser verified provider controls, separate history, correct model/usage labels and draft retention, without selecting Send. Screenshot: `docs/screenshots/claude-routing.png`. Browser log contains a Vite HMR WebSocket connection error; HTTP reload delivered current code. Authenticated Claude execution, actual hook-driven Claude activity and real follow-up execution remain unverified until sign-in. `npm test` discovery is incompatible with the current Node 22 environment; explicit file glob runs the suite.
+
+Started `npm run dev` on 5177/4777 after confirming no active/interrupted/approved runs. Recheck listeners before reuse; do not interrupt live work. Next useful check: human sign-in, then a human-authorized Claude prompt and follow-up, verifying the same session ID, reply and observed activity. No commit/push performed for this pass.
+
 ## Git checkpoint (2026-10-06)
 
 The human authorized committing and pushing all project changes so far to the configured origin/main. Fresh checkpoint validation on Node 18.16.0: npm test passed all 120 tests, including the four catalog API integrations that were blocked in earlier environments; production build passed with the existing chunk-size warning; git diff --check passed. Reviewed tracked/untracked inventory: source, project docs, relative skill symlinks and QA screenshots; no temporary QA source or generated/runtime directories included. Credential-file/key-pattern scan found no matches. Remote main matched local HEAD before the checkpoint. Prior browser/paid-provider limits in each pass remain scoped as recorded; passing this suite does not establish release readiness.
 
-## Latest pass: remove conversation card from Watch activity (2026-10-06)
+## Latest pass: Electron desktop app (2026-10-06)
+
+Human asked for an Electron app of the exact current game build.
+
+- **`electron/main.cjs`:**
+  - Runs `bridge/server.mjs --serve dist` and `adapters/codex/tail.mjs` with Electron's own Node (`ELECTRON_RUN_AS_NODE`), using the same environment as `scripts/dev.mjs --prod`. The runner is on unless `AGENT_WORLD_RUNNER` says otherwise.
+  - Waits for `/` and `/api/state`, then loads the game in a 1440×900 window with a loading screen first.
+  - Window security: context isolation, sandbox, no Node in the page. Other origins and app links open through `shell.openExternal`, and a failed load retries.
+  - Single instance. Quitting sends SIGTERM to the children; verified no orphaned processes.
+  - Opened from Finder, it borrows the login shell's PATH so passes can find `codex` and `claude`.
+  - If an Agent World bridge already answers on 4777, the app reuses it rather than starting a second bridge over the same home: it loads that bridge's page if it serves one, otherwise the Vite page on 5177, otherwise it explains and quits.
+  - `--demo` uses `userData/demo-home` with fake agents on a free port.
+- **`package.json`:** `main`; scripts `app`, `app:demo` and `app:build`; electron-builder config (unpacked, no node_modules, since the client is fully bundled in dist; ad-hoc signed with `identity: "-"`; icon `electron/build/icon.icns`); output in `release/` (gitignored). Electron is pinned to ^39.8.10 and electron-builder to 26.8.0, the newest whose installs still work on this machine's default Node 18.16 (Electron 40+ and builder 26.15 need require(esm), Node ≥20.19).
+- **Icon:** `electron/build/icon.svg`, a green gem on a sky and hill tile, rendered to `icon.png` with transparent corners and `icon.icns`.
+- **`bridge/server.mjs`:** static MIME types now cover woff2, woff, jpg and json.
+
+Checks actually run:
+- `npm run app:demo` from the checkout: the window loaded the game (Live · 4 sessions, 4 Sims, captured over CDP).
+  - First load showed the bridge's "not found" because `dist/` was being rewritten by a concurrent build. Hence the wait for `/` plus retry.
+- `electron-builder --mac --dir` → `release/mac-arm64/Agent World.app`: 256 MB, ad-hoc signature verified with `codesign --verify --deep`, bundle has no node_modules.
+- The packaged app launched with `--demo` from its own Resources/app and went Live with 4 Sims.
+- Quitting both left no bridge or fake processes. npm test passed 125/125.
+
+Follow-up launch (real mode):
+- The first two tries showed the "already running in API-only mode" dialog. The human's Vite listens only on [::1]:5177, and the 800 ms probes timed out under heavy machine load (load average about 35).
+- Fixed: the app now probes both loopback addresses with a 5 s timeout and logs startup errors.
+- On the third launch the dev bridge had stopped, so the app started its own bridge and Codex tailer on 4777 with `~/.agent-world` and loaded the game. The window's contents weren't inspectable without accessibility permission; the bridge answered `/api/state`.
+
+Originally not run: the app in real (non-demo) mode, because the human's own dev bridge was on 4777 at the time and I didn't want to touch it. Also no DMG, notarization or Intel build.
+
+## Previous pass: offline bubbles show only "last seen" (2026-10-06)
+
+Human asked that the overhead bubbles shown while observation is offline drop the "Last known: <activity>" text, the conversation line and the detail, and show only when the agent was last seen. In `web/src/sim.js` `updateLabel`, a stale bubble (observation offline and the Sim has a session) now shows the name plus `Last seen <age>`, using `observedLabel` with "Last observed" reworded. The detail and conversation lines are suppressed while stale. Live bubbles are unchanged. Other "Last known" surfaces were left as they were: the roster, the inspect drawer, the Needs strip and the agent-view tests.
+
+Checks: npm test passed 120/120. In the browser on the QA stack, I forced each attached Sim to offline and selected, then rendered its bubble. All four read `<Name> | Last seen just now`, with the stale styling. Taking the real bridge offline wasn't observable in the pane because the Vite proxy kept the stream looking live.
+
+## Previous pass: visual pass E, graphics and animation polish (2026-10-06)
+
+Human asked for a graphics, animations and visuals pass. I reviewed full-resolution renders (captured through the QA home's photo endpoint) at noon, golden hour and night, from overview and close-up, and fixed what looked weakest:
+
+- **Roofs (`lot.js`):**
+  - Roofs are now strictly on or off, with hysteresis (open below 48 m, or 76 m for the centered home; close 8 m farther out). Before, they hovered half-lifted and shrunken anywhere between 46 and 58 m.
+  - The lift is a damped spring with a small settle bounce.
+  - Hovering a roofed home nudges its roof up 0.45 m, hinting that double-click looks inside (`lot.hovered`, set from main's pointer hover).
+  - Craftsman roofs are proper hip roofs (two slopes, a ridge and two ends) with a ridge cap instead of a four-sided pyramid. Each home's shingle tint (slate, brown, sage or umber) comes from a hash of its project.
+  - Craftsman homes get a chimney too. Cottage and craftsman chimneys have six animated smoke puffs, shown only while the roof is on.
+- **Ground (`fx.js`, `scenery.js`, `seasons.js`):**
+  - `FX_MOTTLE` adds broad warm and cool patches, and the big terrain now uses mottle (0.22).
+  - `FX_LAWN` adds mowed stripes on lot lawns, faded out with `fwidth` so they don't shimmer at distance.
+  - Grass tufts are three-blade clumps with per-instance tint instead of single spikes.
+  - Autumn grass is olive (lawns #a9c066, tufts #9dab4c, terrain blend 0.3) instead of khaki.
+- **Lighting (`environment.js`):**
+  - Day fill is lower (hemi about 0.4, environment light 0.36) with a stronger sun (3.45 at noon) and slightly lower exposure, so shadows and roof planes read.
+  - Golden hour is less saturated (1.06).
+  - Night is a neutral moonlight instead of saturated blue (moon 1.35, desaturated grade), so warm windows and lamp pools pop and roofs keep their form.
+- **Animation:**
+  - Selecting a Sim plays a squash-and-stretch hop and spins its diamond (`sim.js`; root scale is restored afterwards).
+  - At dusk, homes switch their lights on at staggered moments (a per-project threshold) instead of all at once.
+- **Interiors:** the wainscot is a bit darker (0.8) and there's a new baseboard (0.55) along the interior walls.
+
+Checks actually run, on the isolated QA stack at an emulated 1280×800:
+- **Renders, before and after** (`docs/screenshots/visual-pass-e-*.jpg`):
+  - Roof state at the old in-between distance: each lot was exactly 0 or 1.
+  - The hover lift raised a roof from 2.74 to 3.19.
+  - The selection hop's scale animated and returned to 1.
+  - The pane held 60 fps at night in the overview.
+  - No console errors.
+- **Tests and build:** npm test passed 120/120; build passes; `git diff --check` is clean.
+
+Not verified: spring, summer and winter looks; Medium and Low quality; Retina hardware. Smoke adds 6 small draws per chimney.
+
+## Previous pass: picture avatar and drag-to-pan camera (2026-10-06)
+
+Human asked: the player becomes a picture of an animated avatar, walking in the world is removed, click-and-drag moves around the map, and I choose how to look inside buildings.
+
+- **Camera (`web/src/camera.js`, replaces `avatar.js`):** left-drag grabs the ground under the pointer and pans, with a short coast after a flick. Right/middle-drag turns and tilts, the wheel zooms, and WASD/arrows pan at a speed that scales with zoom (Shift is faster). Q/E turn. A 5px threshold separates pans from clicks, and the click after a pan is suppressed. Grabbing mid-flight keeps the flight's zoom. Text selection and touch scrolling are blocked on the canvas. Panning goes through a `panTarget()` callback: free focus, build focus or map focus. Grabbing while following a Sim switches to free focus without a jump. User pans clamp to the bounds of the homes, square and downtown (refreshed every 2s).
+- **Player (`web/src/player.js`):** a "You" badge after the brand chip, showing the shared SVG `portrait()` with CSS bob, breathe and blink (none under reduced motion). Clicking it opens the wardrobe with a large live preview; saves still use `{ kind: 'player' }`. `portrait()` gained accessories (glasses, cap, beanie, headphones, flower) and a collar cue for hoodies and collared tops, which Sim portraits get too. On phones the badge shrinks to the picture only.
+- **Seeing inside:** the existing roof lift (46–58 units) and cutaway walls are kept. The home under the screen center (`lot.peek`) lifts its roof from 74–88 units, so whatever you center on opens up. Double-clicking a home glides to it at distance 22; double-clicking a Sim focuses it; double-clicking ground glides there.
+- **Rewired avatar-dependent play:**
+  - Finds are clicked to collect, with an invisible 0.75 radius hit sphere and a pointer cursor; `Explore.collect` and `hitTargets`.
+  - Garden chips show when a bed is within 7 units of the screen center while zoomed in (camera distance under 34).
+  - Pets greet the screen center when the camera distance is under 26.
+  - Space and the hint use the Sim nearest the screen center when zoomed in.
+  - Build's nearest-lot pick uses the camera target.
+  - The census "Visit" flies the camera.
+  - Snow footprints and the car yielding to the avatar are gone.
+  - `blockedAt` was removed from main. The `blockedAt` methods in commons, downtown and landscape are now unused and could be deleted.
+- **Help menu, photo hint, README, GAMEPLAY, CONCEPT and the navigation skill reference** are updated for drag-to-pan.
+
+Checks actually run, on the isolated QA stack (:4778/:5178, demo agents, scratch AGENT_WORLD_HOME):
+- **Browser:** no console errors on load and no avatar in the scene. Drag pans in normal, inspect, build and map modes. Inspect stays open while panning. Double-clicking a roofed home glides in with the roof off. The badge opens the wardrobe, and a live hair change updated both the badge and the preview (then cancelled). Clicking a find collected it in the QA home (crystal count 1→2). No text is selected after a drag. The help menu is compact. Phone width fits.
+- **Tests and build:** npm test passed 120/120, the production build passed (existing chunk warning), and `git diff --check` is clean.
+
+Gaps:
+- No pinch-zoom on touch.
+- Real-mouse feel (coast amount) should be tuned by the human. Synthetic drags arrive as single jumps.
+- Drag starting on a floating label doesn't pan.
+
+## Previous pass: theme, contrast and spacing across modals and menus (2026-10-06)
+
+Human asked that every modal and menu be in theme, with good internal spacing and readable text, plus two prompter icon swaps. Codex's parallel work (prompter, usage, setup guide, review flow) was preserved and only restyled.
+
+- **Tokens:** `--ink-3` darkened to #5f6779; added `--accent-ink`, `--warm-ink` and `--amber-ink`; `--gold` set to #a96a00. The night theme is `body.night` (game time), not `prefers-color-scheme`. Earlier prefers-color-scheme rules were converted, and night tokens were added for the ink, accent, warm, amber and gold colors and for the glass background. Hard-coded #c2562e and #b07400 text now uses those tokens.
+- **Prompter (`pass-card.js`):** full glass/ink retheme: sidebar, threads, bubbles, composer, model and usage popovers, focus rings. The rename text is now a pencil icon button (aria-label kept), and the usage “C” is a gauge icon (`usage.js`). Added the `arrowUp` icon for send.
+- **Scoped fixes:** panel `.count` no longer collides with the roster count. The Prompt-agent pill excludes the hero card and screen preview. Pill buttons are used in Rewards, Downtown and the album. App chips use color-mix text. Waiting and stage pills have darker day ink and lighter night ink.
+- **Album (`photo.js`):** uses the shared `.panel-head` (icon, “Album”, count) and is a compact 400px card when empty.
+- **Layout:** observation age moved under the roster status. Inspect, Build and Wardrobe drop to top:104px while the Needs strip shows (desktop only, via `:has`).
+- **Bug fix (`models.js`):** `prepGeometry` dropped vertex colors when re-merging already-merged meshes, so parked cars rendered black. It now keeps the `color` attribute when the material uses vertex colors. One car color was also lightened.
+
+Checks actually run: a contrast audit script (WCAG 4.5:1 text, 3:1 large text and symbols; blends translucent backgrounds) over the prompter, Work, Play, Connections, Chats, Rewards, Downtown, dock menus, inspect drawer, roster, top bar, Needs strip, toasts, Build, Wardrobe, Paint, Album, the task editor and the Work-loop journal, in day and night. 0 failing after fixes; night readings taken mid-transition were re-measured after settling. Took browser screenshots of each surface. Verified the drawer clears the Needs strip (needs bottom 102, drawer top 104). npm test: 120/120 passed. Production build passed (existing chunk warning). QA ran on an isolated AGENT_WORLD_HOME with demo/fake agents on :4778/:5178; no real data writes, commit or push.
+
+Gaps: mobile layouts were not re-audited this pass. The rename pencil was verified with DOM-injected sample rows (nothing saved). Next smallest step: a phone-width pass over the same surfaces.
+
+## Previous pass: remove conversation card from Watch activity (2026-10-06)
 
 Scoped instruction: remove the conversation card containing Open in Codex and Shelf from Watch activity. Removed its slot and rendering block from `web/src/ui.js`, plus the now-unused conversationTarget import. Conversation labels remain in the roster. Watch activity retains Prompt this agent, inactive status chat entry, animated screen, role, observed details and recent steps. Shelf access elsewhere and chat continuation are unchanged. README and CONCEPT now reflect the reduced activity view. Existing uncommitted work preserved.
 

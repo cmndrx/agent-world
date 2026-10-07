@@ -38,7 +38,7 @@ const STATIC_DIR = arg('serve', null);
 ensureHome();
 const config = readConfig();
 const passes=new PassStore(path.join(homeDir(),'passes.json'));
-const runner=new PassRunner(passes,{canRun:p=>!threadBusy(world.snapshot().sessions,p.resumeSession),enabled:process.env.AGENT_WORLD_RUNNER==='1',onChange:()=>broadcast({type:'passes',passes:passes.snapshot(),runner:{enabled:runner.enabled,provider:'codex'}})});
+const runner=new PassRunner(passes,{canRun:p=>!threadBusy(world.snapshot().sessions,p.resumeSession),enabled:process.env.AGENT_WORLD_RUNNER==='1',onChange:()=>broadcast({type:'passes',passes:passes.snapshot(),runner:runner.status()})});
 
 
 function loadCatalog() {
@@ -116,7 +116,7 @@ function noteCity(e) {
   }, 500);
   return true;
 }
-const snapshot = () => ({ ...world.snapshot(), ...productivity.snapshot(), style, photos: listPhotos(), city, passes:passes.snapshot(), runner:{enabled:runner.enabled,provider:'codex'} });
+const snapshot = () => ({ ...world.snapshot(), ...productivity.snapshot(), style, photos: listPhotos(), city, passes:passes.snapshot(), runner:runner.status() });
 const inbox = new Inbox(eventsDir(), { onError: (err) => console.warn('[inbox]', err.message) });
 for (const e of inbox.readAll()) {
   world.apply(e);
@@ -142,7 +142,7 @@ inbox.watch((e) => {
 });
 setInterval(() => world.sweep(), 30_000);
 
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png' };
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.json': 'application/json', '.woff2': 'font/woff2', '.woff': 'font/woff' };
 
 /** Requests that change local data must come from this app's own pages (or a non-browser client). */
 function isLocalOrigin(req) {
@@ -257,10 +257,10 @@ const server = http.createServer(async (req, res) => {
       const input = JSON.parse(body);
       let result;
       if(url.pathname.startsWith('/api/pass-')) {
-        if(url.pathname==='/api/pass-proposal'){if(input.model){const catalog=await readModels();if(!catalog.models?.some(m=>m.id===input.model))throw new Error('Selected model is unavailable. Refresh the model list.');}if(input.resumeSession){const known=world.catalog.snapshot().conversations.some(c=>c.source==='codex'&&c.id===input.resumeSession&&c.project===input.project)||passes.snapshot().runs.some(r=>r.project===input.project&&r.conversationSession===input.resumeSession);if(!known)throw new Error('Conversation is not recorded in this project.');}result=passes.propose(input,world.households);}
+        if(url.pathname==='/api/pass-proposal'){if((!input.provider||input.provider==='codex')&&!runner.status().providers.codex.installed)throw new Error('Codex CLI executable was not found. Check installation or AGENT_WORLD_CODEX_COMMAND, then restart the bridge.');if(input.provider==='claude'&&!runner.status().providers.claude.installed)throw new Error('Claude Code CLI is not installed. Install it and sign in, then restart the bridge.');if(input.provider==='claude'&&input.model)throw new Error('Claude uses its configured default model.');if(input.model){const catalog=await readModels();if(!catalog.models?.some(m=>m.id===input.model))throw new Error('Selected model is unavailable. Refresh the model list.');}if(input.resumeSession){const provider=input.provider||'codex';const known=(provider==='codex'&&world.catalog.snapshot().conversations.some(c=>c.source==='codex'&&c.id===input.resumeSession&&c.project===input.project))||passes.snapshot().runs.some(r=>r.project===input.project&&(r.provider||'codex')===provider&&r.conversationSession===input.resumeSession);if(!known)throw new Error('Conversation is not recorded in this project.');}result=passes.propose(input,world.households);}
         else if(url.pathname==='/api/pass-resolve')result=passes.resolve(input);
         else {if(input.action==='approve' && !runner.enabled)throw new Error('Local runner is unavailable. Start npm run dev with the runner enabled.');const proposal=passes.snapshot().proposals.find(p=>p.id===input.id);if(input.action==='approve'&&threadBusy(world.snapshot().sessions,proposal?.resumeSession))throw new Error('This conversation is working. Wait for its current turn to finish.');result=passes.decide(input,world.households);}
-        broadcast({type:'passes',passes:passes.snapshot(),runner:{enabled:runner.enabled,provider:'codex'}});
+        broadcast({type:'passes',passes:passes.snapshot(),runner:runner.status()});
         res.writeHead(200);return res.end(JSON.stringify({ok:true,result}));
       }
       if (url.pathname === '/api/artifact-preview') {

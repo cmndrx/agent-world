@@ -1,5 +1,5 @@
 // Gardens (play layer): crops growing in garden beds, and the little prompt you use to plant or harvest
-// when your avatar walks up. Growth follows real time (shared/garden.mjs); nothing wilts and nothing
+// when you zoom in on one. Growth follows real time (shared/garden.mjs); nothing wilts and nothing
 // here is related to agent activity.
 
 import * as THREE from 'three';
@@ -9,7 +9,7 @@ import { icon } from './icons.js';
 import { PALETTE, cyl, ico, mat } from './models.js';
 import { escapeHtml as esc } from './sim.js';
 
-const NEAR = 3.2;
+const NEAR = 7; // from the middle of the screen, while zoomed in
 const SPOTS = { tomato: [[-0.36, -0.2], [0.36, -0.2], [-0.36, 0.2], [0.36, 0.2]], sunflower: [[-0.4, 0], [0, 0], [0.4, 0]], pumpkin: [[-0.3, -0.05], [0.32, 0.08]] };
 
 function sprout(g, x, z, s) {
@@ -218,7 +218,11 @@ export class Garden {
     this.renderChip(b);
   }
 
-  update(dt, t, avatarPos) {
+  /**
+   * @param {THREE.Vector3} focus what the camera is looking at
+   * @param {boolean} zoomedIn close enough to tend a bed
+   */
+  update(dt, t, focus, zoomedIn = true) {
     if (!this.style) return;
     if (t - this.lastTick > 15 || this.lastTick < 0) {
       this.lastTick = t;
@@ -227,8 +231,8 @@ export class Garden {
     const v = new THREE.Vector3();
     for (const b of this.beds.values()) {
       b.object.getWorldPosition(v);
-      const d = Math.hypot(v.x - avatarPos.x, v.z - avatarPos.z);
-      const near = d < NEAR;
+      const d = Math.hypot(v.x - focus.x, v.z - focus.z);
+      const near = zoomedIn && d < NEAR;
       if (!near && this.open === b.chip.dataset.bed) {
         this.open = null;
         b.chipKey = '';

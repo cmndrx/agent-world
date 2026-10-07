@@ -2,6 +2,7 @@
 
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { LOT_D, LOT_W } from './lot.js';
 import { PALETTE, box, buildLampPost, buildTree, ico, mat, mergeStatic, rng } from './models.js';
 
@@ -30,11 +31,14 @@ function addWind(material, strength = 0.12) {
   return material;
 }
 
+/** Grass tuft base color (seasons.js recolors it with the ground). */
+export const TUFT = 0x70b358;
+
 export class Scenery {
   constructor(scene) {
     this.scene = scene;
     // Surface detail for shared ground materials (fx.js): mottled grass and paving, worn asphalt.
-    mat(PALETTE.grassLot).userData.mottle = 0.16;
+    Object.assign(mat(PALETTE.grassLot).userData, { mottle: 0.16, lawn: true });
     mat(PALETTE.sidewalk).userData.mottle = 0.07;
     mat(PALETTE.asphalt, { roughness: 0.9 }).userData.asphalt = true;
     this.group = new THREE.Group();
@@ -79,7 +83,9 @@ export class Scenery {
     }
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geo.computeVertexNormals();
-    const ground = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95 }));
+    const groundMat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95 });
+    groundMat.userData.mottle = 0.22; // fine grain plus broad warm/cool patches (fx.js)
+    const ground = new THREE.Mesh(geo, groundMat);
     ground.position.set(cx, 0, cz);
     ground.receiveShadow = true;
     this.group.add(ground);
@@ -169,9 +175,17 @@ export class Scenery {
     }
 
     // Instanced grass tufts and flowers on the open ground beside and behind lots.
-    const tuftGeo = new THREE.ConeGeometry(0.07, 0.42, 3);
-    tuftGeo.translate(0, 0.21, 0);
-    const tuftMat = addWind(new THREE.MeshStandardMaterial({ color: 0x6fb257, flatShading: true, roughness: 1 }));
+    // Each tuft is a little clump of three splayed blades rather than a single spike.
+    const blades = [[0, 0, 0.42, 0.07], [0.06, 2.1, 0.32, 0.055], [0.06, 4.2, 0.36, 0.05]].map(([off, a, h, r]) => {
+      const b = new THREE.ConeGeometry(r, h, 3);
+      b.translate(0, h / 2, 0);
+      b.rotateZ(off ? 0.32 : 0.08);
+      b.rotateY(a);
+      b.translate(Math.cos(a) * off, 0, -Math.sin(a) * off);
+      return b;
+    });
+    const tuftGeo = mergeGeometries(blades);
+    const tuftMat = addWind(new THREE.MeshStandardMaterial({ color: TUFT, flatShading: true, roughness: 1 }));
     const count = 900;
     const tufts = new THREE.InstancedMesh(tuftGeo, tuftMat, count);
     const flowerGeo = new THREE.IcosahedronGeometry(0.08, 0);
@@ -202,7 +216,8 @@ export class Scenery {
       q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), r() * Math.PI);
       s.setScalar(0.7 + r() * 0.8);
       m.compose(p.set(x, 0, zz), q, s);
-      tufts.setMatrixAt(placed++, m);
+      tufts.setMatrixAt(placed, m);
+      tufts.setColorAt(placed++, color.setScalar(0.82 + r() * 0.3)); // light and dark clumps
     }
     tufts.count = placed;
     placed = 0;

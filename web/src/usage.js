@@ -1,12 +1,13 @@
 import { usageWindow } from '../../shared/usage.mjs';
 import { escapeHtml as esc } from './sim.js';
+import { icon } from './icons.js';
 
 export class ConnectedUsage {
   constructor({ compact = false } = {}) {
     this.compact = compact;
     this.element = document.createElement('details');
     this.element.className = compact ? 'connected-usage usage-account' : 'connected-usage';
-    this.element.innerHTML = `${compact ? '<summary aria-label="Account usage" title="Account usage"><span aria-hidden="true">C</span></summary>' : '<summary>Connected app usage</summary>'}<div class="usage-content" aria-live="polite">Open to check remaining usage.</div>`;
+    this.element.innerHTML = `${compact ? `<summary aria-label="Codex usage remaining" title="Codex usage remaining">${icon('gauge')}</summary>` : '<summary>Connected app usage</summary>'}<div class="usage-content" aria-live="polite">Open to check remaining usage.</div>`;
     if (compact) {
       document.addEventListener('pointerdown', e => { if (this.element.open && !this.element.contains(e.target)) this.element.open = false; });
       this.element.addEventListener('keydown', e => { if (e.key === 'Escape' && this.element.open) { e.preventDefault(); e.stopPropagation(); this.element.open = false; this.element.querySelector('summary').focus(); } });
@@ -37,7 +38,7 @@ export class ConnectedUsage {
     const content = this.element.querySelector('.usage-content');
     const available = data.status === 'available' && data.buckets?.length && Number.isFinite(Date.parse(data.capturedAt));
     if (this.compact) {
-      content.innerHTML = `<div class="usage-account-heading"><span class="usage-avatar" aria-hidden="true">C</span><div><b>Codex</b><small>Account usage</small></div></div><div class="usage-remaining">◴ &nbsp; Usage remaining</div>${available ? data.buckets.map(bucket => `${data.buckets.length > 1 ? `<h4>${esc(bucket.name)}</h4>` : ''}${bucket.windows.map(w => {
+      content.innerHTML = `<div class="usage-account-heading"><span class="usage-avatar" aria-hidden="true">${icon('gauge')}</span><div><b>Codex</b><small>Usage remaining</small></div></div>${available ? data.buckets.map(bucket => `${data.buckets.length > 1 ? `<h4>${esc(bucket.name)}</h4>` : ''}${bucket.windows.map(w => {
         const v = usageWindow(w), date = w.resetsAt ? new Date(w.resetsAt * 1000) : null;
         const reset = date ? (w.minutes != null && w.minutes < 1440 ? date.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}) : date.toLocaleDateString([], {month:'short',day:'numeric'})) : 'Unknown';
         return `<div class="usage-account-row"><span>${esc(v.label.replace('5-hour','5h'))}</span><span>${v.expired ? 'Awaiting refresh' : `${esc(v.remaining)}%`}</span><time title="${esc(date?.toLocaleString()||'Reset unavailable')}">${esc(reset)}</time></div>`;

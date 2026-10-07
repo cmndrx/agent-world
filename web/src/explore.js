@@ -1,12 +1,12 @@
-// Exploration (phase 3): today's finds sparkle in yards around the neighborhood. Walk your avatar up to
-// one to collect it. Pure play: finds unlock special decor, never bricks, and have nothing to do with agents.
+// Exploration (phase 3): today's finds sparkle in yards around the neighborhood. Click one to
+// collect it. Pure play: finds unlock special decor, never bricks, and have nothing to do with agents.
 
 import * as THREE from 'three';
 import { COLLECTIBLES, dayKey, spawnsFor } from '../../shared/collectibles.mjs';
 import { DECOR } from '../../shared/style.mjs';
 import { box, cyl, ico } from './models.js';
 
-const PICKUP_RANGE = 1.3;
+const HIT_RADIUS = 0.75; // generous, so a find is easy to click from a distance
 
 function model(kind) {
   const c = COLLECTIBLES[kind].color;
@@ -85,8 +85,14 @@ export class Explore {
       if (this.objects.has(spawn.id)) continue;
       const group = model(spawn.kind);
       group.position.set(spawn.x, 0.12, spawn.z);
+      // An invisible, oversized sphere to click on (the raycaster ignores visibility).
+      const hit = new THREE.Mesh(new THREE.SphereGeometry(HIT_RADIUS, 8, 6), new THREE.MeshBasicMaterial({ visible: false }));
+      hit.position.y = 0.3;
+      hit.userData.findId = spawn.id;
+      hit.name = 'hit';
+      group.add(hit);
       lots.get(spawn.project).group.add(group);
-      this.objects.set(spawn.id, { group, spawn });
+      this.objects.set(spawn.id, { group, spawn, hit });
     }
   }
 
@@ -95,25 +101,36 @@ export class Explore {
     return this.objects.size;
   }
 
-  update(dt, t, avatarPos) {
+  /** Click targets for today's visible finds. */
+  hitTargets() {
+    return [...this.objects.entries()].filter(([id, o]) => !this.pending.has(id) && o.group.visible).map(([, o]) => o.hit);
+  }
+
+  /** Collect a find that was clicked. */
+  collect(id) {
+    const o = this.objects.get(id);
+    if (!o || this.pending.has(id)) return;
+    const { group, spawn } = o;
+    const world = group.getWorldPosition(new THREE.Vector3());
+    this.pending.add(id);
+    const before = this.style?.found?.[spawn.kind] || 0;
+    group.visible = false;
+    this.save({ kind: 'collect', key: id })
+      .then(() => this.onFound(spawn.kind, before === 0, before + 1, world))
+      .catch(() => (group.visible = true))
+      .finally(() => this.pending.delete(id));
+  }
+
+  update(dt, t) {
     if (dayKey() !== this.day) this.sync();
-    for (const [id, { group, spawn }] of this.objects) {
+    for (const { group } of this.objects.values()) {
       group.rotation.y = t * 1.2;
       group.children.forEach((c) => {
         if (c.name === 'ring') {
           c.scale.setScalar(1 + Math.sin(t * 3) * 0.12);
           c.material.opacity = 0.45 + Math.sin(t * 3) * 0.25;
-        } else c.position.y += Math.sin(t * 2.2) * 0.0015;
+        } else if (c.name !== 'hit') c.position.y += Math.sin(t * 2.2) * 0.0015;
       });
-      const world = group.getWorldPosition(new THREE.Vector3());
-      if (this.pending.has(id) || Math.hypot(world.x - avatarPos.x, world.z - avatarPos.z) > PICKUP_RANGE) continue;
-      this.pending.add(id);
-      const before = this.style?.found?.[spawn.kind] || 0;
-      group.visible = false;
-      this.save({ kind: 'collect', key: id })
-        .then(() => this.onFound(spawn.kind, before === 0, before + 1, world))
-        .catch(() => (group.visible = true))
-        .finally(() => this.pending.delete(id));
     }
   }
 }

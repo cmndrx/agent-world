@@ -377,6 +377,16 @@ export class Sim {
 
     this.root.position.set(this.pos.x, FLOOR_Y, this.pos.y);
     this.root.rotation.y = this.facing;
+    // Selecting a Sim gives it a quick squash-and-stretch hop (pure feedback; says nothing about the agent).
+    if (this.selected && !this.wasSelected) this.popT = 0;
+    this.wasSelected = this.selected;
+    const base = (this.root.userData.baseScale ??= this.root.scale.x);
+    if (this.popT !== undefined && this.popT < 0.9) {
+      this.popT += dt;
+      const k = Math.exp(-this.popT * 6) * Math.sin(this.popT * 22);
+      this.root.scale.set(base * (1 - k * 0.07), base * (1 + k * 0.12), base * (1 - k * 0.07));
+      this.root.position.y += Math.max(0, Math.sin(Math.min(this.popT * 9, Math.PI))) * 0.14;
+    } else this.root.scale.setScalar(base);
 
     const pose = this.currentPose(walking, now);
     this.animate(pose, t, dt);
@@ -388,7 +398,7 @@ export class Sim {
     // Plumbob: bob, spin, pulse when the agent needs you.
     const waiting = this.state === 'waiting_for_user';
     const gem = this.plumbob.userData.gem;
-    this.plumbob.rotation.y += dt * (waiting ? 3.2 : 1.1);
+    this.plumbob.rotation.y += dt * ((waiting ? 3.2 : 1.1) + (this.popT !== undefined && this.popT < 0.9 ? 14 * (0.9 - this.popT) : 0));
     this.plumbob.position.y = 1.85 + Math.sin(t * 2 + this.hash) * 0.05;
     const pulse = waiting ? 1 + Math.sin(t * 6) * 0.16 : 1;
     gem.scale.set(pulse, 2.05 * pulse, pulse);
@@ -677,10 +687,12 @@ export class Sim {
 
   updateLabel() {
     const state = this.state;
-    let text = this.observationConnected === false && this.truth ? `Last known: ${this.act.label} · ${observedLabel(this.truth)}` : this.act.label;
+    // While observation is offline, the bubble only says when the agent was last seen (no stale activity).
+    const stale = this.observationConnected === false && !!this.truth;
+    let text = stale ? observedLabel(this.truth).replace('Last observed', 'Last seen') : this.act.label;
     if (this.observationConnected !== false && state === 'waiting_for_user') text = `${text} · ${formatDuration(this.waitSeconds)}`;
     const target = this.act.detail;
-    const showDetail = (this.expanded || this.selected || this.hovered) && target && state !== 'off_duty' && !text.includes(target);
+    const showDetail = !stale && (this.expanded || this.selected || this.hovered) && target && state !== 'off_duty' && !text.includes(target);
     const compact = this.observationConnected !== false && this.labelMode === 'compact' && !this.selected && !this.hovered && state !== 'waiting_for_user';
     // A chip keeps the truth (state icon and color) plus a name; the full bubble adds what and where.
     const chip = this.observationConnected !== false && this.labelMode === 'chip' && !compact;
@@ -690,7 +702,7 @@ export class Sim {
         ? `<span class="b-icon">${icon(STATE_ICON[state])}</span><span class="b-text"><b>${escapeHtml(this.name)}</b></span>`
         : `<span class="b-icon">${icon(STATE_ICON[state])}</span>` +
         `<span class="b-text"><b>${escapeHtml(this.name)}</b>${canPromptFromStatus(this.truth)?`<button type="button" class="b-state" data-prompt-sim aria-label="${escapeHtml(text)} · Open chat">${escapeHtml(text)}</button>`:`<span class="b-state">${escapeHtml(text)}</span>`}` +
-        (this.truth?.conversation ? `<span class="b-conversation">${escapeHtml(conversationLabel(this.truth.conversation))}</span>` : '') +
+        (this.truth?.conversation && !stale ? `<span class="b-conversation">${escapeHtml(conversationLabel(this.truth.conversation))}</span>` : '') +
         (showDetail ? `<span class="b-target${this.act.prose ? ' prose' : ''}">${escapeHtml(target)}</span>` : '') +
         `</span>`;
     if (html !== this.labelHtml) {
@@ -698,7 +710,7 @@ export class Sim {
       this.labelHtml = html;
       this.labelSize = null; // re-measured by the declutter pass
     }
-    const cls = `bubble${this.observationConnected === false && this.truth ? ' observation-stale' : ''} s-${plumbobFor(state)}${this.isVisitor ? ' visitor' : ''}${this.selected ? ' selected' : ''}${compact ? ' compact' : ''}${chip ? ' chip' : ''}${this.labelMode === 'hidden' ? ' hidden' : ''}${this.crowded ? ' crowded' : ''}${this.labelDy > 2 ? ' shifted' : ''}`;
+    const cls = `bubble${stale ? ' observation-stale' : ''} s-${plumbobFor(state)}${this.isVisitor ? ' visitor' : ''}${this.selected ? ' selected' : ''}${compact ? ' compact' : ''}${chip ? ' chip' : ''}${this.labelMode === 'hidden' ? ' hidden' : ''}${this.crowded ? ' crowded' : ''}${this.labelDy > 2 ? ' shifted' : ''}`;
     if (this.bubbleEl.className !== cls) {
       this.bubbleEl.className = cls;
       this.labelSize = null;

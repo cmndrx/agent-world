@@ -311,7 +311,7 @@ export class WorkCenter {
       const plan = `<article class="plan-card"><div class="plan-main">
           <small>Outcome</small><h3>${esc(p?.outcome || 'No outcome yet')}</h3>
           <p>${icon('arrowRight')} ${esc(p?.nextAction || 'Add a next step')}</p></div>
-        <div class="plan-side"><span class="stars" title="${esc(levelName(level))}">${'★'.repeat(level)}<i>${'★'.repeat(MAX_LEVEL - level)}</i></span>
+        <div class="plan-side"><span class="stars" title="${esc(levelName(level))}">${'★'.repeat(level)}<i>${'☆'.repeat(MAX_LEVEL - level)}</i></span>
           <div class="row-actions"><button class="chip-link" data-edit-plan>${icon('pencil')} Edit</button>${p?.outcome ? `<button class="chip-link" data-reach>${icon('flag')} Reached</button>` : ''}</div></div>
         <div class="reach-confirm" ${this.reachOpen && p?.outcome ? '' : 'hidden'}><label><input type="checkbox" name="reachConfirm" ${this.reachChecked ? 'checked' : ''} /> Yes, this outcome is reached</label>
           <small>+${BRICKS.outcomeReached} bricks${level < MAX_LEVEL ? ` · grows into a ${esc(levelName(level + 1))}` : ''}</small><button class="primary" data-reach-confirm>Confirm</button></div>

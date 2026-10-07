@@ -65,6 +65,10 @@ export class Lot {
     this.exterior = this.baseExterior = EXTERIORS[seed % EXTERIORS.length];
     this.arch = this.baseArch = Object.keys(ARCHES)[(Math.imul(seed ^ (seed >>> 13), 0x5bd1e995) >>> 0) % 4];
     this.roofAllowed = true; // main turns roofs off in build mode and for the inspected home
+    this.peek = false; // main sets this for the home in the middle of the screen
+    this.hovered = false; // main sets this for the home under the pointer
+    this.roofOn = true;
+    this.roofV = 0;
     this.roofK = 0;
     this.interior = this.baseInterior = INTERIORS[(seed >>> 3) % INTERIORS.length];
     // Build-mode decor (simulation layer only; see docs/GAMEPLAY.md).
@@ -514,7 +518,8 @@ export class Lot {
     }
     this.walls = [];
     const glassMat = this.glass;
-    const wainscot = new THREE.Color(this.interior).multiplyScalar(0.86).getHex();
+    const wainscot = new THREE.Color(this.interior).multiplyScalar(0.8).getHex();
+    const baseboard = new THREE.Color(this.interior).multiplyScalar(0.55).getHex();
     // Outside walls get clapboard lines (fx.js); a slightly different roughness keeps the material separate.
     const siding = mat(this.exterior, { roughness: 0.83 });
     siding.userData.siding = this.arch === 'modern' ? 0 : 0.26;
@@ -556,6 +561,7 @@ export class Lot {
           // Wainscot panel and chair rail along the lower wall.
           pieces.push(trim(to - from, 0.9, 0.45, (from + to) / 2, 0.025, wainscot));
           pieces.push(trim(to - from, 0.05, 0.92, (from + to) / 2, 0.05, PALETTE.trim));
+          pieces.push(trim(to - from, 0.12, 0.06, (from + to) / 2, 0.045, baseboard)); // grounds the room
         }
       };
       // Cut openings for windows (y 1.0–2.05) and the door (y 0–2.15).
@@ -636,6 +642,7 @@ export class Lot {
 
   /** Roof in the home's architecture style (ARCHES). Sits on the walls at y 2.74; lot.update lifts it away. */
   buildRoof() {
+    this.smoke = null;
     if (this.roof) {
       this.group.remove(this.roof);
       this.roof.traverse((o) => o.isMesh && o.geometry.dispose());
@@ -674,18 +681,48 @@ export class Lot {
           g.add(vent);
         }
       }
-      if (chimney) g.add(box(0.9, H + 0.8, 0.9, 0x9a5b45, W / 2 - 2.2, (H + 0.8) / 2, -1.6), box(1.05, 0.15, 1.05, 0x6b3f30, W / 2 - 2.2, H + 0.85, -1.6));
+      if (chimney) addChimney(W / 2 - 2.2, -1.6, H);
+    };
+    // A brick chimney with a lazy curl of smoke (animated in update; lifts away with the roof).
+    const addChimney = (x, z, H) => {
+      g.add(box(0.9, H + 0.8, 0.9, 0x9a5b45, x, (H + 0.8) / 2, z), box(1.05, 0.15, 1.05, 0x6b3f30, x, H + 0.85, z));
+      const smoke = new THREE.Group();
+      smoke.userData.dynamic = true;
+      smoke.position.set(x, H + 1, z);
+      const puffMat = new THREE.MeshLambertMaterial({ color: 0xf2f2f2, transparent: true, opacity: 0, depthWrite: false });
+      for (let i = 0; i < 6; i++) {
+        const puff = new THREE.Mesh(new THREE.IcosahedronGeometry(0.28, 0), puffMat.clone());
+        puff.userData.phase = i / 6;
+        puff.userData.dynamic = true;
+        smoke.add(puff);
+      }
+      g.add(smoke);
+      this.smoke = smoke;
     };
     if (this.arch === 'craftsman') {
-      // Hip roof: a four-sided pyramid stretched over the footprint, with wide eaves.
-      const r = 1;
-      const hip = new THREE.Mesh(new THREE.ConeGeometry(r, 2.2, 4, 1), shingle(0x4f5a66));
-      hip.rotation.y = Math.PI / 4;
-      hip.scale.set((W + ov * 3) / (r * Math.SQRT2), 1, (D + ov * 3) / (r * Math.SQRT2));
-      hip.position.y = 1.1;
+      // Hip roof: two sloped sides meeting at a ridge plus two triangular ends, over wide eaves.
+      const a = (W + ov * 3) / 2;
+      const b = (D + ov * 3) / 2;
+      const H = 2.3;
+      const r = a - b;
+      const v = (x, y, z) => [x, y, z];
+      const tris = [
+        [v(-a, 0, b), v(a, 0, b), v(r, H, 0)], [v(-a, 0, b), v(r, H, 0), v(-r, H, 0)], // front slope
+        [v(a, 0, -b), v(-a, 0, -b), v(-r, H, 0)], [v(a, 0, -b), v(-r, H, 0), v(r, H, 0)], // back slope
+        [v(a, 0, b), v(a, 0, -b), v(r, H, 0)], // right end
+        [v(-a, 0, -b), v(-a, 0, b), v(-r, H, 0)], // left end
+      ];
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(tris.flat(2), 3));
+      geo.computeVertexNormals();
+      const tints = [0x56606c, 0x6a5246, 0x4d6358, 0x6b5a4c];
+      const hash = [...this.project].reduce((h, ch) => (Math.imul(h, 31) + ch.charCodeAt(0)) | 0, 7);
+      const hip = new THREE.Mesh(geo, shingle(tints[Math.abs(hash) % tints.length]));
       hip.castShadow = true;
       g.add(hip);
+      g.add(box(r * 2 + 0.3, 0.12, 0.22, 0x3b414a, 0, H + 0.02, 0)); // ridge cap
       g.add(box(W + ov * 3, 0.12, D + ov * 3, 0xe9e5dc, 0, 0.02, 0));
+      addChimney(-a + 3.2, -b + 2.6, H * 0.55);
     } else if (this.arch === 'modern') {
       g.add(box(W + 0.4, 0.3, D + 0.4, 0xd9d4ca, 0, 0.15, 0));
       for (const [w, d, x, z] of [[W + 0.4, 0.25, 0, (D + 0.4) / 2], [W + 0.4, 0.25, 0, -(D + 0.4) / 2], [0.25, D + 0.4, (W + 0.4) / 2, 0], [0.25, D + 0.4, -(W + 0.4) / 2, 0]]) {
@@ -874,6 +911,16 @@ export class Lot {
       puff.material.opacity = steaming ? 0.45 * (1 - p) : 0;
     });
 
+    // Chimney smoke: slow puffs that rise, drift with the breeze and fade (only while the roof is on).
+    if (this.smoke && this.roof?.visible) {
+      for (const puff of this.smoke.children) {
+        const p = (t * 0.16 + puff.userData.phase) % 1;
+        puff.position.set(p * 0.9 + Math.sin(p * 6 + puff.userData.phase * 9) * 0.12, p * 2.6, Math.sin(p * 4) * 0.15);
+        puff.scale.setScalar(0.5 + p * 1.9);
+        puff.material.opacity = Math.sin(p * Math.PI) * 0.42 * (0.7 + night * 0.3);
+      }
+    }
+
     // Trees sway gently (yard trees and planted decor trees).
     const sway = (c) => {
       c.rotation.z = Math.sin(t * 0.9 + c.userData.phase) * 0.025;
@@ -885,22 +932,36 @@ export class Lot {
     for (const glow of this.levelGlows) glow.material.emissiveIntensity = 0.15 + night * glow.userData.nightGlow;
     if (this.statue) this.statue.rotation.y += dt * 0.6;
 
-    // Night: interior light, window glow, lamps.
-    this.lamp.intensity = night * 14;
-    this.glass.emissiveIntensity = night * 0.9;
+    // Night: interior light, window glow, lamps. Each home switches on at its own moment around dusk,
+    // so the street lights up house by house instead of all at once.
+    this.lightsAt ??= 0.18 + (Math.abs([...this.project].reduce((h, ch) => (Math.imul(h, 33) + ch.charCodeAt(0)) | 0, 5)) % 100) / 100 * 0.42;
+    const lit = THREE.MathUtils.smoothstep(night, this.lightsAt, this.lightsAt + 0.08) * night;
+    this.lamp.intensity = lit * 14;
+    this.glass.emissiveIntensity = lit * 0.9;
     this.glass.opacity = 0.82 + night * 0.12;
-    for (const glow of this.nightGlows) glow.material.emissiveIntensity = night * (glow.userData.nightGlow ?? 1);
+    for (const glow of this.nightGlows) glow.material.emissiveIntensity = lit * (glow.userData.nightGlow ?? 1);
 
     // Roof: shown when you're zoomed out, lifting away as you zoom in so the room (and the truth inside it)
     // is always visible up close.
     const center = this.group.position;
     const camDist = camera.position.distanceTo(center);
-    const roofTarget = this.roofAllowed && this.wallMode !== 'down' ? THREE.MathUtils.smoothstep(camDist, 46, 58) : 0;
-    this.roofK += (roofTarget - this.roofK) * (1 - Math.exp(-dt * 5));
+    // The roof is either on or off (never parked half-lifted). The home in the middle of the screen (`peek`)
+    // opens up from farther out so you can look inside; the gap between thresholds stops flicker.
+    const openBelow = this.peek ? 76 : 48;
+    if (!this.roofAllowed || this.wallMode === 'down') this.roofOn = false;
+    else if (this.roofOn && camDist < openBelow) this.roofOn = false;
+    else if (!this.roofOn && camDist > openBelow + 8) this.roofOn = true;
+    // A soft spring, so the roof settles with a little bounce instead of sliding.
+    const target = this.roofOn ? 1 : 0;
+    this.roofV = (this.roofV || 0) + ((target - this.roofK) * 70 - this.roofV * 11) * dt;
+    this.roofK += this.roofV * dt;
+    if (Math.abs(target - this.roofK) < 0.001 && Math.abs(this.roofV) < 0.01) this.roofK = target;
+    // Hovering a roofed home lifts its roof a touch: a hint that double-click looks inside.
+    this.hoverK = (this.hoverK || 0) + ((this.hovered ? 1 : 0) - (this.hoverK || 0)) * (1 - Math.exp(-dt * 10));
     if (this.roof) {
-      const k = this.roofK;
+      const k = THREE.MathUtils.clamp(this.roofK, 0, 1.08);
       this.roof.visible = k > 0.01;
-      this.roof.position.y = 2.74 + (1 - k) * 5;
+      this.roof.position.y = 2.74 + (1 - Math.min(k, 1)) * 5 + this.hoverK * 0.45 * Math.min(k, 1);
       this.roof.scale.setScalar(0.55 + 0.45 * k);
     }
     // Cutaway walls: lower the walls between the camera and the room (all up while the roof is on).

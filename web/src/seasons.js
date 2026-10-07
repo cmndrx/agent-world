@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { dayKey } from '../../shared/collectibles.mjs';
 import { PALETTE } from './models.js';
 import { patchWorldMaterial } from './fx.js';
+import { TUFT } from './scenery.js';
 
 export const SEASONS = { auto: 'Follow the calendar', spring: 'Spring', summer: 'Summer', autumn: 'Autumn', winter: 'Winter' };
 export const WEATHERS = { auto: 'Seasonal mix', clear: 'Clear', rain: 'Rain', snow: 'Snow' };
@@ -24,8 +25,8 @@ function dailyWeather(season, day) {
 
 // Foliage and ground colors (by their original color) per season.
 const FOLIAGE = [PALETTE.leaf, PALETTE.leafLight, PALETTE.leafDark, 0x4c9a59, 0x9bd06b, 0x7fb866, 0x6aa65a, 0x8fc477, 0x5f9b57, 0x6fb257];
-const GROUND = [PALETTE.grassLot, 0x8fca70];
-const AUTUMN = { [PALETTE.leaf]: 0xd9822b, [PALETTE.leafLight]: 0xe9b44c, [PALETTE.leafDark]: 0xb5452b, 0x9bd06b: 0xe9c46a, 0x7fb866: 0xc9a14a, 0x6aa65a: 0xb9803a, 0x8fc477: 0xd8b25a, 0x5f9b57: 0xa86a32, 0x6fb257: 0xb9a54a };
+const GROUND = [PALETTE.grassLot, 0x8fca70, TUFT];
+const AUTUMN = { [TUFT]: 0x9dab4c, [PALETTE.grassLot]: 0xa9c066, [PALETTE.leaf]: 0xd9822b, [PALETTE.leafLight]: 0xe9b44c, [PALETTE.leafDark]: 0xb5452b, 0x9bd06b: 0xe9c46a, 0x7fb866: 0xc9a14a, 0x6aa65a: 0xb9803a, 0x8fc477: 0xd8b25a, 0x5f9b57: 0xa86a32, 0x6fb257: 0xb9a54a };
 const SPRING = { [PALETTE.leafLight]: 0xf4b6c8, 0x9bd06b: 0xa8e07a };
 
 export class Seasons {
@@ -74,7 +75,7 @@ export class Seasons {
       // Blend the terrain's vertex colors (kept from the first pass) toward the season's ground color.
       ground.userData.season = season;
       const base = (ground.userData.baseColors ??= colors.array.slice());
-      const [tr, tg, tb, k] = { autumn: [0.78, 0.7, 0.36, 0.45], winter: [0.93, 0.95, 0.97, 0.88], spring: [0.5, 0.78, 0.4, 0.1], summer: [0, 0, 0, 0] }[season];
+      const [tr, tg, tb, k] = { autumn: [0.66, 0.68, 0.34, 0.3], winter: [0.93, 0.95, 0.97, 0.88], spring: [0.5, 0.78, 0.4, 0.1], summer: [0, 0, 0, 0] }[season];
       for (let i = 0; i < base.length; i += 3) {
         colors.array[i] = base[i] + (tr - base[i]) * k;
         colors.array[i + 1] = base[i + 1] + (tg - base[i + 1]) * k;

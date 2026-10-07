@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fd0ff"/><stop offset="1" stop-color="#4f86e6"/></linearGradient>
+    <linearGradient id="hill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fd46d"/><stop offset="1" stop-color="#4fa458"/></linearGradient>
+    <linearGradient id="gemL" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b6f5a6"/><stop offset="1" stop-color="#3fc06a"/></linearGradient>
+    <linearGradient id="gemR" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3fc06a"/><stop offset="1" stop-color="#1f8a4a"/></linearGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  <path d="M100 700 Q330 590 540 660 T924 640 V739 Q924 924 739 924 H285 Q100 924 100 739 Z" fill="url(#hill)"/>
+  <g transform="translate(512 470)">
+    <ellipse cx="0" cy="300" rx="120" ry="26" fill="#000" opacity=".16"/>
+    <path d="M0 -250 L-150 0 L0 250 Z" fill="url(#gemL)"/>
+    <path d="M0 -250 L150 0 L0 250 Z" fill="url(#gemR)"/>
+    <path d="M0 -250 L-150 0 L0 -40 Z" fill="#fff" opacity=".35"/>
+    <path d="M-150 0 L0 -40 L150 0 L0 40 Z" fill="#fff" opacity=".12"/>
+  </g>
+</svg>

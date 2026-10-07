@@ -2,3 +2,4 @@ node_modules/
 dist/
 .demo-home/
 .DS_Store
+release/

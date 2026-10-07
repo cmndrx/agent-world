@@ -97,7 +97,7 @@ Ideas for later:
   (`Delete`) decor on a 0.25 m grid. Indoor items go inside the room, outdoor items inside the fence.
   Placement must keep every desk, waiting spot, couch seat and the front door reachable; invalid spots glow red.
 - **Paint:** exterior color, interior wallpaper and floor style per home.
-- **Wardrobe:** per resident (and for your avatar): skin tone, hair style and color, top style and color,
+- **Wardrobe:** per resident (and for your own picture in the top bar): skin tone, hair style and color, top style and color,
   pants, and an accessory (glasses, cap, beanie, headphones, flower).
 - Functional stations (desks, chairs) stay put so the activity view keeps working.
 
@@ -122,7 +122,7 @@ As built (`shared/progression.mjs`):
 - Map mode: arrange houses and name streets.
 - Public spaces unlocked by neighborhood milestones (park, plaza, café, a town-hall trophy case).
 - Pets per home (flavor), seasonal themes and weather.
-- Exploration collectibles found while walking around (seed packets, gnomes, rare plants), unrelated to agents.
+- Exploration collectibles found while looking around (click to collect) (seed packets, gnomes, rare plants), unrelated to agents.
 
 As built:
 - **Map mode** (`M` or the map button; `web/src/mapmode.js`). A north-up, top-down view fitted to the viewport. Click a house, then any plot, to move it; houses on both plots swap. An empty row is always offered, and the camera refits when rows are added. Click a street name to rename it (40 characters max). Saved as `style.layout` (plot order) and `style.streets` (row to name). The server accepts only known homes, each placed once.
@@ -136,7 +136,7 @@ As built:
   | Town hall | 5 outcomes or 15 tasks |
 
   "Tasks" means credited reviews: new credits are limited to one per project per day, and legacy accepted credits are preserved. The town hall holds one trophy per reached outcome, up to 10. Locked spaces show a signpost with the requirement; signs fade when the camera is over another street.
-- **Pets** (Build mode, Paint tab): none, cat, dog or bunny, per home (`home.pet`). Pets wander the lot on the nav grid, nap, and greet your avatar. They never stand in for an agent.
+- **Pets** (Build mode, Paint tab): none, cat, dog or bunny, per home (`home.pet`). Pets wander the lot on the nav grid, nap, and come say hi when you zoom in close. They never stand in for an agent.
 - **Seasons and weather** (cloud button in the dock; `web/src/seasons.js`). The season follows the calendar or an override. Weather is a seeded daily pick (or chosen) of clear, rain or snow. Foliage, ground and terrain are recolored; rain, snow and autumn leaves fall; sky and fog go overcast. The menu says it is ambience only, not a forecast.
 - **Finds** (`shared/collectibles.mjs`, `web/src/explore.js`):
   - Four finds a day sparkle in yards, placed deterministically from the date and the homes. Walk within about 1.3 m to pick one up.
@@ -152,7 +152,7 @@ As built:
   - `Space` takes a photo. The bridge saves it as a JPEG in `~/.agent-world/photos` (`bridge/photos.mjs`; JPEG only, 6 MB and 300 photos max, local origin only).
 - **Album:** browse, download, delete (with a confirmation), or hang up to 4 photos on a home's back wall as polaroids (`style.gallery`). The server only accepts photos that exist, and deleting a photo takes it off every wall.
 - **Gardens** (`shared/garden.mjs`, `web/src/garden.js`).
-  - Place a free garden bed (Build mode, Garden), then walk up to it to plant:
+  - Place a free garden bed (Build mode, Garden), then zoom in on it to plant:
 
     | Crop | Grows in | Needs |
     | --- | --- | --- |
@@ -168,6 +168,6 @@ As built:
   - Foliage sways in the wind, more in rain.
   - Outdoor surfaces that face up get patchy snow, or a wet sheen with sky-tinted puddles. Rooms stay dry.
   - Ponds, fountains and bird baths share a rippling, reflective water material that ripples more in rain.
-  - Rain splashes on the ground. Your avatar leaves footprints in snow that fade after 30 seconds.
+  - Rain splashes on the ground.
 
 Deferred: a "sticker book" of first-seen activity kinds (could tempt users to make agents do things to collect).

@@ -6,7 +6,7 @@ import { LOT_D, LOT_W } from './lot.js';
 import { PALETTE, box, cyl, ico, mat, mergeStatic, rng } from './models.js';
 import { waterMaterial } from './fx.js';
 
-const CAR_COLORS = [0xd94f4f, 0x4f86c6, 0xf2c14e, 0xf4f1ea, 0x334155, 0x5fbf73, 0x9b7ede, 0xef8354];
+const CAR_COLORS = [0xd94f4f, 0x4f86c6, 0xf2c14e, 0xf4f1ea, 0x6b7f99, 0x5fbf73, 0x9b7ede, 0xef8354];
 const STREET_X0 = -LOT_W * 1.5 - 14;
 const STREET_X1 = LOT_W * 4.5 + 14;
 

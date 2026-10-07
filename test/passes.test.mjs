@@ -66,7 +66,7 @@ test('continued prompts pin the conversation through approval, execution and fol
  const {store,homes,project}=fixture(t);const id='12345678-1234-1234-1234-123456789abc';
  const p=store.propose({project,slot:1,title:'Continue',instruction:'Follow up',resumeSession:id},homes);store.decide({id:p.id,version:p.version,action:'approve',confirmed:true},homes);
  assert.equal(store.claim(()=>false),null);const run=store.claim();assert.equal(run.resumeSession,id);store.conversation(run.id,id);store.finish(run.id,'completed',passResult({summary:'Done',checks:[],limitations:[],next:{title:'Next',instruction:'One more'}}));assert.equal(store.snapshot().proposals[0].resumeSession,id);
- assert.throws(()=>store.propose({project,slot:2,title:'x',instruction:'x',resumeSession:'--last'},homes),/valid Codex/);
+ assert.throws(()=>store.propose({project,slot:2,title:'x',instruction:'x',resumeSession:'--last'},homes),/valid conversation/);
 });
 
 test('resume CLI preserves explicit identity and never uses last or fresh fallback',async t=>{
@@ -105,4 +105,24 @@ test('public summary storage is bounded and never belongs to a different run',t=
  assert.equal(store.reasoning('other',{id:'x',type:'reasoning',text:'Wrong run'}),false);
  for(let i=0;i<100;i++)store.reasoning(run.id,{id:String(i),type:'reasoning',text:'x'.repeat(5000)});
  const summaries=store.snapshot().runs[0].reasoningSummaries;assert.ok(summaries.length<=32);assert.ok(summaries.reduce((n,s)=>n+s.text.length,0)<=64000);assert.equal(summaries.at(-1).text.length,4000);
+});
+
+test('Claude routes one pass, pins provider and resumes exact session without bypassing permissions',async t=>{
+ const {store,homes,project}=fixture(t),cli=path.join(project,'claude-mock'),id='12345678-1234-1234-1234-123456789abc';
+ fs.writeFileSync(cli,`#!/usr/bin/env node
+const fs=require('fs'),a=process.argv.slice(2);fs.writeFileSync('claude-args.json',JSON.stringify(a));process.stdin.resume();process.stdin.on('end',()=>{console.log(JSON.stringify({type:'system',subtype:'init',session_id:'${id}'}));console.log(JSON.stringify({type:'assistant',message:{content:[{type:'thinking',thinking:'PRIVATE_THOUGHT'}]}}));console.log(JSON.stringify({type:'result',session_id:'${id}',is_error:false,structured_output:{summary:'Claude response',checks:[],limitations:[],next:{title:'Next',instruction:'Follow up'}}}));});`,{mode:0o700});
+ let p=store.propose({project,slot:1,title:'Claude',instruction:'Work',provider:'claude'},homes);store.decide({id:p.id,version:p.version,action:'approve',confirmed:true},homes);
+ const runner=new PassRunner(store,{enabled:true,command:path.join(project,'not-codex'),claude:cli});runner.start();t.after(()=>runner.stop());while(runner.busy)await new Promise(r=>setTimeout(r,10));
+ let run=store.snapshot().runs[0];assert.equal(run.status,'completed');assert.equal(run.provider,'claude');assert.equal(run.result.summary,'Claude response');assert.equal(run.conversationSession,id);assert.doesNotMatch(fs.readFileSync(store.file,'utf8'),/PRIVATE_THOUGHT/);
+ p=store.snapshot().proposals[0];assert.equal(p.provider,'claude');assert.equal(p.resumeSession,id);assert.equal(p.status,'proposed');store.decide({id:p.id,version:p.version,action:'approve',confirmed:true},homes);await runner.tick();
+ const args=JSON.parse(fs.readFileSync(path.join(project,'claude-args.json')));assert.equal(args[args.indexOf('--resume')+1],id);assert.equal(args[args.indexOf('--permission-mode')+1],'dontAsk');assert.equal(args.includes('--dangerously-skip-permissions'),false);assert.ok(args.includes('--json-schema'));assert.equal(store.snapshot().runs[1].provider,'claude');
+ assert.throws(()=>store.propose({project,slot:2,title:'x',instruction:'x',provider:'other'},homes),/Choose Codex/);assert.throws(()=>store.propose({project,slot:2,title:'x',instruction:'x',provider:'claude',model:'gpt-test'},homes),/configured default/);
+});
+test('Claude permission denials and mismatched sessions cannot become completed runs',async t=>{
+ for(const kind of ['denied','mismatch']){
+ const {store,homes,project}=fixture(t),cli=path.join(project,'claude-error'),id='12345678-1234-1234-1234-123456789abc';
+ fs.writeFileSync(cli,`#!/usr/bin/env node
+process.stdin.resume();process.stdin.on('end',()=>{console.log(JSON.stringify({type:'system',subtype:'init',session_id:'${id}'}));console.log(JSON.stringify({type:'result',session_id:'${kind==='mismatch'?'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee':id}',permission_denials:${kind==='denied'?'[{tool_name:"Bash"}]':'[]'},structured_output:{summary:'Should not succeed',checks:[],limitations:[],next:null}}));});`,{mode:0o700});
+ const p=store.propose({project,slot:1,title:'x',instruction:'x',provider:'claude'},homes);store.decide({id:p.id,version:p.version,action:'approve',confirmed:true},homes);const runner=new PassRunner(store,{enabled:true,claude:cli});runner.start();t.after(()=>runner.stop());while(runner.busy)await new Promise(r=>setTimeout(r,10));const run=store.snapshot().runs[0];assert.equal(run.status,'failed');assert.equal(run.result,null);assert.match(run.error,/permissions|different conversation/);
+ }
 });

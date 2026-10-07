@@ -7,7 +7,7 @@ The activity world watches observed agents. A separate local runner can now exec
 
 1. **Observed activity, explicit execution approval.** The world reads real events. The agent card may authorize one exact instruction to a separate local runner. Approval is never inferred from activity or task completion.
 2. **Truth vs. simulation.** Every on-screen thing is either *truth* (backed by an observed event) or *flavor* (invented by the game to look alive). Flavor can never write to truth, and the UI never presents flavor as fact.
-3. **Provider-agnostic.** Claude, ChatGPT/Codex, or a shell script all look the same to the game. The provider is cosmetic.
+3. **Provider-agnostic.** Claude, ChatGPT/Codex, or a shell script all look the same to the game. The observed world uses a shared vocabulary; the prompt provider explicitly determines which CLI executes authorized work.
 4. **Private by default.** Show what an agent is doing, not the contents of your code or prompts, unless the user opts in.
 
 ## World model
@@ -54,7 +54,7 @@ Sims are **persistent per project**, so the same characters show up every day.
 An agent waiting on the human (permission prompt, question, finished turn) is the most useful thing to surface.
 
 - Plumbob turns **yellow**, the Sim faces the camera and waves, and an edge-of-screen indicator points to it.
-- Walking the avatar up to the Sim (or clicking it) shows *why* it is waiting.
+- Clicking the Sim (or pressing Space with it in view) shows *why* it is waiting.
 - Wait time is shown and escalates visually (getting more impatient). This is truth: it is measured from the event timestamp.
 
 ## Truth layer
@@ -351,3 +351,14 @@ Recorded Codex chats expose an explicit Rename action that saves a local user ti
 ### Live reasoning hierarchy correction (2026-10-06)
 
 The human's real run emitted nonempty public summary sections before turn completion, but chat displayed a second Thinking/command activity disclosure that obscured the intended distinction. Chat now gives the actual summary a single Reasoning · live disclosure, automatically expanded for pending replies. Summary updates preserve manual collapse/expansion and drafts; completion preserves the same content. Tool/file activity stays in Watch activity. codex exec JSONL delivers section/item updates; it must not be described as token-by-token streaming. App-server item/reasoning/summaryTextDelta is the documented route for finer summary deltas, but this pass does not migrate the runner or consume raw textDelta.
+
+### No walking avatar (2026-10-06)
+
+The player is no longer a character in the world. You're an animated picture in the top bar (drawn from your wardrobe look; click it to restyle), and you get around like a city builder: left-drag pans, right-drag turns and tilts, the wheel zooms, WASD/arrows pan. Looking inside a home works with the roof and wall layers: the home in the middle of the screen lifts its roof from farther out, every roof lifts when zoomed in close, cutaway walls lower toward the camera, and double-clicking a home glides in. Finds are clicked to collect, garden chips appear when you zoom in on a bed, and pets greet the spot you're zoomed in on. None of this touches the truth layer.
+
+
+### Prompt provider routing (2026-10-06)
+
+The composer now offers Codex and Claude Code. Provider changes start a new chat without discarding the draft; each recorded conversation stays pinned to its provider. Claude continuation is limited to exact game-created sessions in the same project, never ordinary Claude app chats or inferred recent sessions. The separate runner uses Claude print mode with structured results and configured permissions (`dontAsk`, no bypass), while installed hooks provide observed world activity. Only Send authorizes that instruction. CLI installation is not authentication; failed sign-in, tool denials and missing results produce inline failed replies without automatic retry. Claude quota, model switching and reasoning import remain unavailable.
+
+Project cards in the roster contain the project title and resident/visitor rows; they omit the conversation shelf and Plan & briefing footer actions. Conversation metadata and planning remain available through their other existing entry points.

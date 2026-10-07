@@ -58,6 +58,7 @@ export function patchWorldMaterial(m) {
     m.userData.asphalt ? '#define FX_ASPHALT' : '',
     m.userData.siding ? `#define FX_SIDING ${m.userData.siding.toFixed(3)}` : '',
     m.userData.bands ? `#define FX_BANDS ${m.userData.bands.toFixed(3)}` : '',
+    m.userData.lawn ? '#define FX_LAWN' : '',
   ].filter(Boolean).join('\n');
   m.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, fxUniforms);
@@ -88,6 +89,16 @@ export function patchWorldMaterial(m) {
         #ifdef FX_MOTTLE
           float fxM = fxNoise(vFxWorld.xz * 0.32) * 0.6 + fxNoise(vFxWorld.xz * 1.9) * 0.4;
           diffuseColor.rgb *= 1.0 + (fxM - 0.5) * FX_MOTTLE;
+          // Broad patches drift cooler (lush) or warmer (sunny, drier) so big areas never read as one flat color.
+          float fxP = smoothstep(0.2, 0.8, fxNoise(vFxWorld.xz * 0.045 + 13.0));
+          diffuseColor.rgb *= mix(vec3(1.0), mix(vec3(0.9, 0.99, 0.92), vec3(1.07, 1.04, 0.88), fxP), min(1.0, FX_MOTTLE * 5.0));
+        #endif
+        #ifdef FX_LAWN
+          // Freshly mowed stripes, faded out where they'd shimmer in the distance.
+          float fxSu = vFxWorld.x / 1.6;
+          float fxSw = fwidth(fxSu);
+          float fxStripe = smoothstep(0.5 - fxSw, 0.5 + fxSw, abs(fract(fxSu) - 0.5) * 2.0);
+          diffuseColor.rgb *= 1.0 + (fxStripe - 0.5) * 0.09 * (1.0 - smoothstep(0.15, 0.45, fxSw));
         #endif
         #ifdef FX_ASPHALT
           float fxA = fxNoise(vFxWorld.xz * 0.55) * 0.55 + fxNoise(vFxWorld.xz * 3.3) * 0.25 + fxHash(floor(vFxWorld.xz * 22.0)) * 0.2;

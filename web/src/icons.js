@@ -87,6 +87,7 @@ import arrowRight from 'lucide-static/icons/arrow-right.svg?raw';
 import circleAlert from 'lucide-static/icons/circle-alert.svg?raw';
 import flag from 'lucide-static/icons/flag.svg?raw';
 
+import arrowUp from 'lucide-static/icons/arrow-up.svg?raw';
 const RAW = {
   bellOff, bell, blocks, bookOpen, brain, chevronDown, circleCheck, circleHelp, clock, coffee, cpu, eye, gauge,
   globe, hand, hourglass, house, keyboard, layers, moon, navigation, panelLeft, pencil, sparkles, sun, sunrise,
@@ -96,6 +97,7 @@ const RAW = {
   map: mapIcon, cloudSun, cloudRain, cloudSnow, snowflake, leaf, flower, cat, dog, rabbit, gem, sprout, clover, treeDeciduous, landmark,
   camera, images, arrowLeft, shovel, flower2, store, building2, hardHat, info,
   briefcase, inbox, copy, externalLink, messageCircle, gamepad, plug, plus, listChecks, target, arrowRight, circleAlert, flag,
+  arrowUp,
 };
 
 const cache = {};

@@ -20,9 +20,11 @@ export class PassStore {
     const current=data.proposals.find(p=>p.project===input.project&&p.slot===slot);
     if(current && input.version!==current.version)throw new Error('The proposal changed. Reopen the card.');
     if(current && ['approved','running'].includes(current.status))throw new Error('This approved pass is already queued or running.');
-    if(input.resumeSession!=null&&!validThread(input.resumeSession))throw new Error('Choose a valid Codex conversation.');
+    if(input.resumeSession!=null&&!validThread(input.resumeSession))throw new Error('Choose a valid conversation.');
     if(input.model!=null&&!validModel(input.model))throw new Error('Choose a valid model.');
-    const proposal={model:input.model||null,resumeSession:input.resumeSession||null,id:randomUUID(),project:input.project,slot,title:text(input.title,200),instruction:text(input.instruction,4000),provider:'codex',recordedBy:text(input.recordedBy,100)||'Unspecified',status:'proposed',version:(current?.version||0)+1,createdAt:new Date().toISOString()};
+    const provider=input.provider||'codex';if(!['codex','claude'].includes(provider))throw new Error('Choose Codex or Claude Code.');
+    if(provider==='claude'&&input.model)throw new Error('Claude uses its configured default model.');
+    const proposal={model:input.model||null,resumeSession:input.resumeSession||null,id:randomUUID(),project:input.project,slot,title:text(input.title,200),instruction:text(input.instruction,4000),provider,recordedBy:text(input.recordedBy,100)||'Unspecified',status:'proposed',version:(current?.version||0)+1,createdAt:new Date().toISOString()};
     data.proposals=data.proposals.filter(p=>p!==current);data.proposals.push(proposal);return proposal;
   });}
   decide(input,homes) {return this.change(data=>{
@@ -65,7 +67,7 @@ export class PassStore {
     run.status=status;run.finishedAt=new Date().toISOString();run.result=result;run.error=text(error,500);
     const p=data.proposals.find(p=>p.id===run.proposalId);if(p){p.status=status;p.version++;}
     if(status==='completed'&&result?.next){
-      const next={model:run.model||null,resumeSession:run.conversationSession||run.resumeSession||null,id:randomUUID(),project:run.project,slot:run.slot,title:result.next.title,instruction:result.next.instruction,provider:'codex',recordedBy:'Codex runner',status:'proposed',version:(p?.version||0)+1,createdAt:run.finishedAt};
+      const next={model:run.model||null,resumeSession:run.conversationSession||run.resumeSession||null,id:randomUUID(),project:run.project,slot:run.slot,title:result.next.title,instruction:result.next.instruction,provider:run.provider||'codex',recordedBy:(run.provider==='claude'?'Claude':'Codex')+' runner',status:'proposed',version:(p?.version||0)+1,createdAt:run.finishedAt};
       data.proposals=data.proposals.filter(q=>!(q.project===run.project&&q.slot===run.slot));data.proposals.push(next);
     }
     return run;

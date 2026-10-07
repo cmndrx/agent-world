@@ -72,7 +72,7 @@ export class ProgressPanel {
     const p = this.data.progress || { earned: 0, spent: 0, balance: 0, levels: {}, ledger: [] };
     const homes = this.data.households.map((h) => {
       const level = p.levels[h.project] || 1;
-      return `<li><span class="lvl-stars">${'★'.repeat(level)}<span>${'★'.repeat(MAX_LEVEL - level)}</span></span>
+      return `<li><span class="lvl-stars">${'★'.repeat(level)}<span>${'☆'.repeat(MAX_LEVEL - level)}</span></span>
         <span class="lvl-home"><b>${esc(h.name)}</b><small>${esc(levelName(level))}</small></span>
         <button class="chip-btn" data-plan="${esc(h.project)}">Plan</button></li>`;
     }).join('');

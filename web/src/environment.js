@@ -5,16 +5,16 @@ import * as THREE from 'three';
 
 /** Palette keyframes by hour (0–24). Colors are interpolated between neighbors. */
 const KEYS = [
-  { h: 0, top: '#081030', horizon: '#1d2a5c', sun: '#9fb4ff', sunI: 1.0, hemiSky: '#3d4f8f', hemiGround: '#1a2033', hemiI: 0.62, exposure: 1.18, gTint: '#e2e8ff', gSat: 1.05, gCon: 1.1 },
-  { h: 5.2, top: '#101a40', horizon: '#3f3b6a', sun: '#a9bcff', sunI: 0.9, hemiSky: '#4a5a98', hemiGround: '#221f33', hemiI: 0.62, exposure: 1.15, gTint: '#dfe2ff', gSat: 1.05, gCon: 1.08 },
+  { h: 0, top: '#081030', horizon: '#1d2a5c', sun: '#b3c2ef', sunI: 1.35, hemiSky: '#4a5480', hemiGround: '#1d2030', hemiI: 0.58, exposure: 1.18, gTint: '#e9ecf8', gSat: 0.94, gCon: 1.12 },
+  { h: 5.2, top: '#101a40', horizon: '#3f3b6a', sun: '#b8c4f0', sunI: 1.2, hemiSky: '#525a88', hemiGround: '#221f30', hemiI: 0.58, exposure: 1.15, gTint: '#e6e7f6', gSat: 0.96, gCon: 1.1 },
   { h: 6.4, top: '#3b5a99', horizon: '#f6a586', sun: '#ffaa70', sunI: 1.7, hemiSky: '#8fa6e0', hemiGround: '#7a5a48', hemiI: 0.6, exposure: 1.0, gTint: '#fff0e4', gSat: 1.12, gCon: 1.08 },
-  { h: 8, top: '#5598e2', horizon: '#ffe0c2', sun: '#ffe0b8', sunI: 2.9, hemiSky: '#a9c8f5', hemiGround: '#8a8a5e', hemiI: 0.5, exposure: 0.98, gTint: '#fff8ee', gSat: 1.16, gCon: 1.1 },
-  { h: 12.5, top: '#4a94e6', horizon: '#cfe7fa', sun: '#fff4e2', sunI: 3.1, hemiSky: '#a8c9f4', hemiGround: '#8fa86a', hemiI: 0.52, exposure: 0.95, gTint: '#fbfcff', gSat: 1.14, gCon: 1.12 },
-  { h: 16.5, top: '#4f8fda', horizon: '#ffe3c2', sun: '#ffe2b8', sunI: 2.9, hemiSky: '#a6c3f0', hemiGround: '#90a06a', hemiI: 0.5, exposure: 0.97, gTint: '#fff6ea', gSat: 1.15, gCon: 1.1 },
-  { h: 18.4, top: '#4a66b0', horizon: '#ffa565', sun: '#ffaa6c', sunI: 2.8, hemiSky: '#9ca8e2', hemiGround: '#7f7458', hemiI: 0.52, exposure: 1.05, gTint: '#fff1e2', gSat: 1.15, gCon: 1.1 },
+  { h: 8, top: '#5598e2', horizon: '#ffe0c2', sun: '#ffe0b8', sunI: 3.1, hemiSky: '#a9c8f5', hemiGround: '#8a8a5e', hemiI: 0.42, exposure: 0.94, gTint: '#fff8ee', gSat: 1.14, gCon: 1.12 },
+  { h: 12.5, top: '#4a94e6', horizon: '#cfe7fa', sun: '#fff4e2', sunI: 3.45, hemiSky: '#a8c9f4', hemiGround: '#8fa86a', hemiI: 0.4, exposure: 0.9, gTint: '#fbfcff', gSat: 1.12, gCon: 1.15 },
+  { h: 16.5, top: '#4f8fda', horizon: '#ffe3c2', sun: '#ffe2b8', sunI: 3.15, hemiSky: '#a6c3f0', hemiGround: '#90a06a', hemiI: 0.42, exposure: 0.94, gTint: '#fff6ea', gSat: 1.13, gCon: 1.13 },
+  { h: 18.4, top: '#4a66b0', horizon: '#ffa565', sun: '#ffb37a', sunI: 2.9, hemiSky: '#a2ade4', hemiGround: '#6f6a5c', hemiI: 0.5, exposure: 1.04, gTint: '#fff3e8', gSat: 1.06, gCon: 1.12 },
   { h: 19.6, top: '#24305f', horizon: '#e5717a', sun: '#ff6a58', sunI: 1.4, hemiSky: '#6a62a8', hemiGround: '#3a2c40', hemiI: 0.58, exposure: 1.06, gTint: '#ffdcd8', gSat: 1.15, gCon: 1.1 },
-  { h: 20.8, top: '#0b1333', horizon: '#26306a', sun: '#9fb4ff', sunI: 1.0, hemiSky: '#3d4f8f', hemiGround: '#1a2033', hemiI: 0.62, exposure: 1.16, gTint: '#e2e8ff', gSat: 1.05, gCon: 1.1 },
-  { h: 24, top: '#081030', horizon: '#1d2a5c', sun: '#9fb4ff', sunI: 1.0, hemiSky: '#3d4f8f', hemiGround: '#1a2033', hemiI: 0.62, exposure: 1.18, gTint: '#e2e8ff', gSat: 1.05, gCon: 1.1 },
+  { h: 20.8, top: '#0b1333', horizon: '#26306a', sun: '#b3c2ef', sunI: 1.35, hemiSky: '#4a5480', hemiGround: '#1d2030', hemiI: 0.58, exposure: 1.16, gTint: '#e9ecf8', gSat: 0.94, gCon: 1.12 },
+  { h: 24, top: '#081030', horizon: '#1d2a5c', sun: '#b3c2ef', sunI: 1.35, hemiSky: '#4a5480', hemiGround: '#1d2030', hemiI: 0.58, exposure: 1.18, gTint: '#e9ecf8', gSat: 0.94, gCon: 1.12 },
 ];
 
 export const TIME_PRESETS = {
@@ -226,7 +226,7 @@ export class Environment {
       this.envRT?.dispose();
       this.envRT = this.pmrem.fromScene(this.envScene, 0.04);
       this.scene.environment = this.envRT.texture;
-      this.scene.environmentIntensity = 0.3 + (1 - this.night) * 0.15;
+      this.scene.environmentIntensity = 0.26 + (1 - this.night) * 0.1; // less flat fill, so shadows read
     }
   }
 

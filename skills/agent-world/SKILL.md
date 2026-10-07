@@ -11,7 +11,7 @@ Help the human understand where attention is needed and advance real project wor
 
 Find the Agent World checkout. In this installation it is `/Users/blacksatoshi/Documents/Projects/agent-world`; repository links and this skill's scripts resolve against that checkout. Read `CONCEPT.md` and `README.md` first. For continued development, also read `docs/NEXT_PASS.md` and current Git changes. Treat the dated handoff as a starting point, then verify live state.
 
-The visual activity layer remains observation-only. The primary agent card also supports human-approved passes: a separate local Codex CLI runner executes exactly one displayed instruction after explicit approval. Previous task boards remain in history. Agents may propose a next pass but must never approve, resolve interrupted runs for the human, or launch their own follow-up. Execution approval is separate from accepting previous work.
+The visual activity layer remains observation-only. The primary agent card also supports human-approved passes: a separate local runner uses the human-selected Codex or Claude Code CLI to execute exactly one displayed instruction after explicit approval. Previous task boards remain in history. Agents may propose a next pass but must never approve, resolve interrupted runs for the human, or launch their own follow-up. Execution approval is separate from accepting previous work.
 
 Read only the relevant reference:
 
@@ -64,7 +64,7 @@ The human clicks an agent to watch activity, then opens chat from its inactive s
 
 ## Continuing conversations
 
-Send now resumes the displayed Codex thread by exact UUID. The resident uses its latest game-launched chat, or its attached observed Codex chat if none. New conversation explicitly starts fresh. Busy observed conversations block Send; queued work waits for them. Do not resume a real conversation or submit a prompt on the human's behalf without task authorization. Tests use isolated homes and projects. Claude continuation is not supported.
+Send now resumes the displayed Codex thread by exact UUID. The resident uses its latest game-launched chat, or its attached observed Codex chat if none. New conversation explicitly starts fresh. Busy observed conversations block Send; queued work waits for them. Do not resume a real conversation or submit a prompt on the human's behalf without task authorization. Tests use isolated homes and projects. Claude resumes exact game-created sessions only; ordinary Claude app chats and external Claude Code sessions are not resumed.
 
 ## Models and usage
 

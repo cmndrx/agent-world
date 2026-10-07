@@ -261,9 +261,11 @@ function bucketFor(o) {
   return { key: `${o.material.uuid}|${o.castShadow}`, material: o.material, color: null };
 }
 /** A non-indexed copy of a geometry in a target space, with only the attributes merging needs. */
-function prepGeometry(geometry, matrix, color) {
+function prepGeometry(geometry, matrix, color, keepColor = false) {
   const g = geometry.index ? geometry.toNonIndexed() : geometry.clone();
-  for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
+  // Keep baked vertex colors when re-merging something that was already merged (e.g. a parked car into its street).
+  const keep = keepColor && g.attributes.color ? ['position', 'normal', 'uv', 'color'] : ['position', 'normal', 'uv'];
+  for (const name of Object.keys(g.attributes)) if (!keep.includes(name)) g.deleteAttribute(name);
   if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
   g.applyMatrix4(matrix);
   if (color) {
@@ -291,7 +293,7 @@ export function mergeStatic(group) {
     if (dyn) return;
     if (o.userData.keep) return;
     const b = bucketFor(o);
-    const g = prepGeometry(o.geometry, new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld), b.color);
+    const g = prepGeometry(o.geometry, new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld), b.color, o.material.vertexColors);
     if (!buckets.has(b.key)) buckets.set(b.key, { material: b.material, cast: o.castShadow, geos: [] });
     buckets.get(b.key).geos.push(g);
     remove.push(o);
@@ -346,7 +348,7 @@ function mergeDirect(group) {
     const meshes = items.map((i) => i.o);
     const geos = items.map(({ o, color }) => {
       o.updateMatrix();
-      return prepGeometry(o.geometry, o.matrix, color);
+      return prepGeometry(o.geometry, o.matrix, color, o.material.vertexColors);
     });
     const merged = new THREE.Mesh(mergeGeometries(geos), material);
     merged.castShadow = true;
