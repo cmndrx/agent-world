@@ -88,11 +88,13 @@ Everything here is cosmetic and never changes what is shown as true about agents
 
 Style is saved in `~/.agent-world/style.json`, separate from observed events and your task board.
 
-**Progress (bricks and home levels).** Click the bricks chip in the top bar.
-- Earn **+10 bricks** at most once per project per local calendar day for new tasks you accept *with review notes* (existing accepted credits are preserved), and **+25** when you mark a project's outcome reached (Work → Now → *Reached*, with a confirmation).
+**Mayor Martin and the Town Hall.** On your first visit, Mayor Martin appears as an animated 3D character in the town and speaks to you as Governor. Even if a CLI is already signed in, choose Codex or Claude Code in his dialogue to link that provider to the town and claim **50 gems**. Existing observed sessions and project history remain saved, but residents and their homes stay out of the game until this link is made. Before that claim Martin is a game character, not an attached AI session; his introductory lines are scripted. Build the Town Hall for 30 gems; construction takes five real minutes. A crane and hard-hat crew animate at the site, whose countdown sign opens the construction dialogue. Spend 5 gems to shorten the build by one minute. The link, build and gem spending persist in `~/.agent-world/gameplay.json`. Reopen the conversation by clicking Martin, the Town Hall sign, or Play → Mayor Martin.
+
+**Progress (gems and home levels).** Click the gems chip in the top bar.
+- Earn **+10 gems** at most once per project per local calendar day for new tasks you accept *with review notes* (existing accepted credits are preserved), and **+25** when you mark a project's outcome reached (Work → Now → *Reached*, with a confirmation).
 - Each reached outcome grows that house a level: Cottage, House, Villa, Manor, Estate, with new porch, garden and yard details.
-- Spend bricks in Build mode to unlock nicer decor. Some items also need a higher home level.
-- Bricks are recomputed from your board, so agents can't earn them and how busy they look never counts.
+- Spend gems in Build mode to unlock nicer decor. Some items also need a higher home level.
+- Work rewards are recomputed from your board. Agents cannot grant gems by doing work or looking busy.
 
 **Downtown: a city that builds itself.** East of the homes, main street grows from the *kinds* of work your agents actually do.
 - Running tests opens a QA lab, git a post office, web research a library, and helper agents a coworking space. There are 8 businesses.
@@ -118,10 +120,10 @@ Style is saved in `~/.agent-world/style.json`, separate from observed events and
 
 **Neighborhood.**
 - **Map mode** (`M` or the map button): click a house, then a plot, to move it. Click a street name to rename it. WASD pans.
-- **Town square** (west of the first street): the park, café, plaza fountain and town hall open as your homes reach outcomes and you accept tasks with review notes. The Progress panel shows what each one needs.
+- **Town square** (west of the first street): build the Town Hall with Mayor Martin. The park, café and plaza fountain open as your homes reach outcomes and you accept tasks with review notes. The Progress panel shows what each one needs.
 - **Pets:** Build mode, Paint tab. Each home can have a cat, a dog or a bunny.
 - **Seasons and weather** (cloud button in the dock): follow the calendar or pick a season, plus clear, rain or snow. Ambience only.
-- **Finds:** a few collectibles sparkle in yards each day. Click one to pick it up. Your first of each kind unlocks a special decor item in the Found catalog. Finds never give bricks.
+- **Finds:** a few collectibles sparkle in yards each day. Click one to pick it up. Your first of each kind unlocks a special decor item in the Found catalog. Finds never give gems.
 
 ## Projects and conversations
 

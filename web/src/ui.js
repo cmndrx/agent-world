@@ -182,12 +182,18 @@ export class UI {
   // ---- Status, clock, intro --------------------------------------------------------
 
   setConnection(state, live = 0) {
-    this.status.title = state === 'live' ? 'Bridge connected. Agent state is the last received observation, not an adapter health check.' : 'Current activity unavailable. Received observations and your planning are preserved.';
+    this.status.title = state === 'live' ? (this.gameLinked ? 'Bridge connected. Agent state is the last received observation, not an adapter health check.' : 'Bridge connected. Link Codex or Claude Code with Mayor Martin to welcome agents into town.') : 'Current activity unavailable. Received observations and your planning are preserved.';
     this.connectionState = state;
+    this.liveCount = live;
     this.status.dataset.state = state;
     this.status.querySelector('.text').textContent =
-      state === 'live' ? (live ? `Live · ${live} session${live === 1 ? '' : 's'}` : 'Live · no attached sessions') : state === 'connecting' ? 'Connecting…' : 'Offline · last known activity';
+      state === 'live' ? (this.gameLinked ? (live ? `Live · ${live} session${live === 1 ? '' : 's'}` : 'Live · no attached sessions') : 'Town not linked') : state === 'connecting' ? 'Connecting…' : 'Offline · last known activity';
     if (state === 'offline') $('#intro .intro-status .text').textContent = "Can't connect yet. Is `npm run dev` still running?";
+  }
+
+  setGameLinked(linked) {
+    this.gameLinked = linked;
+    this.setConnection(this.connectionState || 'connecting', this.liveCount || 0);
   }
 
   setClock(label, hour, mode) {
@@ -491,7 +497,9 @@ export class UI {
     const live = sims.filter((s) => s.truth).length;
     $('#roster-count').textContent = lots.length ? `${lots.length} home${lots.length === 1 ? '' : 's'} · ${live} ${this.connectionState === 'live' ? 'attached' : 'last known sessions'}` : '';
     if (!lots.length) {
-      const html = `<div class="empty">No agents yet.<br>Start Claude Code or Codex in any project folder and its agent moves in here.<br><br>Want a tour first? Run <code>npm run demo</code>.</div>`;
+      const html = this.gameLinked
+        ? `<div class="empty">No agents yet.<br>Start Claude Code or Codex in any project folder and its agent moves in here.</div>`
+        : `<div class="empty">Your town is waiting for its first agents.<br>Talk to Mayor Martin to link Codex or Claude Code.</div>`;
       if (this.html.roster !== html) this.rosterBody.innerHTML = this.html.roster = html;
       return;
     }

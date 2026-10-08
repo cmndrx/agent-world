@@ -32,7 +32,7 @@ test('unlocks spend the derived balance; locked and level-gated items are refuse
   assert.equal(lockReason('fern', {}), null);
   let s = applyStyleChange(emptyStyle(), { kind: 'unlock', key: 'monstera' }, known); // 10 of 20
   assert.deepEqual(s.unlocks, ['monstera']);
-  assert.throws(() => applyStyleChange(s, { kind: 'unlock', key: 'bonsai' }, known), /Not enough bricks/); // needs 20, has 10
+  assert.throws(() => applyStyleChange(s, { kind: 'unlock', key: 'bonsai' }, known), /Not enough gems/); // needs 20, has 10
   assert.throws(() => applyStyleChange(s, { kind: 'unlock', key: 'fern' }, known), /free/);
   assert.throws(() => applyStyleChange(s, { kind: 'home', key: '/p', value: { decor: [{ id: 'a', item: 'bonsai', x: 0, z: 0 }] } }, known), /Unlock/);
   s = applyStyleChange(s, { kind: 'home', key: '/p', value: { decor: [{ id: 'a', item: 'monstera', x: 0, z: 0 }] } }, known);

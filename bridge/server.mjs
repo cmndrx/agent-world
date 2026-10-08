@@ -21,6 +21,10 @@ import { emptyCity, helperKey, helperType, mergeCity, recordEvent, residentKey }
 import { applyStyleChange, emptyStyle, removePhoto } from '../shared/style.mjs';
 import { MAX_PHOTO_BYTES, deletePhoto, listPhotos, photoIds, photoPath, savePhoto } from './photos.mjs';
 import { progress } from '../shared/progression.mjs';
+import { applyGameplayAction, emptyGameplay, gameplaySpent } from '../shared/gameplay.mjs';
+import { readCodexUsage } from './usage.mjs';
+import { claudeCommand } from './providers.mjs';
+import { spawnSync } from 'node:child_process';
 import { dayKey, spawnsFor } from '../shared/collectibles.mjs';
 import { appProjectID } from '../shared/conversations.mjs';
 import { Inbox } from './inbox.mjs';
@@ -78,6 +82,23 @@ function loadProductivity() {
 }
 // Customization (simulation layer only): decor, paint and wardrobe. See docs/GAMEPLAY.md.
 let style = loadStyle();
+const gameplayFile = path.join(homeDir(), 'gameplay.json');
+let gameplay = emptyGameplay();
+try { gameplay = { ...gameplay, ...JSON.parse(fs.readFileSync(gameplayFile, 'utf8')) }; } catch {}
+function saveGameplay() {
+  fs.writeFileSync(gameplayFile + '.tmp', JSON.stringify(gameplay, null, 2));
+  fs.renameSync(gameplayFile + '.tmp', gameplayFile);
+  broadcast({ type: 'gameplay', gameplay });
+}
+async function providerReady(provider) {
+  if (provider === 'codex') return (await readCodexUsage()).status === 'available';
+  if (provider === 'claude') {
+    const result = spawnSync(claudeCommand(), ['auth', 'status', '--json'], { encoding: 'utf8', timeout: 5000, windowsHide: true, shell: process.platform === 'win32' });
+    if (result.status !== 0) return false;
+    try { return JSON.parse(result.stdout).loggedIn === true; } catch { return false; }
+  }
+  return false;
+}
 function loadStyle() {
   try { return { ...emptyStyle(), ...JSON.parse(fs.readFileSync(styleFile(), 'utf8')) }; } catch { return emptyStyle(); }
 }
@@ -116,7 +137,7 @@ function noteCity(e) {
   }, 500);
   return true;
 }
-const snapshot = () => ({ ...world.snapshot(), ...productivity.snapshot(), style, photos: listPhotos(), city, passes:passes.snapshot(), runner:runner.status() });
+const snapshot = () => ({ ...world.snapshot(), ...productivity.snapshot(), style, gameplay, photos: listPhotos(), city, passes:passes.snapshot(), runner:runner.status() });
 const inbox = new Inbox(eventsDir(), { onError: (err) => console.warn('[inbox]', err.message) });
 for (const e of inbox.readAll()) {
   world.apply(e);
@@ -239,7 +260,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (['/api/pass-proposal', '/api/pass-decision', '/api/pass-resolve', '/api/projects', '/api/conversations', '/api/conversation-title', '/api/plan', '/api/task', '/api/briefing-seen', '/api/style', '/api/milestone', '/api/photo-delete', '/api/review', '/api/artifact-preview'].includes(url.pathname) && req.method === 'POST') {
+  if (['/api/pass-proposal', '/api/pass-decision', '/api/pass-resolve', '/api/projects', '/api/conversations', '/api/conversation-title', '/api/plan', '/api/task', '/api/briefing-seen', '/api/style', '/api/gameplay', '/api/milestone', '/api/photo-delete', '/api/review', '/api/artifact-preview'].includes(url.pathname) && req.method === 'POST') {
     res.setHeader('content-type', 'application/json');
     // Browser forms from other websites must not alter the local catalog.
     if (!req.headers['content-type']?.startsWith('application/json')) {
@@ -269,13 +290,20 @@ const server = http.createServer(async (req, res) => {
         result = previewArtifact(task, input.path);
         res.writeHead(200); return res.end(JSON.stringify({ ok: true, result }));
       }
+      if (url.pathname === '/api/gameplay') {
+        if (input.action === 'claim' && !(await providerReady(input.provider))) throw new Error('Sign in to Codex or Claude Code, then try again.');
+        const balance = progress(productivity.snapshot(), style, gameplay).balance;
+        gameplay = applyGameplayAction(gameplay, input, balance);
+        saveGameplay();
+        res.writeHead(200); return res.end(JSON.stringify({ ok: true, gameplay }));
+      }
       if (url.pathname === '/api/style') {
         // Bricks and levels are derived from the human's board every time (docs/GAMEPLAY.md).
-        const earnedNow = progress(productivity.snapshot(), style);
+        const earnedNow = progress(productivity.snapshot(), style, gameplay);
         const known = {
           homes: new Set(Object.keys(world.households)),
           residents: new Set(Object.values(world.households).flatMap((h) => h.characters.map((c) => `${h.project}#${c.slot}`))),
-          earned: earnedNow.earned,
+          earned: earnedNow.earned - gameplaySpent(gameplay),
           levels: earnedNow.levels,
           spawns: spawnsFor(dayKey(), Object.keys(world.households)),
           photos: photoIds(),

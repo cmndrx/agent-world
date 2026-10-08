@@ -836,6 +836,71 @@ body.building .labels, body.building .labels * { pointer-events: none !important
 /* ---- Progression (phase 2): bricks, home levels, celebrations ---- */
 #bricks-open { cursor: pointer; border: 1px solid var(--glass-border); color: var(--ink); }
 #bricks-open .icon { color: var(--warm-ink); font-size: 15px; }
+.mayor-dialog {
+  position: fixed; inset: 0; z-index: 60; box-sizing: border-box;
+  width: 100vw; height: 100dvh; max-width: none; max-height: none;
+  margin: 0; padding: 0; border: 0; overflow: hidden;
+  color: #f6f2e8; background: transparent; pointer-events: none;
+}
+.mayor-wash { position: absolute; inset: 0; background: linear-gradient(0deg, rgba(8, 20, 23, .72), rgba(8, 20, 23, .15) 58%, transparent 85%); }
+.mayor-character {
+  position: absolute; z-index: 1; left: clamp(4px, 2vw, 36px); bottom: 0;
+  height: min(80dvh, 760px); width: min(48vw, 620px);
+  filter: drop-shadow(16px 14px 20px rgba(3, 9, 14, .36));
+  animation: mayor-enter .65s var(--ease) both;
+}
+@keyframes mayor-enter { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+.mayor-dismiss {
+  position: absolute; top: clamp(14px, 3vw, 32px); right: clamp(14px, 3vw, 32px); z-index: 3;
+  width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.6);
+  border-radius: 50%; color: #fff; background: rgba(8, 20, 23, .63); cursor: pointer; pointer-events: auto;
+}
+.mayor-dismiss:hover, .mayor-dismiss:focus-visible { background: #176a64; }
+.mayor-talk { position: absolute; z-index: 2; right: clamp(18px, 3vw, 48px); bottom: clamp(22px, 4vh, 46px); width: min(760px, calc(100vw - min(40vw, 500px) - 80px)); pointer-events: auto; }
+.mayor-bubble {
+  position: relative; box-sizing: border-box; padding: 29px 32px 24px;
+  border: 2px solid #e7c87c; border-radius: 7px;
+  background: rgba(16, 37, 40, .96); box-shadow: 0 18px 48px rgba(0, 0, 0, .36), inset 0 0 0 4px rgba(255,255,255,.035);
+}
+.mayor-bubble::after { content: ''; position: absolute; left: -23px; bottom: 52px; border-top: 18px solid transparent; border-bottom: 18px solid transparent; border-right: 22px solid #e7c87c; }
+.mayor-name { position: absolute; top: -18px; left: 23px; padding: 5px 16px; border: 1px solid #f7e4af; border-radius: 4px; background: #e7c87c; color: #263631; font-weight: 1000; font-size: 15px; box-shadow: 0 3px 8px #0004; }
+.mayor-quest { display: block; margin-bottom: 8px; color: #a9d0bc; font-size: 11px; font-weight: 900; text-transform: uppercase; }
+.mayor-line { margin: 0; font-size: clamp(17px, 1.8vw, 23px); line-height: 1.4; font-weight: 750; }
+.mayor-line strong { color: #f3ce77; }
+.mayor-detail { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin-top: 16px; color: #d9e8d8; font-size: 13px; font-weight: 850; }
+.mayor-detail span { display: inline-flex; align-items: center; gap: 5px; }
+.mayor-detail .icon { color: #f2c86e; }
+.mayor-progress { width: 100%; height: 9px; margin: 17px 0 0; overflow: hidden; border: 1px solid #9bad9e; border-radius: 5px; background: #2a4644; }
+.mayor-progress span { display: block; height: 100%; background: #f0c361; }
+.mayor-error { margin: 13px 0 0; color: #ffd8b7; font-size: 13px; font-weight: 800; }
+.mayor-options { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 22px; }
+.mayor-choice {
+  min-height: 44px; display: inline-flex; align-items: center; justify-content: space-between; gap: 14px;
+  border: 1px solid #9aaea0; border-radius: 5px; padding: 9px 14px;
+  color: #f5f3e9; background: #345653; font: 900 14px var(--font); cursor: pointer;
+}
+.mayor-choice.primary { color: #263631; border-color: #ffe19c; background: #f0ca74; }
+.mayor-choice.subtle { background: rgba(255, 255, 255, .06); }
+.mayor-choice:hover, .mayor-choice:focus-visible { outline: 2px solid #f9e7b3; outline-offset: 2px; }
+.mayor-choice:disabled { opacity: .45; cursor: not-allowed; }
+.mayor-choice .icon { width: 15px; color: inherit; }
+body:has(.mayor-dialog[open]) :is(#topbar, #roster, #dock, #needs) { opacity: 0; pointer-events: none; }
+body:has(.mayor-dialog[open]) .labels { opacity: .45; pointer-events: none; }
+@media (max-width: 760px) {
+  .mayor-character { left: 0; bottom: min(29dvh, 230px); height: min(51dvh, 390px); width: 58vw; }
+  .mayor-talk { left: 12px; right: 12px; bottom: 12px; width: calc(100vw - 24px); max-height: 53dvh; overflow-y: auto; padding-top: 18px; }
+  .mayor-bubble { padding: 25px 18px 17px; }
+  .mayor-bubble::after { display: none; }
+  .mayor-name { left: 14px; }
+  .mayor-line { font-size: 17px; }
+  .mayor-options { margin-top: 16px; gap: 7px; }
+  .mayor-choice { flex: 1 1 100%; min-height: 41px; font-size: 13px; }
+}
+@media (max-height: 600px) and (max-width: 760px) {
+  .mayor-character { height: 44dvh; bottom: 46dvh; }
+  .mayor-talk { max-height: 57dvh; }
+}
+@media (prefers-reduced-motion: reduce) { .mayor-character { animation: none; } }
 .lot-sign .lot-level { margin-left: 4px; padding-left: 7px; border-left: 1px solid rgba(255, 255, 255, 0.25); color: #ffd166; font-size: 11px; font-weight: 800; }
 .progress-panel {
   width: min(560px, calc(100vw - 32px));
@@ -915,6 +980,12 @@ body.night .brick-balance { background: linear-gradient(135deg, rgba(194, 86, 46
 .commons-sign.far { opacity: 0; }
 .commons-sign { transition: opacity 0.3s; }
 .commons-sign.locked span { font-weight: 700; font-size: 10.5px; color: #7d6a3a; white-space: normal; max-width: 180px; }
+.construction-sign { padding: 0; background: #173f43; color: #fff7df; border: 1px solid #edc66e; }
+.construction-sign button { display: grid; gap: 2px; min-width: 132px; padding: 6px 10px; border: 0; background: transparent; color: inherit; text-align: center; cursor: pointer; pointer-events: auto; }
+.construction-sign button:hover, .construction-sign button:focus-visible { background: #286363; outline: 2px solid #f4d989; outline-offset: 2px; }
+.construction-sign span { color: #f4d989; font-size: 11px; font-weight: 900; }
+.mayor-world-label { padding: 4px 9px; border: 1px solid #e7c87c; border-radius: 5px; background: #173f43; color: #fff7df; font: 900 12px var(--font); cursor: pointer; pointer-events: auto; white-space: nowrap; }
+.mayor-world-label:hover, .mayor-world-label:focus-visible { background: #286363; outline: 2px solid #f4d989; }
 body.mapping .labels { visibility: hidden; }
 body.mapping #roster, body.mapping #needs { opacity: 0.25; pointer-events: none; }
 #mapmode { position: fixed; inset: 0; z-index: 13; pointer-events: none; }

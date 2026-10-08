@@ -228,7 +228,7 @@ export function applyStyleChange(style, change, known) {
     if (next.unlocks.includes(key)) throw new Error('Already unlocked.');
     const spent = next.unlocks.reduce((n, item) => n + itemPrice(item), 0);
     const balance = (known.earned || 0) - spent;
-    if (balance < itemPrice(key)) throw new Error(`Not enough bricks yet (${Math.max(0, balance)} of ${itemPrice(key)}).`);
+    if (balance < itemPrice(key)) throw new Error(`Not enough gems yet (${Math.max(0, balance)} of ${itemPrice(key)}).`);
     next.unlocks.push(key);
   } else if (kind === 'home') {
     if (!known.homes.has(key)) throw new Error('Unknown home.');
