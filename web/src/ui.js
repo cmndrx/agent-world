@@ -1,14 +1,16 @@
+import { connectionView } from '../../shared/connections.mjs';
+import {ProjectsPanel} from './projects.js';
 import {canPromptFromStatus} from '../../shared/agent-view.mjs';
-import { observedLabel } from '../../shared/freshness.mjs';
-// HTML overlays: roster, "needs you" strip, inspect drawer, toasts, dock menus, edge arrows.
+import { observedLabel, observationTime } from '../../shared/freshness.mjs';
+// HTML overlays: roster, inspect drawer, toasts, dock menus, edge arrows.
 // Everything here renders truth, except the clearly marked "Simulation" card.
 
-import { conversationLabel } from '../../shared/conversations.mjs';
 import * as THREE from 'three';
 import { plumbobFor } from '../../shared/schema.mjs';
-import { appName, brandOf, resolveActivity } from './activity.js';
+import { appName, resolveActivity } from './activity.js';
 import { SEASONS, WEATHERS } from './seasons.js';
 import { icon, STATE_ICON } from './icons.js';
+import { AvatarPortrait } from './avatar-portrait.js';
 import { PROVIDER_COLORS } from './models.js';
 import { escapeHtml, formatDuration } from './sim.js';
 
@@ -16,7 +18,12 @@ const $ = (sel) => document.querySelector(sel);
 const hex = (n) => `#${(n >>> 0).toString(16).padStart(6, '0')}`;
 const clock = (ts) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 
-const WAIT_REASON = { permission: 'Needs your OK', turn_complete: 'Your turn', input: 'Has a question', interrupted: 'Stopped' };
+/** Short relative time: "just now", "5m ago", "3h ago", "2d ago". */
+function ago(ms) {
+  const sec = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+  return sec < 60 ? 'just now' : sec < 3600 ? `${Math.floor(sec / 60)}m ago` : sec < 86400 ? `${Math.floor(sec / 3600)}h ago` : `${Math.floor(sec / 86400)}d ago`;
+}
+
 
 /** A small SVG portrait drawn from a Sim's look. */
 export function portrait(look, cls = '') {
@@ -82,23 +89,10 @@ function portraitWithRing(sim, size = '') {
   return `<span class="portrait-wrap ${size}">${portrait(sim.look, size)}<span class="ring s-${plumbobFor(sim.state)}"></span></span>`;
 }
 
-function stateText(sim) {
-  if (sim.state === 'waiting_for_user') return WAIT_REASON[sim.truth.detail?.reason] || 'Needs you';
-  return sim.activityLabel;
-}
-
-/** A small colored chip naming the app ("Claude" / "Codex"). */
-function appChip(session) {
-  if (!session) return '';
-  const color = hex(PROVIDER_COLORS[session.provider] ?? 0x98a1b2);
-  return `<span class="app-chip" style="--chip:${color}" title="${escapeHtml(appName(session))}">${escapeHtml(brandOf(session))}</span>`;
-}
-
 /** A one-line sentence for a "needs you" toast: "<b>Otto</b> needs your OK to run a command". */
 function toastText(sim) {
   const name = `<b>${escapeHtml(sim.name)}</b>`;
   const reason = sim.truth?.detail?.reason;
-  if (reason === 'turn_complete') return `${name} is done. Your turn.`;
   if (reason === 'input') return `${name} has a question for you`;
   if (reason === 'interrupted') return `${name} stopped and is waiting for you`;
   const label = sim.activityLabel;
@@ -116,8 +110,6 @@ export class UI {
     this.h = handlers;
     this.roster = $('#roster');
     this.rosterBody = $('#roster-body');
-    this.needs = $('#needs');
-    this.needsList = $('#needs-list');
     this.panel = $('#inspect');
     this.arrows = $('#arrows');
     this.toasts = $('#toasts');
@@ -128,6 +120,9 @@ export class UI {
     this.lastRender = 0;
     this.html = {};
 
+    this.rosterView='agents';
+    this.projectsPanel=new ProjectsPanel($('#project-body'),{focus:project=>this.h.onFocusLot(project),onCount:count=>{if(this.rosterView==='projects')$('#roster-count').textContent=`${count} project${count===1?"":"s"}`;}});
+    document.querySelectorAll('[data-roster-view]').forEach(b=>b.addEventListener('click',()=>{this.rosterView=b.dataset.rosterView;this.roster.classList.toggle('project-onboarding',this.rosterView==='projects');this.roster.classList.remove('collapsed');$('#roster-title').textContent=this.rosterView==='agents'?'Your agents':'Your projects';this.rosterBody.hidden=this.rosterView!=='agents';$('#project-body').hidden=this.rosterView!=='projects';document.querySelectorAll('[data-roster-view]').forEach(t=>t.setAttribute('aria-selected',String(t.dataset.rosterView===this.rosterView)));if(this.rosterView==='projects')this.projectsPanel.load();}));
     // Roster
     $('#roster-toggle').innerHTML = icon('panelLeft');
     $('#roster-toggle').addEventListener('click', () => {
@@ -143,10 +138,6 @@ export class UI {
       const row = e.target.closest('.sim-row[data-key]');
       if (row) return this.h.onFocus(row.dataset.key);
 
-    });
-    this.needsList.addEventListener('click', (e) => {
-      const b = e.target.closest('[data-key]');
-      if(b){if(b.classList.contains('prompt-ready'))this.h.onPromptKey?.(b.dataset.key);else this.h.onFocus(b.dataset.key);}
     });
     this.arrows.addEventListener('click', (e) => {
       const a = e.target.closest('[data-key]');
@@ -169,25 +160,33 @@ export class UI {
     this.initDock();
     const layoutChrome = () => {
       const top = $('#topbar').getBoundingClientRect().bottom + 10;
-      this.needs.style.top = `${top}px`;
-      const below = this.needs.hidden ? top : this.needs.getBoundingClientRect().bottom + 10;
+      const below = top;
       this.roster.style.top = `${below}px`;
       this.roster.style.maxHeight = `calc(100dvh - ${below + 100}px)`;
     };
     new ResizeObserver(layoutChrome).observe($('#topbar'));
-    new ResizeObserver(layoutChrome).observe(this.needs);
     layoutChrome();
   }
 
   // ---- Status, clock, intro --------------------------------------------------------
 
+// <<<<<<< ai-features
+//   setConnection(state, view = connectionView(null, false)) {
+//     this.status.title = view.detail;
+//     this.status.setAttribute('aria-label', `${view.text}. ${view.detail}`);
+// =======
   setConnection(state, live = 0) {
     this.status.title = state === 'live' ? (this.gameLinked ? 'Bridge connected. Agent state is the last received observation, not an adapter health check.' : 'Bridge connected. Link Codex or Claude Code with Mayor Martin to welcome agents into town.') : 'Current activity unavailable. Received observations and your planning are preserved.';
+// >>>>>>> gameplay-improvement
     this.connectionState = state;
     this.liveCount = live;
     this.status.dataset.state = state;
+// <<<<<<< ai-features
+//     this.status.querySelector('.text').textContent = state === 'connecting' ? 'Connecting…' : view.text;
+// =======
     this.status.querySelector('.text').textContent =
       state === 'live' ? (this.gameLinked ? (live ? `Live · ${live} session${live === 1 ? '' : 's'}` : 'Live · no attached sessions') : 'Town not linked') : state === 'connecting' ? 'Connecting…' : 'Offline · last known activity';
+// >>>>>>> gameplay-improvement
     if (state === 'offline') $('#intro .intro-status .text').textContent = "Can't connect yet. Is `npm run dev` still running?";
   }
 
@@ -340,7 +339,7 @@ export class UI {
     const lotColor = hex(sim.lot.exterior);
     this.panel.innerHTML = `
       <div class="insp-head">
-        ${portraitWithRing(sim, 'lg')}
+        <span class="portrait-wrap lg avatar-3d-wrap"><span class="ring s-${plumbobFor(sim.state)}"></span></span>
         <div class="names">
           ${sim.character
             ? `<input name="name" value="${escapeHtml(sim.name)}" maxlength="40" aria-label="Name (click to rename)" title="Click to rename" />`
@@ -366,6 +365,8 @@ export class UI {
         <ol class="timeline" data-slot="timeline"></ol>
         <div class="simcard" data-slot="sim"></div>
       </div>`;
+    // A live 3D bust of this agent (same model as in the world), idling while the panel is open.
+    this.panel.querySelector('.avatar-3d-wrap').prepend(new AvatarPortrait({ look: () => sim.look, role: () => sim.roleInfo, mode: 'bust' }).canvas);
     this.html.panel = {};
     this.renderPanel();
   }
@@ -473,8 +474,6 @@ export class UI {
     if (now - this.lastRender < 400) return;
     this.lastRender = now;
 
-    this.needs.querySelector('.needs-label').lastChild.textContent = this.connectionState === 'live' ? 'Needs you' : 'Last known requests';
-    this.renderNeeds(waiting);
     this.renderRoster(sims, lots, selected);
     if (this.sim) {
       if (this.sim.gone) this.close();
@@ -482,71 +481,44 @@ export class UI {
     }
   }
 
-  renderNeeds(waiting) {
-    this.needs.hidden = waiting.length === 0;
-    patchList(this.needsList, waiting, {
-      key: (s) => s.key,
-      className: (s) => `need${s.truth?.detail?.reason==='turn_complete'?' prompt-ready':''}`,
-      html: (s) => `${portrait(s.look)}
-        <span style="display:grid;text-align:left;line-height:1.1"><b>${escapeHtml(s.name)}</b><span class="why">${escapeHtml(stateText(s))} · ${escapeHtml(s.lot.name)}</span></span>
-        <time>${this.connectionState === 'live' ? formatDuration(s.waitSeconds) : 'last known'}</time>`,
-    });
-  }
-
+  /** Your agents: a flat list of every agent with its status (same words as its bubble) and when it was last seen. */
   renderRoster(sims, lots, selected) {
+// <<<<<<< ai-features
+//     if(this.rosterView==='projects')return;
+//     const stale = this.connectionState !== 'live';
+//     $('#roster-count').textContent = sims.length ? `${sims.length} agent${sims.length === 1 ? "" : "s"} · ${sims.filter((s) => s.truth).length} active` : '';
+//     if (!sims.length) {
+//       const html = `<div class="empty">Add your first project to give your agents a home.<br><br><button type="button" onclick="document.querySelector('[data-roster-view=projects]').click()">Add a project</button></div>`;
+// =======
     const live = sims.filter((s) => s.truth).length;
     $('#roster-count').textContent = lots.length ? `${lots.length} home${lots.length === 1 ? '' : 's'} · ${live} ${this.connectionState === 'live' ? 'attached' : 'last known sessions'}` : '';
     if (!lots.length) {
       const html = this.gameLinked
         ? `<div class="empty">No agents yet.<br>Start Claude Code or Codex in any project folder and its agent moves in here.</div>`
         : `<div class="empty">Your town is waiting for its first agents.<br>Talk to Mayor Martin to link Codex or Claude Code.</div>`;
+// >>>>>>> gameplay-improvement
       if (this.html.roster !== html) this.rosterBody.innerHTML = this.html.roster = html;
       return;
     }
     if (this.html.roster) this.rosterBody.innerHTML = this.html.roster = '';
-
-    patchList(this.rosterBody, lots, {
-      tag: 'div',
-      key: (lot) => lot.project,
-      className: () => 'lot-group',
-      html: () => '<button class="lot-title"></button><div class="rows"></div>',
+    // Who needs you first, then who's busy, then everyone else; alphabetical within each.
+    const rank = (s) => (s.state === 'waiting_for_user' ? 0 : s.state === 'error' ? 1 : s.truth && !['idle', 'done'].includes(s.state) ? 2 : s.truth ? 3 : 4);
+    const ordered = [...sims].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+    patchList(this.rosterBody, ordered, {
+      key: (s) => s.key,
+      className: (s) => `sim-row agent-row${s.truth ? '' : ' off'}${s === selected ? ' selected' : ''}`,
+      html: (s) => this.rosterRow(s, stale),
     });
-    for (const lot of lots) {
-      const group = [...this.rosterBody.children].find((g) => g.dataset.key === lot.project);
-      const here = sims.filter((s) => s.lot === lot);
-      const waitingHere = here.filter((s) => s.state === 'waiting_for_user').length;
-      const activeHere = here.filter((s) => s.truth).length;
-      const meta = this.connectionState !== 'live' && activeHere ? `${activeHere} last known` : waitingHere ? `${waitingHere} need${waitingHere === 1 ? 's' : ''} you` : activeHere ? `${activeHere} working` : 'no sessions';
-      const title = group.querySelector('.lot-title');
-      const titleHtml = `<span class="swatch" style="background:${hex(lot.exterior)}"></span>${icon('house')}${escapeHtml(lot.name)}<span class="lot-meta">${meta}</span>`;
-      if (title._html !== titleHtml) {
-        title.innerHTML = title._html = titleHtml;
-        title.dataset.lot = lot.project;
-        title.title = lot.project;
-      }
-      const ordered = [];
-      for (const s of here.filter((s) => !s.isVisitor).sort((a, b) => a.character.slot - b.character.slot)) {
-        ordered.push(s, ...here.filter((v) => v.parent === s));
-      }
-      patchList(group.querySelector('.rows'), ordered, {
-        key: (s) => s.key,
-        className: (s) => `sim-row${s.truth ? '' : ' off'}${s.isVisitor ? ' visitor' : ''}${s === selected ? ' selected' : ''}`,
-        html: (s) => this.rosterRow(s),
-      });
-    }
   }
 
-  rosterRow(s) {
-    const cls = plumbobFor(s.state);
-    const detail = s.truth ? s.act.detail : '';
-    const right = this.connectionState === 'live' && s.state === 'waiting_for_user' ? formatDuration(s.waitSeconds) : '';
+  rosterRow(s, stale) {
+    const status = s.statusText(stale && !!s.truth);
+    const seenAt = s.truth ? observationTime(s.truth) : Date.parse(s.character?.lastSeen ?? '') || null;
+    const seen = s.truth && !stale ? 'Now' : seenAt ? ago(seenAt) : 'Never';
+    const stateIcon = s.walking && !stale ? 'navigation' : STATE_ICON[s.state];
     return `${portraitWithRing(s)}
-      <span class="who"><b>${escapeHtml(s.name)} ${s.isVisitor ? '' : appChip(s.truth)}</b>
-        ${s.truth?.conversation ? `<span class="t conversation-title">${escapeHtml(conversationLabel(s.truth.conversation))}</span>` : ''}
-        <span class="what">${icon(STATE_ICON[s.state])}${escapeHtml(this.connectionState === 'live' || !s.truth ? stateText(s) : `Last known: ${stateText(s)}`)}</span>
-        ${detail && !s.act.prose && !stateText(s).includes(detail) ? `<span class="t">${escapeHtml(detail)}</span>` : ''}
-        ${s.truth ? `<small class="observation-age">${escapeHtml(observedLabel(s.truth))}</small>` : ''}</span>
-      ${right ? `<span class="state-pill s-${cls}">${right}</span>` : ''}`;
+      <span class="who"><b>${escapeHtml(s.name)}</b>${s.character?.assignedRole?`<span class="resident-role">${escapeHtml(s.roleInfo?.title||s.character.assignedRole)}</span>`:''}<span class="what">${icon(stateIcon)}${escapeHtml(stale && s.truth ? 'Offline' : status)}</span></span>
+      <small class="seen" title="${seenAt ? `Last seen ${escapeHtml(new Date(seenAt).toLocaleString())}` : 'Not seen yet'}">${seen}</small>`;
   }
 
   updateArrows(waiting, camera, width, height) {

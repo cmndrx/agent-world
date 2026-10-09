@@ -23,7 +23,7 @@ Typing, code bars and ambient poses are illustrative. Observed labels, file/comm
 - `Q / E`, dock arrows, or right-drag: rotate; vertical right-drag tilts.
 - Scroll: zoom.
 - Click a resident, or `Space` for the one in the middle of the view: open Watch activity. Its inactive status and animated screen open chat for the exact observed Codex conversation. Finished-turn attention opens chat directly; this sends nothing.
-- “Needs you” entries and edge arrows: navigate to an attached resident that needs attention.
+- Work → Now attention entries and edge arrows: navigate to an attached resident that needs attention. The main-overlay Needs you strip and its waiting-agent cards have been removed.
 - House sign or **Plan & briefing**: open that home’s agent card.
 - **Conversation shelf** or the top-bar chat icon (**Chats**): search conversations and find their current resident. **Open in…** opens a known original chat link, not a prompt composer under the game's control. Coding conversation links may be unavailable.
 - `Esc`: close menus/drawers; native dialogs can be dismissed through their close control or Escape.
@@ -62,3 +62,14 @@ Agent selection opens Watch activity. The inactive status, animated screen and P
 
 
 The composer provider control chooses Codex or Claude Code for a new chat and retains the draft. Each provider has its own recorded chats. Follow-ups resume the exact selected session; Claude resumes only sessions created by Agent World, not external Claude app/CLI sessions. Claude requires a signed-in CLI and configured tool permissions, uses its configured model, and has no verified quota or reasoning-summary source. Installation detection does not establish sign-in. Do not send a test prompt without human authorization for the actual work.
+
+## Direct prompt tools
+
+The composer offers Attach files (up to four supported images/text files), and new chats use the project checkout (the worktree checkbox has been removed). Send passes only selected files to the provider. Worktree paths and Open in VS Code appear with replies; follow-ups retain that workspace. Never merge or delete its work without authorization. Stop run controls only a game-launched process; Cancel queued prompt prevents a pending execution. Neither rolls back existing edits. Resident/provider chat lists support search, archive, restore and rename; archive hides local list entries rather than deleting provider history. Do not use these controls on real work merely for QA.
+
+## Fixed execution policy
+
+Run settings/review controls have been removed. New messages always use Prompt, Codex workspace writes with shell networking/live search, or Claude configured permissions with web tools enabled where supported. Both providers inherit CLI MCP/plugins and keep shell tools available. Backend rejects per-message overrides; provider-managed permissions/network rules still apply. Existing model/provider/attachment controls remain; existing worktree chats keep their recorded workspace. Historical findings stay readable without implying acceptance. Do not submit real test prompts without task authorization.
+
+
+Codex chat → Connect an app opens a separate setup dialog. Request app access directly calls the computer-use tool through an ephemeral app-server connection, with no model turn. The dialog shows the provider's actual application approval and offered persistence choices. The human alone selects Allow once / Always allow / Deny. Never click these for the human or edit provider permission files. Native interface return verifies the setup connection only; use a separately authorized ordinary prompt to verify saved access. Closing/cancelling denies any pending request. Demo mode disables this flow.

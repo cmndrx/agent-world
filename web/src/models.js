@@ -236,7 +236,7 @@ export const SEASONAL_COLORS = new Set([
 ]);
 const vcMaterials = new Map();
 function bakeable(m) {
-  if (!m?.isMeshStandardMaterial || m.isMeshPhysicalMaterial || m.map || m.transparent || m.vertexColors || m.opacity !== 1) return false;
+  if (!m?.isMeshStandardMaterial || m.isMeshPhysicalMaterial || m.map || m.transparent || m.vertexColors || m.opacity !== 1 || m.side !== THREE.FrontSide) return false;
   if (m.emissive.getHex() !== 0 || m.envMap || m.normalMap) return false;
   const u = m.userData;
   if (u.mottle || u.asphalt || u.siding || u.bands || u.sway || u.noBake || u.skyline) return false;
@@ -644,52 +644,6 @@ export function buildPerson(look, { scale = 1, hat = null, headphones = false, b
     elbowL: AL.elbow,
     elbowR: AR.elbow,
   };
-}
-
-/**
- * Work clothes on the spine (play layer): an apron in the workplace color for a role, or a lanyard with an
- * ID card for an intern. Sits below the provider badge so that stays visible.
- */
-export function buildUniform(kind, color, build = 1, shirt = null) {
-  const g = new THREE.Group();
-  const soft = (c) => patchCharacterMaterial(mat(c, { roughness: 0.7, flat: false }));
-  // Keep the apron readable against a similar shirt: darken it when the colors are close.
-  if (shirt != null) {
-    const a = new THREE.Color(color);
-    const b = new THREE.Color(shirt);
-    if (Math.abs(a.r - b.r) + Math.abs(a.g - b.g) + Math.abs(a.b - b.b) < 0.45) color = a.multiplyScalar(0.55).getHex();
-  }
-  if (kind === 'apron') {
-    const panel = new THREE.Mesh(new THREE.BoxGeometry(0.32 * build, 0.3, 0.025), soft(color));
-    panel.position.set(0, 0.27, 0.215 * build);
-    const trim = new THREE.Mesh(new THREE.BoxGeometry(0.33 * build, 0.022, 0.03), soft(0xfbfbfb));
-    trim.position.set(0, 0.415, 0.216 * build);
-    g.add(trim);
-    const pocket = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.07, 0.01), soft(new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.35).getHex()));
-    pocket.position.set(0.05, 0.23, 0.232 * build);
-    g.add(panel, pocket);
-    for (const s of [1, -1]) {
-      const strap = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.3, 0.02), soft(color));
-      strap.position.set(s * 0.1 * build, 0.55, 0.19 * build);
-      strap.rotation.z = s * 0.25;
-      g.add(strap);
-    }
-  } else if (kind === 'lanyard') {
-    for (const s of [1, -1]) {
-      const strap = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.24, 0.012), soft(color));
-      strap.position.set(-0.04 + s * 0.045, 0.56, 0.2 * build);
-      strap.rotation.z = s * 0.35;
-      g.add(strap);
-    }
-    const card = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.012), soft(0xfbfbfb));
-    card.position.set(-0.05, 0.42, 0.222 * build);
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.025, 0.014), soft(color));
-    stripe.position.set(-0.05, 0.455, 0.223 * build);
-    g.add(card, stripe);
-  }
-  g.traverse((o) => o.isMesh && (o.castShadow = true));
-  mergeDirect(g);
-  return g;
 }
 
 /** The classic floating diamond. Emissive so the bloom pass makes it glow. */

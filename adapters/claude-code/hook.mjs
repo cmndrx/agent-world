@@ -2,6 +2,7 @@
 // Claude Code hook adapter. Claude Code pipes the hook payload (JSON) to stdin;
 // we translate it into a canonical Agent World event. Must be fast and never block the agent.
 
+import { observerContact } from '../contact.mjs';
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { emit } from '../emit.mjs';
@@ -111,7 +112,9 @@ async function main() {
   try {
     const input = JSON.parse(raw);
     if (!input.session_id) return;
-    for (const e of translate(input)) emit(e);
+    const events = translate(input);
+    if (events.length) { try { observerContact('claude', input.session_id, input.hook_event_name !== 'SessionEnd'); } catch {} }
+    for (const e of events) emit(e);
   } catch (err) {
     // Never interfere with the agent. Log to stderr only.
     process.stderr.write(`[agent-world] ${err.message}\n`);

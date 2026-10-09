@@ -6,6 +6,7 @@
 // Codex logs don't record a session end, so a session that has been waiting on you with
 // no new writes for --idle-end-minutes is ended here (a heuristic, documented in CONCEPT.md).
 
+import { observerContact } from '../contact.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -196,9 +197,11 @@ for (const file of walk(SESSIONS)) {
 
 const dirty = new Set();
 try {
-  fs.watch(SESSIONS, { recursive: true }, (_type, name) => {
+  const watcher = fs.watch(SESSIONS, { recursive: true }, (_type, name) => {
     if (name && String(name).endsWith('.jsonl')) dirty.add(path.join(SESSIONS, String(name)));
   });
+  // Polling remains the observer if the OS later rejects the watcher.
+  watcher.on('error', () => watcher.close());
 } catch {
   // Recursive watch unsupported here; the periodic full scan still works, just slower.
 }
@@ -209,3 +212,13 @@ setInterval(() => {
 setInterval(fullScan, 5000);
 
 console.log(`[codex] watching ${SESSIONS}`);
+
+// A readable rollout directory and a running tailer establish observer contact only.
+function heartbeat() {
+  let readable = false;
+  try { fs.readdirSync(SESSIONS); readable = true; } catch {}
+  try { observerContact('codex', `tailer:${process.pid}`, readable, { pid: process.pid }); } catch {}
+}
+heartbeat();
+setInterval(heartbeat, 5000);
+process.on('exit', () => { try { observerContact('codex', `tailer:${process.pid}`, false, { pid: process.pid }); } catch {} });

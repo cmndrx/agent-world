@@ -214,7 +214,7 @@ export class WorkCenter {
     const text=taskHandoff(task,this.data);
     this.handoffDialog ||= document.createElement('dialog');
     this.handoffDialog.className='task-editor glass';
-    this.handoffDialog.innerHTML=`<header class="panel-head"><h2>Task handoff</h2><button data-dismiss aria-label="Close handoff">×</button></header><p>Copy into your agent’s app when you want to continue. Nothing is sent automatically.</p><label>Handoff text<textarea readonly rows="12"></textarea></label><button data-copy-text>Copy handoff</button><p role="status"></p>`;
+    this.handoffDialog.innerHTML=`<header class="panel-head"><span class="panel-icon">${icon('copy')}</span><div><h2>Task handoff</h2></div><button class="icon-btn" data-dismiss aria-label="Close handoff">${icon('x')}</button></header><p>Copy into your agent’s app when you want to continue. Nothing is sent automatically.</p><label>Handoff text<textarea readonly rows="12"></textarea></label><button data-copy-text>Copy handoff</button><p role="status"></p>`;
     this.handoffDialog.querySelector('textarea').value=text;
     this.handoffDialog.querySelector('[data-dismiss]').onclick=()=>this.handoffDialog.close();
     this.handoffDialog.querySelector('[data-copy-text]').onclick=async()=>{

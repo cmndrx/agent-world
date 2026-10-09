@@ -1,3 +1,9 @@
+> **Chat composer:** conversation rows show names only. While a game prompt is active, an empty composer shows a square Stop button; typing switches it to the Send arrow. Sending a follow-up queues that exact message behind current work and continues the same owned conversation. Clearing the draft restores Stop. Queued messages stay visible, and a run must establish its conversation before dependent messages can execute.
+
+> The main overlay no longer shows the yellow **Needs you** tag or the waiting-agent cards beside it. Click a resident in the world to open Watch activity and chat.
+
+> **Agent-owned chats:** clicking a resident keeps that resident as the prompt recipient. Its prompter lists only its recorded and observed conversations, separated by provider. Send resumes the selected owned thread; New chat creates a conversation for that same resident. The API rejects another resident's thread, and game-launched observed activity stays with the requested resident. Earlier app messages are still not imported. Existing duplicated run history is preserved; the first recorded owner wins. Saved app links without an observed resident remain in Connections → Chats.
+
 > The main overlay omits the chat, Prompt agent and All homes buttons. Open chat from an agent's activity view; open the conversation library through Connections → Chats or a home's shelf.
 
 > Project cards show the project title and agent rows. Their Conversation shelf and Plan & briefing footer buttons have been removed.
@@ -6,7 +12,7 @@
 
 > **Rename chats:** use Rename beside a recorded chat in the prompter, edit its name and choose Save name (or press Enter). Cancel/Escape discards the edit. Names are saved locally in Agent World and shared with the conversation shelf; the original Codex app title is unchanged.
 
-> Current primary workflow: click an agent to open **Watch activity**. Click **Done, your turn** (or another inactive status), **Prompt this agent**, or the animated screen to open chat for that observed conversation. Finished-turn attention entries open chat directly. Chat shows recorded message pairs, a conversation list and a pinned composer; **Enter** sends and **Shift + Enter** adds a line. Each game-launched reply automatically expands **Reasoning · live** for public Codex summaries during the run; arriving sections accumulate there and remain as **Reasoning summary** after completion. Command/file steps stay in **Watch activity**. Private internal reasoning is never imported; summary availability depends on the model. **New chat** starts fresh. Closing chat returns to Watch activity; sending keeps chat open while work runs. Returned reports appear in chat; the separate Results & history modal is removed. The lower-left **Account usage** button in chat and **Connected app usage** in Connections shows Codex account remaining percentages and reset times from the official read-only account endpoint. Unsupported or unavailable sources show no assumed balance. Errors remain inline, with no floating pass notices. Earlier app messages are not imported.
+> Current primary workflow: click an agent to open **Watch activity**. Click the status card, **Prompt this agent**, or the animated screen to open chat for that observed conversation. Finished-turn attention entries open chat directly. Chat shows recorded message pairs, a conversation list and a pinned composer; **Enter** sends and **Shift + Enter** adds a line. Each game-launched reply automatically expands **Reasoning · live** for public Codex summaries during the run; arriving sections accumulate there and remain as **Reasoning summary** after completion. Command/file steps stay in **Watch activity**. Private internal reasoning is never imported; summary availability depends on the model. **New chat** starts fresh. Closing chat returns to Watch activity; sending keeps chat open while work runs. Returned reports appear in chat; the separate Results & history modal is removed. The lower-left **Account usage** button in chat and **Connected app usage** in Connections shows Codex account remaining percentages and reset times from the official read-only account endpoint. Unsupported or unavailable sources show no assumed balance. Errors remain inline, with no floating pass notices. Earlier app messages are not imported.
 
 > Live Codex account usage is available after restarting the updated bridge. Each chat shows its last observed model. Use the model pill inside the composer (its menu opens upward) to choose **Next message model** to change the model when sending; **Keep conversation model** retains the existing choice. Preferences are per chat for this browser session, and never change a running turn. Claude usage and model selection remain unavailable.
 
@@ -40,6 +46,9 @@ Remove the hooks any time with `npm run hooks:claude -- --remove`.
 
 ## Desktop app (Electron)
 
+**Applying source updates to the desktop app:** Every application code or UI update must include `npm run app:build` and package verification. the packaged app contains a snapshot of this checkout. Editing source or running `npm run build` does not refresh an already-running packaged app. After checking that no work is queued or running, quit Agent World, run `npm run app:build`, then reopen `release/mac-arm64/Agent World.app`. For checkout development, quit the packaged app and use `npm run app` instead. An existing bridge may be reused, so ensure the bridge also runs the updated code.
+
+
 The same build as `npm start`, in its own window. The app starts the bridge (serving `dist/`) and the Codex tailer with Electron's bundled Node, so it doesn't need a separate Node install, and it stops them when you quit.
 
 ```bash
@@ -71,10 +80,10 @@ npm run app:build  # package release/mac-arm64/Agent World.app (ad-hoc signed, n
 | Double-click a home | Glide in and look inside |
 | Click a Sim, or `Space` for the one in view | Inspect: truth (observed events) vs. simulation (flavor) |
 | **You** (top bar) | Your picture; click it to change your look |
-| "Needs you" list / edge arrows | Fly to agents waiting on you |
-| Neighborhood panel | Every home and Sim with live status; click to fly there |
+| Edge arrows | Fly to agents waiting on you |
+| Your agents (left panel) | Every agent with its status (Working, Needs your OK, Idle, Off duty, Traveling…) and when it was last seen; click one to fly there |
 | Dock | Time of day, walls, graphics quality, sounds, help |
-| 🔔 (dock) | Toggle chimes: ding-dong for permission/questions, soft arpeggio when a turn finishes, a gentle ping if still waiting after 2 min |
+| 🔔 (dock) | Toggle chimes: ding-dong for permission/questions, a gentle ping if still waiting after 2 min |
 
 The tab title shows how many agents are waiting, e.g. `(2) Agent World`.
 
@@ -124,6 +133,12 @@ Style is saved in `~/.agent-world/style.json`, separate from observed events and
 - **Pets:** Build mode, Paint tab. Each home can have a cat, a dog or a bunny.
 - **Seasons and weather** (cloud button in the dock): follow the calendar or pick a season, plus clear, rain or snow. Ambience only.
 - **Finds:** a few collectibles sparkle in yards each day. Click one to pick it up. Your first of each kind unlocks a special decor item in the Found catalog. Finds never give gems.
+
+## Live provider status
+
+The overlay Live button counts **distinct activity observers** (0, 1 or 2), separately from attached sessions. Click it for each provider's status and the supported meaning. Codex is connected while its log tailer has a readable sessions directory and a fresh five-second heartbeat (expires after 20 seconds, or when its process exits). Claude Code is connected for 30 seconds after a supported Agent World hook runs; SessionEnd clears that session's contact. Multiple contacts from one provider count once. Quiet Claude sessions can expire while still open because hooks do not provide a persistent health channel.
+
+The bridge sends health every two seconds; a disconnected bridge or ten seconds without fresh health makes the count unavailable. Reconnection loads current evidence. Contacts are separate files under `AGENT_WORLD_HOME/connections`, never activity events or queue records. Installation, saved chats, authentication and historical/successful turns do not establish this status. This checks local observer contact, not cloud availability, desktop-app presence, account entitlement or an authenticated live session. Existing hooks must point to the updated adapter; no hook installation or authentication changes are made automatically. Demo agents do not establish provider connections.
 
 ## Projects and conversations
 
@@ -211,7 +226,7 @@ npm run build     # production client into dist/
 npm start         # build, then serve everything from the bridge on :4777
 ```
 
-Work is the default view with a compact dock. **Play** opens the cosmetic activities as icon tiles; **Connections** (plug icon) shows what's observed (Codex, Claude Code, saved app chats) with last-seen times and a three-step start. Caveats live under each panel's “How it works” note. Pets have their own Build tab. Task details are optional; review evidence remains visible when editing existing work.
+Work is the default view with a compact dock. **Play** opens the cosmetic activities as icon tiles; **Connections** (plug icon) shows what's observed (Codex, Claude Code, saved app chats) with last-seen times. Caveats live under each panel's “How it works” note. Pets have their own Build tab. Task details are optional; review evidence remains visible when editing existing work.
 
 Reviews open a focused deliverable view. Preview recorded project-local text outputs, inspect reported checks, then explicitly accept or return with feedback. Return records feedback without messaging an agent. See [review workflow](docs/REVIEW_WORKFLOW.md) for supported formats and limits.
 
@@ -249,3 +264,74 @@ The runner and read-only model/usage APIs use the same Codex executable discover
 ### Codex desktop ownership
 
 A conversation opened in Codex may remain owned by its desktop writer even while waiting. An independent CLI cannot resume that thread until ownership is released. The game shows this error, preserves the failed prompt and never creates a fallback chat. Continue in Codex or explicitly choose New conversation. Direct prompting of a desktop-owned thread requires a future app integration; closing its visible view has not been verified to release ownership.
+
+### Prompt tools (2026-10-07)
+
+Click a resident → **Prompt this agent**. **Attach files** adds up to four PNG/JPEG/WebP images or UTF-8 text/code files. Each file is limited to 5 MB; text files are limited to 256 KB and the first 20,000 characters are passed. PDFs and binary documents are not supported. Private uploads are bound to the home/resident and integrity checked before execution. Only Send passes attachments to the selected provider; canonical activity events never contain their contents. Removing a draft attachment does not delete its retained private upload. Codex receives native image flags; Claude receives image paths for its permitted Read tool.
+
+**Stop run** stops a game-launched CLI process group and records cancellation; edits already made remain. **Cancel queued prompt** prevents execution. These controls do not stop agents launched outside the game or automatically roll back files.
+
+The backend retains isolated Git worktree support for previously created chats; the prompter no longer offers a worktree checkbox. An isolated worktree snapshots the Git root at execution time, including tracked changes and untracked files (excluding ignored files). A Git repository with a commit is required. Follow-ups stay in that worktree. Chat displays its branch, path and Open in VS Code link; changes are retained for review and never automatically merged or removed. Observed worktree activity belongs to the original resident/home while retaining its actual source path.
+
+Each resident/provider list offers search, archive and restore alongside rename. Archive only hides a chat from Agent World's normal list; it does not archive/delete provider history. Active or queued chats cannot be archived. Restore a chat to send another message.
+
+### Fixed execution policy (2026-10-07)
+
+The prompter has no Run settings panel. Every new message uses Prompt workflow, with shell tools available, Codex workspace-write and shell networking enabled, Claude configured permissions (dontAsk), live Codex search and Claude WebSearch/WebFetch enabled where supported. Both providers inherit their CLI's MCP/plugin configuration; Codex supports this, so no off fallback is needed. Claude's existing sandbox/network/tool rules remain authoritative; the game adds no shell/network deny.
+
+The policy is enforced at proposal validation, queue claim and runner startup. Per-message overrides are rejected. Previously queued settings cannot restore review mode or different permissions; completed historical run records/findings remain readable. Existing model, provider and attachment controls remain. New prompter chats use the project checkout; existing worktree chats retain their recorded workspace. No running turn changes policy midway.
+
+Configured services still need provider authentication/trust and permitted tools. These defaults describe requested capabilities, not proof they were used or connected. No global CLI settings, credentials or plugin installations are changed. Real provider/service execution requires separate verification.
+
+### Connect an app from the game
+
+In a Codex resident chat, choose **Connect an app**, enter an application name or bundle ID, and select **Request app access**. A dedicated ephemeral Codex app-server connection calls the native computer-use tool directly; it does not start a model turn or create a saved conversation. The game's dialog displays the actual provider approval request, including its app, warning and offered persistence choices. **Always allow** requests saved access for future Codex runs; **Allow once** applies only to this setup connection. Deny, close and Cancel never grant access. The game reports verification only when a native interface is returned; setup success does not establish that a later normal prompt can use the app. Saved approvals can be revoked in ChatGPT Settings → Computer use. OS permissions and provider/org restrictions still apply.
+
+The normal prompt runner still uses `codex exec`; it cannot collect first-time app approvals. This dedicated setup flow handles the MCP elicitation through the supported app-server protocol and leaves the decision to the human. No provider permission files are edited. If an app has no visible window or tools are unavailable, the dialog reports that result. Demo mode disables real connections.
+
+Current verification (2026-10-07): the real provider request appeared in Electron and the human selected Always allow. A fresh native-tool connection then returned the Agent World interface without another approval. First-use documentation before the window-state block is handled correctly. Local ad-hoc rebuilds can invalidate macOS Documents-folder approval; the human completed the requested consent and a fresh packaged Electron setup displayed “Native app access verified.” for Agent World without another approval. The ordinary game test could not execute because Codex desktop owns its conversation; native access in a normal game prompt remains unverified for that chat. Codex native-app approval and macOS folder access are separate permissions. See `docs/NEXT_PASS.md` for the exact pending test and evidence.
+
+## Codex voice (experimental, 2026-10-08)
+
+The Codex composer has a microphone button for the selected resident and conversation. It starts a thread-scoped app-server realtime session, captures mono PCM audio, plays returned audio, and shows provider-authored live transcripts. Mute and End voice controls are available during a call; closing the drawer ends the call and interrupts associated execution. Conversation/provider switching and text sends are locked during voice. Only one call can run, and approved/queued execution must finish first. Command/file permission requests require a human decision. Raw audio is held in memory, never saved by Agent World; returned transcript text is saved to that resident's chat.
+
+**Current blocker:** the installed Codex CLI 0.160.0 rejected both default and v3 realtime connections with `realtime conversation requires API key auth`. Thread initialization succeeded but zero audio chunks were returned. ChatGPT sign-in alone has not worked for this route. No API-key login, paid fallback, or authentication change was performed. UI/transport wiring is implemented, but two-way audio, speech quality and microphone permission behavior are not verified end to end. This must not be described as working subscription-backed voice.
+
+### Claude conversation models
+
+In a resident's chat, select Claude Code in the model menu, then choose Claude Sonnet, Claude Opus, Claude Haiku or Use configured default. Choices are saved per provider/project/conversation in the local UI and pinned into the next authorized prompt. Resuming preserves the exact Claude session; changing a model does not create a new conversation. The runner supplies `--model` only for an explicit choice. The menu also shows the last model Claude reported, separately from the next-message selection. Claude checks account access when executing; these are CLI aliases, not an entitlement list. Claude effort can be selected per conversation; Default uses configured effort.
+
+Claude's model menu also offers a requested-effort slider: Default, Low, Medium, High, Extra high and Max. It is saved per provider/project/conversation and applies to the next message on the same session. Default omits `--effort`; resetting effort leaves the chosen Claude model intact. Claude applies model support and organization limits, so requested effort is not proof of the effective level.
+
+## Local Codex projects and homes
+
+The sidebar switches between Agents and Projects. Opening Projects reads the local Codex registry through the installed CLI's experimental app-server project/list method, then registers its available primary folders as homes. Each folder has one home and at least one persistent off-duty resident. Projects with unavailable folders are reported and skipped; multiple Codex projects sharing a canonical folder reuse its home. Existing observed folders are also listed. This does not import conversation contents or start work.
+
+Add project takes a name and an absolute local folder (~/ is supported). Create folder if missing makes one folder under an existing parent; otherwise the folder must exist. The CLI project/create result must confirm the folder before Agent World reports success. Existing files are preserved. Repeated requests reuse an existing project for that canonical folder; retries keep the idempotency key while the form is unchanged. If Codex creation fails after the folder was created, the folder is retained and the error names it. Click a project row to focus its home.
+
+This creates local Codex project records, not synced ChatGPT Projects. Multi-root projects use their first root as the home. Game prompts still route by the resident's folder and session; automatic assignment of game-created chats to the native Codex project's projectId is a separate integration, not verified or claimed here.
+
+### Explicit project onboarding (2026-10-08)
+Projects start empty with one vacant lot and Add your first project. Opening Projects only lists available Codex roots; Import existing adds a chosen project, while Create new registers a folder/project. selected-projects.json stores the explicit world selection independently from existing households, chats, files and the Codex registry. Existing automatically imported homes remain preserved but hidden until explicitly imported. Demo remains unchanged. No real projects were created/imported during QA.
+
+Project cards include Remove: removes the selected project and its home/residents from Agent World only. Local folders, Codex registry entries, conversations and recorded history are retained for re-import. Running/queued game work and active voice must finish or stop before removal. Removing the last home restores the vacant onboarding lot.
+
+## Scheduled prompts
+
+Inside a resident’s prompter, Scheduled → New task opens a reference-style Schedule a task dialog. Run with explicitly chooses Codex or Claude Code for new tasks (installed providers only). A task keeps its provider when edited; create another task to change it. Once, Daily and Weekly use the displayed IANA time zone and calendar wall time. Advanced contains the task name and time zone. Create/Save explicitly authorizes the exact stored instruction at those times, with the selected provider/model/effort and resident. Every new task appears immediately as its own scheduled conversation in that resident’s chat list. Its first run creates a new provider conversation, without continuing the selected chat; repeat runs reuse that task’s conversation. The time picker offers 15-minute increments, enforced by the API for create/edit. Already dispatched one-time tasks keep their original chat; future legacy schedules acquire a dedicated conversation without changing their authorized time. Responses and public reasoning summaries use the normal chat/runner path. Attachments are not scheduled in this pass.
+
+Schedules are persisted atomically alongside the pass queue in passes.json. The local scheduler checks every 10 seconds while the bridge/runner is running; the app must remain open and the computer awake. Missed times coalesce to one catch-up run. Only one pending occurrence per schedule is allowed. DST preserves wall time; nonexistent spring-forward times are skipped and duplicated fall-back times run once. A failed/interrupted/cancelled run pauses the schedule for explicit review/resume. Pausing cancels unstarted scheduled work; running work continues until stopped in chat. Edit/delete requires finishing/stopping an active occurrence. Removing a project pauses its schedules. No cloud account automation or background service is configured.
+
+Agents must not create, resume or edit real schedules without scoped human authorization. QA uses an isolated AGENT_WORLD_HOME and CODEX_HOME and fixture CLIs; scheduled responses do not imply accepted work.
+
+## Starter team and scoped handoffs
+
+The first added project receives three persistent residents: Assistant (slot 1), Junior developer (slot 2), Researcher (slot 3). Existing first-home names and chat ownership are preserved. Assigned responsibilities are planning metadata, distinct from observed activity and activity-derived downtown specialties; no sessions/events are invented. Further imported homes keep their existing onboarding.
+
+Sending a prompt to this team authorizes scoped delegation of that request within the project. The selected provider/model/effort are retained throughout the request. The runner gives each resident its responsibility and the roster. Agents choose relevant handoffs in a structured response: role, task title, scoped instruction and earlier prerequisite IDs. For example the Assistant can delegate website implementation to the Junior developer, optionally following a Researcher report. There is no keyword router or direct provider-to-provider messaging.
+
+The first handoff to a recipient starts a separate resident-owned conversation; subsequent handoffs in the same request can reuse an established recipient conversation. Earlier unrelated resident chats are never resumed automatically. Queued handoffs appear in the receiving resident’s list. The original chat shows sender → recipient, status, reported results and Open chat links. Automatic instructions are attributed to a teammate or Team report request, never to the human. After all parts settle, one final pass resumes the original conversation with recorded reports to summarize changes, checks, failures and unfinished work. A returned report does not accept tasks or grant world rewards.
+
+Runs remain sequential to avoid competing workspace edits. The graph is bounded to three handoffs per response, six per human request and two delegation levels, with no further delegation in the final report. Invalid/self/unknown-role handoffs are rejected atomically. Failed prerequisites pause dependent work; no automatic retry. Interrupted work still requires human inspection. Stop in the original or receiving chat cancels the remaining request queue and stops its active game-owned run; existing file changes remain. Publishing/pushing/spending are not included. New schedules in the starter team capture delegation authorization; existing schedules are not retroactively expanded. Isolated-worktree and voice runs do not enable this team workflow in this pass.
+
+Fixture CLIs verify execution/routing for Codex and Claude without provider spending. Intelligent task decomposition by a real model remains to be evaluated with real user prompts.

@@ -39,7 +39,7 @@ export class ReviewFlow {
         try {
           await work.post('/api/review', {id:this.task.id,project:this.task.project,version:this.task.version,decision:b.dataset.decision,feedback,acceptedByUser:consent});
           const remaining=work.data.tasks.filter(t=>t.project===this.task.project && t.status==='needs_review').length;
-          this.dialog.innerHTML=`<header class="panel-head"><h2>Review recorded</h2><button data-close aria-label="Close review">×</button></header><div class="review-body"><p>${b.dataset.decision==='accept'?'Accepted by you.':'Returned to work. Feedback saved; no message sent.'}</p><p>${remaining} still await review in this home.</p><small>Only this decision was recorded. Other tasks keep their stage.</small></div><footer class="review-decisions">${remaining?'<button class="primary" data-next-review>Review next task</button>':''}<button data-measure>Work loop journal</button><button data-close>Done</button><p role="status"></p></footer>`;
+          this.dialog.innerHTML=`<header class="panel-head"><span class="panel-icon">${icon('circleCheck')}</span><div><h2>Review recorded</h2></div><button class="icon-btn" data-close aria-label="Close review">${icon('x')}</button></header><div class="review-body"><p>${b.dataset.decision==='accept'?'Accepted by you.':'Returned to work. Feedback saved; no message sent.'}</p><p>${remaining} still await review in this home.</p><small>Only this decision was recorded. Other tasks keep their stage.</small></div><footer class="review-decisions">${remaining?'<button class="primary" data-next-review>Review next task</button>':''}<button data-measure>Work loop journal</button><button data-close>Done</button><p role="status"></p></footer>`;
         } catch (err) { this.message(err.message); }
         finally { this.dialog.querySelectorAll('[data-decision]').forEach(el => el.disabled = false); }
       }
@@ -51,7 +51,7 @@ export class ReviewFlow {
     const refs = [...evidenceReferences(task.evidence), ...(task.references || []).filter(r=>r.kind==='output').map(r=>({kind:r.value.startsWith('/')?'path':'url',value:r.value}))];
     const unique = refs.filter((r,i)=>refs.findIndex(x=>x.value===r.value)===i);
     const checks=(task.references || []).filter(r=>r.kind==='check');
-    this.dialog.innerHTML = `<header class="panel-head"><span class="panel-icon">${icon('eye')}</span><div><h2>Review work</h2><small>${esc(this.work.homeName(task.project))}</small></div><button data-close aria-label="Close review">×</button></header>
+    this.dialog.innerHTML = `<header class="panel-head"><span class="panel-icon">${icon('eye')}</span><div><h2>Review work</h2><small>${esc(this.work.homeName(task.project))}</small></div><button class="icon-btn" data-close aria-label="Close review">${icon('x')}</button></header>
       <div class="review-body"><h3>${esc(task.title)}</h3>
       <section class="review-summary"><b>Recorded summary</b><p>${esc(task.reviewSummary || 'No short summary recorded. Inspect the outputs and full notes before deciding.')}</p></section>
       <section><h4>Outputs · ${unique.length}</h4><div class="row-links">${unique.map(r=>r.kind==='url' && safeReferenceURL(r.value) ? `<a href="${esc(r.value)}" target="_blank" rel="noopener noreferrer">Open ${esc(new URL(r.value).hostname)}</a>` : `<button data-preview="${esc(r.value)}">Preview ${esc(r.value.split('/').at(-1))}</button><button data-copy="${esc(r.value)}">Copy path</button>`).join('') || '<small>No output reference recorded.</small>'}</div></section>

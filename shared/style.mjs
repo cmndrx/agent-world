@@ -150,8 +150,6 @@ export function sanitizeLook(value) {
     if (!(value.accessory in WARDROBE.accessory)) throw new Error('Unknown accessory.');
     out.accessory = value.accessory;
   }
-  // Work clothes from a resident's role (shared/city.mjs) show by default; this hides them.
-  if (value.uniform === false) out.uniform = false;
   return out;
 }
 

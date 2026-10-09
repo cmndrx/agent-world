@@ -22,7 +22,7 @@
 
     <header id="topbar">
       <div class="brand glass"><span class="gem small"></span><span>Agent World</span></div>
-      <div id="status" class="chip glass" data-state="connecting"><span class="dot"></span><span class="text">Connecting…</span></div>
+      <button id="status" type="button" class="chip glass" data-state="connecting"><span class="dot"></span><span class="text">Connecting…</span></button>
       <button id="work-open" class="chip glass">Work</button>
       <button id="play-open" class="chip glass">Play</button>
       <button id="sources-open" class="chip glass icon-chip" title="Connections & getting started" aria-label="Connections & getting started"></button>
@@ -31,19 +31,15 @@
       <div id="demo-chip" class="chip glass" hidden title="These agents are simulated. Run npm run dev to watch your real Claude Code and Codex sessions.">Demo<span class="long"> · simulated agents</span></div>
     </header>
 
-    <!-- Waiting agents, front and center -->
-    <div id="needs" hidden>
-      <div class="needs-label"><span class="pulse"></span>Needs you</div>
-      <div id="needs-list"></div>
-    </div>
-
     <aside id="roster" class="glass panel">
       <header>
-        <h2>Your projects</h2>
+        <h2 id="roster-title">Your agents</h2>
         <span class="count" id="roster-count"></span>
-        <button class="icon-btn" id="roster-toggle" aria-label="Collapse project list"></button>
+        <button class="icon-btn" id="roster-toggle" aria-label="Collapse agent list"></button>
       </header>
+      <div class="roster-views" role="tablist" aria-label="Sidebar view"><button type="button" role="tab" data-roster-view="agents" aria-selected="true">Agents</button><button type="button" role="tab" data-roster-view="projects" aria-selected="false">Projects</button></div>
       <div id="roster-body"></div>
+      <div id="project-body" hidden></div>
     </aside>
 
     <aside id="inspect" class="glass panel" hidden></aside>

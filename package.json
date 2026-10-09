@@ -58,7 +58,10 @@
       ],
       "category": "public.app-category.developer-tools",
       "icon": "electron/build/icon.icns",
-      "identity": "-"
+      "identity": "-",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Talk to your agents in Agent World using Codex voice."
+      }
     },
     "npmRebuild": false
   }

@@ -1,3 +1,4 @@
+import {STARTER_ROLES} from '../shared/team.mjs';
 import { Catalog } from './catalog.mjs';
 import { normalizeConversation } from '../shared/conversations.mjs';
 // The truth model. Folds canonical events into households (persistent characters per project)
@@ -29,12 +30,14 @@ export class World extends EventEmitter {
    * @param {object} [opts.households] persisted households, keyed by project path
    * @param {number} [opts.staleAfterMs] a session with no events for this long counts as gone
    */
-  constructor({ households = {}, catalog = {}, staleAfterMs = 3 * 60 * 60 * 1000 } = {}) {
+  constructor({ households = {}, catalog = {}, residentOwner = () => null, projectHome = () => null, staleAfterMs = 3 * 60 * 60 * 1000 } = {}) {
     super();
     this.catalog = new Catalog(catalog);
     this.households = households;
     this.sessions = new Map();
     this.staleAfterMs = staleAfterMs;
+    this.residentOwner = residentOwner;
+    this.projectHome = projectHome;
   }
 
   isLive(s, at = Date.now()) {
@@ -50,15 +53,23 @@ export class World extends EventEmitter {
     return h;
   }
 
+  ensureStarterTeam(project) {
+    const first=Object.values(this.households).find(h=>h.starterTeam);
+    if(first&&first.project!==project)return this.household(project);
+    const h=this.household(project);h.starterTeam=true;
+    STARTER_ROLES.forEach((role,i)=>{this.assignSlot(project,Date.now(),i+1);h.characters.find(c=>c.slot===i+1).assignedRole=role.id;});
+    this.emit('change',{type:'household',household:h});return h;
+  }
+
   /** Find the lowest slot not occupied by a live primary session, creating the character if new. */
-  assignSlot(project, at) {
+  assignSlot(project, at, preferred = null) {
     const h = this.household(project);
     const taken = new Set();
     for (const s of this.sessions.values()) {
       if (s.project === project && s.slot != null && this.isLive(s, at)) taken.add(s.slot);
     }
-    let slot = 1;
-    while (taken.has(slot)) slot++;
+    let slot = Number.isInteger(preferred) && preferred > 0 ? preferred : 1;
+    if (preferred == null) while (taken.has(slot)) slot++;
     if (!h.characters.find((c) => c.slot === slot)) {
       const seed = hash(`${project}#${slot}`);
       h.characters.push({ slot, name: this.uniqueName(seed), seed });
@@ -66,6 +77,22 @@ export class World extends EventEmitter {
       this.emit('change', { type: 'household', household: h });
     }
     return slot;
+  }
+
+  // Runner identity can arrive after the observer event. Reconcile without inventing activity.
+  syncResidentOwnership() {
+    for (const s of this.sessions.values()) {
+      if (s.parent_session) continue;
+      const owner = this.residentOwner(s.project, s.source, s.conversation.id);
+      if (owner == null) continue;
+      const changed = s.slot !== owner || s.conversation.residentSlot !== owner;
+      s.slot = this.assignSlot(s.project, s.lastEventAt, owner);
+      s.conversation.residentSlot = owner;
+      if (changed) {
+        this.emit('change', { type: 'catalog', ...this.catalog.snapshot() });
+        this.emit('change', { type: 'session', session: this.publicSession(s) });
+      }
+    }
   }
 
   /** A name no other character in the world is using (so "Nell" always means one Sim). */
@@ -81,7 +108,7 @@ export class World extends EventEmitter {
   apply(event) {
     const sourceProject = event.project;
     const linked = this.catalog.projects.get(sourceProject);
-    event = { ...event, sourceProject, project: linked?.home || sourceProject,
+    event = { ...event, sourceProject, project: this.projectHome(sourceProject,event.source,event.parent_session||event.conversation?.id||event.session) || linked?.home || sourceProject,
       conversation: normalizeConversation(event.conversation, event.source, event.session) };
     const c = this.catalog.observe(event);
     if (c) this.emit('change', { type: 'catalog', ...this.catalog.snapshot() });
@@ -108,7 +135,8 @@ export class World extends EventEmitter {
         sourceProject,
         conversation: c || (event.parent_session ? this.sessions.get(event.parent_session)?.conversation || null : event.conversation),
         parent_session: event.parent_session,
-        slot: isVisitor ? null : this.assignSlot(event.project, at),
+        slot: isVisitor ? null : this.assignSlot(event.project, at,
+          this.residentOwner(event.project, event.source, event.conversation.id) ?? c?.residentSlot ?? null),
         state: 'idle',
         detail: null,
         since: event.ts,
@@ -123,6 +151,10 @@ export class World extends EventEmitter {
     }
 
     if (c) s.conversation = c;
+    if (c) {
+      c.residentSlot = this.residentOwner(s.project, s.source, c.id) ?? c.residentSlot ?? s.slot;
+      this.emit('change', { type: 'catalog', ...this.catalog.snapshot() });
+    }
     s.lastEventAt = Math.max(s.lastEventAt, at);
     if (event.app && !s.app) s.app = event.app;
 

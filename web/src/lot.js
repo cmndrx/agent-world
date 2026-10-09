@@ -40,6 +40,8 @@ function photoTexture(id) {
 
 export const LOT_W = 26;
 export const LOT_D = 24;
+/** The yard (and its fence) ends here, short of the lot-side sidewalks at z ±7.7. */
+const YARD_Z = 7.45;
 export const DOOR_HALF = 0.9;
 
 const WALL_H = 2.7;
@@ -193,44 +195,44 @@ export class Lot {
     if (level >= 3) {
       // Villa: flowered garden arch over the path, and a front hedge.
       for (const s of [1, -1]) {
-        g.add(box(0.12, 2.2, 0.12, PALETTE.trim, s * 1.05, 1.1, 9.0));
-        block(s * 1.05 - 0.08, 8.92, s * 1.05 + 0.08, 9.08);
-        for (let x = 2.2; x < 10.2; x += 0.75) {
-          g.add(ico(0.42, PALETTE.leafDark, s * x, 0.36, 9.2, 0));
+        g.add(box(0.12, 2.2, 0.12, PALETTE.trim, s * 1.05, 1.1, 7.2));
+        block(s * 1.05 - 0.08, 7.12, s * 1.05 + 0.08, 7.28);
+        for (let x = 2.45; x < 10.2; x += 0.75) {
+          g.add(ico(0.38, PALETTE.leafDark, s * x, 0.34, 6.95, 0));
         }
-        block(Math.min(s * 2, s * 10.4), 8.85, Math.max(s * 2, s * 10.4), 9.55);
+        block(Math.min(s * 2.1, s * 10.4), 6.6, Math.max(s * 2, s * 10.4), 7.35);
       }
       const arch = new THREE.Mesh(new THREE.TorusGeometry(1.05, 0.06, 6, 16, Math.PI), new THREE.MeshStandardMaterial({ color: PALETTE.trim, flatShading: true }));
-      arch.position.set(0, 2.2, 9.0);
+      arch.position.set(0, 2.2, 7.2);
       arch.castShadow = true;
       g.add(arch);
       for (let i = 0; i < 9; i++) {
         const a = (i / 8) * Math.PI;
-        g.add(ico(0.1, PALETTE.flowers[i % PALETTE.flowers.length], Math.cos(a) * 1.05, 2.2 + Math.sin(a) * 1.05, 9.0));
+        g.add(ico(0.1, PALETTE.flowers[i % PALETTE.flowers.length], Math.cos(a) * 1.05, 2.2 + Math.sin(a) * 1.05, 7.2));
       }
     }
     if (level >= 4) {
       // Manor: a fountain and a flag in the home's color.
-      g.add(cyl(1.0, 1.1, 0.4, 0xd8d2c6, 16, 6.8, 0.2, 7.6));
-      const water = cyl(0.88, 0.88, 0.02, 0x7fc4ec, 16, 6.8, 0.41, 7.6, { material: waterMaterial() });
+      g.add(cyl(1.0, 1.1, 0.4, 0xd8d2c6, 16, 8.9, 0.2, 4.6));
+      const water = cyl(0.88, 0.88, 0.02, 0x7fc4ec, 16, 8.9, 0.41, 4.6, { material: waterMaterial() });
       water.castShadow = false;
       g.add(water);
-      g.add(cyl(0.12, 0.16, 0.8, 0xd8d2c6, 8, 6.8, 0.8, 7.6));
-      g.add(cyl(0.4, 0.25, 0.14, 0xd8d2c6, 12, 6.8, 1.22, 7.6));
-      g.add(glowBox(0.08, 0.3, 0.08, 6.8, 1.42, 7.6, 0x9fd8ff));
-      block(5.75, 6.55, 7.85, 8.65);
-      g.add(cyl(0.04, 0.05, 4.2, PALETTE.metal, 6, -6.8, 2.1, 8.0));
-      g.add(ico(0.07, 0xd9b55a, -6.8, 4.25, 8.0));
-      g.add(box(1.1, 0.65, 0.03, this.exterior, -6.25, 3.8, 8.0));
-      block(-6.9, 7.9, -6.7, 8.1);
+      g.add(cyl(0.12, 0.16, 0.8, 0xd8d2c6, 8, 8.9, 0.8, 4.6));
+      g.add(cyl(0.4, 0.25, 0.14, 0xd8d2c6, 12, 8.9, 1.22, 4.6));
+      g.add(glowBox(0.08, 0.3, 0.08, 8.9, 1.42, 4.6, 0x9fd8ff));
+      block(7.85, 3.55, 9.95, 5.65);
+      g.add(cyl(0.04, 0.05, 4.2, PALETTE.metal, 6, -8.8, 2.1, 5.6));
+      g.add(ico(0.07, 0xd9b55a, -8.8, 4.25, 5.6));
+      g.add(box(1.1, 0.65, 0.03, this.exterior, -8.25, 3.8, 5.6));
+      block(-8.9, 5.5, -8.7, 5.7);
     }
     if (level >= 5) {
       // Estate: lanterns along the path and a golden plumbob statue.
       for (const s of [1, -1]) {
-        for (const z of [6.5, 7.7]) {
-          g.add(cyl(0.05, 0.07, 1.1, PALETTE.dark, 6, s * 1.1, 0.55, z));
-          g.add(glowBox(0.18, 0.22, 0.18, s * 1.1, 1.2, z));
-          block(s * 1.1 - 0.1, z - 0.1, s * 1.1 + 0.1, z + 0.1);
+        for (const z of [6.3]) {
+          g.add(cyl(0.05, 0.07, 1.1, PALETTE.dark, 6, s * 1.55, 0.55, z));
+          g.add(glowBox(0.18, 0.22, 0.18, s * 1.55, 1.2, z));
+          block(s * 1.55 - 0.1, z - 0.1, s * 1.55 + 0.1, z + 0.1);
         }
       }
       g.add(cyl(0.45, 0.55, 0.6, 0xe9e3d5, 8, -6.6, 0.3, 5.9));
@@ -360,7 +362,7 @@ export class Lot {
     const [x0, z0, x1, z1] = this.footprint(item, x, z, rot);
     const inRoom = x0 >= -6.95 && x1 <= 6.95 && z0 >= -4.95 && z1 <= 4.95;
     const overlapsRoom = x1 > -7.3 && x0 < 7.3 && z1 > -5.3 && z0 < 5.3;
-    const inYard = !overlapsRoom && x0 >= -10.7 && x1 <= 10.7 && z0 >= -9.5 && z1 <= 9.7;
+    const inYard = !overlapsRoom && x0 >= -10.7 && x1 <= 10.7 && z0 >= -YARD_Z + 0.15 && z1 <= YARD_Z - 0.15;
     if (def.where === 'indoor' && !inRoom) return { ok: false, reason: 'This goes inside the house' };
     if (def.where === 'outdoor' && !inYard) return { ok: false, reason: 'This goes in the yard' };
     if (def.where === 'any' && !inRoom && !inYard) return { ok: false, reason: 'Place it inside or in the yard' };
@@ -409,14 +411,14 @@ export class Lot {
     this.add(grass);
 
     // Stepping-stone path from the sidewalk to the door.
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 2; i++) {
       const s = softBox(1.3 + r() * 0.2, 0.06, 0.75, PALETTE.sidewalk, (r() - 0.5) * 0.15, 0.08, 5.9 + i * 0.95, 0.15);
       s.rotation.y = (r() - 0.5) * 0.15;
       s.castShadow = false;
       this.add(s);
     }
 
-    // Picket fence around the plot, open at the path.
+    // Picket fence around the yard, open at the path. It stops short of the sidewalks (which start at z ±7.7).
     const fence = (x0, z0, x1, z1) => {
       const len = Math.hypot(x1 - x0, z1 - z0);
       const n = Math.floor(len / 0.45);
@@ -429,16 +431,16 @@ export class Lot {
       this.add(rail);
       this.block(Math.min(x0, x1) - 0.05, Math.min(z0, z1) - 0.05, Math.max(x0, x1) + 0.05, Math.max(z0, z1) + 0.05);
     };
-    fence(-10.8, 9.8, -1.2, 9.8);
-    fence(1.2, 9.8, 10.8, 9.8);
-    fence(-10.8, -9.6, -10.8, 9.8);
-    fence(10.8, -9.6, 10.8, 9.8);
+    fence(-10.8, YARD_Z, -1.2, YARD_Z);
+    fence(1.2, YARD_Z, 10.8, YARD_Z);
+    fence(-10.8, -YARD_Z, -10.8, YARD_Z);
+    fence(10.8, -YARD_Z, 10.8, YARD_Z);
 
     // Mailbox by the gate.
-    this.add(box(0.08, 1.0, 0.08, PALETTE.wood, 1.75, 0.5, 10.2));
-    this.add(softBox(0.42, 0.3, 0.24, 0x4f6d8f, 1.75, 1.08, 10.2, 0.08));
-    this.add(box(0.03, 0.22, 0.03, 0xd94f4f, 1.98, 1.2, 10.16));
-    this.add(box(0.1, 0.05, 0.03, 0xd94f4f, 2.03, 1.29, 10.16));
+    this.add(box(0.08, 1.0, 0.08, PALETTE.wood, 1.62, 0.5, 7.0));
+    this.add(softBox(0.42, 0.3, 0.24, 0x4f6d8f, 1.62, 1.08, 7.0, 0.08));
+    this.add(box(0.03, 0.22, 0.03, 0xd94f4f, 1.85, 1.2, 6.96));
+    this.add(box(0.1, 0.05, 0.03, 0xd94f4f, 1.9, 1.29, 6.96));
 
     // Flower beds under the front windows.
     for (const side of [-1, 1]) {
@@ -455,12 +457,12 @@ export class Lot {
       this.block(cx - 1.6, 5.4, cx + 1.6, 6.1);
     }
 
-    for (const [x, z, sc] of [[-9.4, 7.8, 1.1], [9.3, 8.0, 0.95], [-9.6, 2.5, 0.8], [9.6, -2, 0.85]]) {
+    for (const [x, z, sc] of [[-9.7, 6.6, 1.0], [9.7, 6.7, 0.9], [-9.6, 2.5, 0.8], [9.6, -2, 0.85]]) {
       this.add(buildBush(x, z, sc));
       this.block(x - 0.5 * sc, z - 0.5 * sc, x + 0.5 * sc, z + 0.5 * sc);
     }
     // Trees in the back yard sway, so they stay out of the static merge.
-    this.trees = [buildTree(this.seed + 1, -8.6, -7.6), buildTree(this.seed + 2, 8.5, -7.4), buildTree(this.seed + 3, -2, -8.3)];
+    this.trees = [buildTree(this.seed + 1, -8.9, -6.4), buildTree(this.seed + 2, 8.9, -6.2), buildTree(this.seed + 3, -9.3, -1.6)];
     for (const t of this.trees) this.group.add(t);
   }
 
@@ -801,7 +803,7 @@ export class Lot {
       coffee: [spot(5.6, 0.55, FACE_RIGHT), spot(5.6, 1.35, FACE_RIGHT)],
       couch: [1.15, 2.0, 2.85].map((x) => spot(x, 2.92, FACE_FRONT)),
       wander: [spot(-1, 0.6, 0.4), spot(1.6, 1.2, -0.6), spot(-0.6, 3.6, 0.2), spot(-4.6, 0.9, 1.2), spot(4.9, 3.9, -0.9),
-        spot(0.4, 7.4, 0.3), spot(-3.4, 7.9, -0.5), spot(4.4, 8.3, 0.8), spot(-7.5, 4, 1.2)],
+        spot(0.4, 6.6, 0.3), spot(-3.4, 6.8, -0.5), spot(4.4, 6.8, 0.8), spot(-7.5, 4, 1.2)],
       entrance: spot(0, 10.6, FACE_BACK),
     };
   }
@@ -852,9 +854,9 @@ export class Lot {
     mailbox.add(box(0.1, 1.0, 0.1, PALETTE.wood, 0, 0.5, 0));
     mailbox.add(softBox(0.36, 0.3, 0.55, 0x4f86c6, 0, 1.12, 0, 0.08));
     mailbox.add(box(0.03, 0.18, 0.08, 0xe63946, 0.2, 1.25, -0.12));
-    mailbox.position.set(-1.9, 0, 10.3);
+    mailbox.position.set(-1.9, 0, 7.0);
     this.add(mailbox);
-    this.block(-2.05, 10.15, -1.75, 10.45);
+    this.block(-2.05, 6.85, -1.75, 7.15);
 
     const el = document.createElement('div');
     el.className = 'lot-sign';
@@ -868,7 +870,7 @@ export class Lot {
     el.title = household.project;
     this.signEl = el;
     const label = new CSS2DObject(el);
-    label.position.set(-1.9, 2.0, 10.3);
+    label.position.set(-1.9, 2.0, 7.0);
     this.group.add(label);
   }
 

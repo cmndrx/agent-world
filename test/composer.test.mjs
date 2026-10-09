@@ -1,0 +1,28 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import {runThread} from '../shared/chat.mjs';
+import {validThread} from '../shared/pass-conversations.mjs';
+const source=fs.readFileSync(new URL('../web/src/pass-card.js',import.meta.url),'utf8');
+const PassCard=vm.runInNewContext(source.replace(/^import .*;\n/gm,'').replace('export class PassCard','class PassCard')+'\nPassCard',{icon:name=>name,validThread,runThread});
+function fixture(){const button={dataset:{},setAttribute(k,v){this[k]=v;}};const field={value:''};const card=Object.create(PassCard.prototype);Object.assign(card,{dialog:{querySelector:q=>q==='.send-message'?button:field},activePrompt:()=>({id:'active'}),archived:()=>false,targetThread:()=>null,providerReady:()=>true});return {card,button,field};}
+test('composer switches empty running draft to Stop, typed draft to Send, and back',()=>{
+ const {card,button,field}=fixture();card.updateSend();assert.equal(button.type,'button');assert.equal(button.innerHTML,'square');assert.equal(button.dataset.stopRun,'active');assert.equal(button.disabled,false);
+ field.value='Follow up';card.updateSend();assert.equal(button.type,'submit');assert.equal(button.innerHTML,'arrowUp');assert.equal(button.dataset.stopRun,'');assert.equal(button.disabled,false);
+ field.value='  ';card.updateSend();assert.equal(button.innerHTML,'square');
+ card.activePrompt=()=>null;card.updateSend();assert.equal(button.innerHTML,'arrowUp');assert.equal(button.disabled,true);
+});
+test('stopping state disables Stop without blocking a typed follow-up',()=>{
+ const {card,button,field}=fixture();card.activePrompt=()=>({id:'active',stopRequestedAt:'now'});card.updateSend();assert.equal(button.disabled,true);field.value='Next';card.updateSend();assert.equal(button.disabled,false);
+});
+
+test('Stop targets only the displayed game prompt, never another chat or observed session',()=>{
+ const card=Object.create(PassCard.prototype);Object.assign(card,{project:'/p',slot:1,selectedThread:'pending-new',followProposal:'queued',provider:()=> 'codex',targetThread:()=>null,data:{proposals:[{id:'queued',afterProposal:'parent'}],runs:[{id:'other',proposalId:'unrelated',project:'/p',slot:1,status:'running'},{id:'own',proposalId:'parent',project:'/p',slot:1,status:'running'}]}});
+ assert.equal(card.activePrompt().id,'own');card.newConversation=true;assert.equal(card.activePrompt(),null);
+});
+
+test('model preferences are durable and isolated by conversation and provider',()=>{const saved=new Map();const localStorage={getItem:k=>saved.get(k),setItem:(k,v)=>saved.set(k,v)};const source=fs.readFileSync(new URL('../web/src/conversation-models.js',import.meta.url),'utf8');const Models=vm.runInNewContext(source.replace(/^import .*;\n/gm,'').replace('export class ConversationModels','class ConversationModels')+'\nConversationModels',{localStorage});let models=new Models(()=>{});models.data={provider:'claude',observed:[{thread:'one',requestedModel:'sonnet'}]};assert.equal(models.preference('/p','one','claude'),'sonnet');models.preferences.set(models.prefKey('/p','one','claude'),'opus');models.preferences.set(models.prefKey('/p','two','claude'),'haiku');models.savePreferences();models=new Models(()=>{});assert.equal(models.preference('/p','one','claude'),'opus');assert.equal(models.preference('/p','two','claude'),'haiku');assert.equal(models.preference('/p','one','codex'),null);models.preferences.set(models.prefKey('/p','one','claude'),null);models.data={provider:'claude',observed:[{thread:'one',requestedModel:'sonnet'}]};assert.equal(models.preference('/p','one','claude'),null);});
+
+test('Claude effort is durable, provider-scoped and resettable independently of model',()=>{const saved=new Map();const localStorage={getItem:k=>saved.get(k),setItem:(k,v)=>saved.set(k,v)};const source=fs.readFileSync(new URL('../web/src/conversation-models.js',import.meta.url),'utf8');const Models=vm.runInNewContext(source.replace(/^import .*;\n/gm,'').replace('export class ConversationModels','class ConversationModels')+'\nConversationModels',{localStorage});let models=new Models(()=>{});models.data={provider:'claude',observed:[{thread:'one',requestedEffort:'medium'}]};assert.equal(models.effortPreference('/p','one','claude'),'medium');const key=models.prefKey('/p','one','claude');models.preferences.set(key,'opus');models.efforts.set(key,'max');models.savePreferences();models=new Models(()=>{});assert.equal(models.effortPreference('/p','one','claude'),'max');assert.equal(models.effortPreference('/p','one','codex'),null);assert.equal(models.effortPreference('/p','two','claude'),null);models.efforts.set(key,null);models.data={provider:'claude',observed:[{thread:'one',requestedEffort:'medium'}]};assert.equal(models.effortPreference('/p','one','claude'),null);assert.equal(models.preference('/p','one','claude'),'opus');});
+test('the original conversation can stop its own teammate run without targeting unrelated work',()=>{const card=Object.create(PassCard.prototype);Object.assign(card,{project:'/p',slot:1,selectedThread:'11111111-1111-1111-1111-111111111111',provider:()=> 'codex',targetThread:()=> '11111111-1111-1111-1111-111111111111',data:{proposals:[],runs:[{id:'root',project:'/p',slot:1,provider:'codex',status:'completed',teamDelegated:true,conversationSession:'11111111-1111-1111-1111-111111111111'},{id:'teammate',project:'/p',slot:2,status:'running',teamRoot:'root'}]}});assert.equal(card.activePrompt().id,'teammate');card.targetThread=()=> '22222222-2222-2222-2222-222222222222';assert.equal(card.activePrompt(),undefined);});

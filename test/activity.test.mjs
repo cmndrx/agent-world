@@ -43,7 +43,7 @@ test('waiting says what the agent needs from you', () => {
   assert.equal(t('waiting_for_user', { reason: 'permission', tool: 'Bash' }).label, 'Needs your OK to run a command');
   assert.equal(t('waiting_for_user', { reason: 'permission', tool: 'Write' }).label, 'Needs your OK to change files');
   assert.equal(t('waiting_for_user', { reason: 'permission' }).label, 'Needs your approval');
-  assert.equal(t('waiting_for_user', { reason: 'turn_complete' }).label, 'Done, your turn');
+  assert.equal(t('waiting_for_user', {}).label, 'Needs you');
   assert.equal(t('waiting_for_user', { reason: 'input' }).label, 'Has a question for you');
   assert.equal(t('waiting_for_user', { reason: 'input' }).at, 'wait');
 });

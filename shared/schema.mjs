@@ -72,6 +72,12 @@ export function normalizeEvent(raw) {
     state: raw.kind === 'state' ? raw.state : null,
     detail: normalizeDetail(raw.detail),
   };
+  // A finished turn isn't shown as "your turn" any more: the agent is simply idle and goes back to its
+  // own thing (couch, coffee, wandering). Permission requests and questions still wait for you.
+  if (event.state === 'waiting_for_user' && event.detail?.reason === 'turn_complete') {
+    event.state = 'idle';
+    event.detail = null;
+  }
   for (const [k, v] of Object.entries(raw)) if (k.startsWith('x_')) event[k] = v;
   return { ok: true, event };
 }
