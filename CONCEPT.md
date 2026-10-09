@@ -303,6 +303,8 @@ Click a Sim to see the no-flavor view: provider, session id, project, current st
 
 - **2026-10-05**: Focused reviews preserve evidence/context and record human accept/return decisions with feedback. Structured check results are reported claims, not observed success. Recorded local text outputs may be previewed within the real project under bounded file/type/size restrictions. Preview reads current content and never establishes correctness; no desktop app or agent is launched.
 
+- **2026-10-06**: Game-first onboarding introduces Mayor Martin and the player as Governor. A verified first Codex or Claude Code connection grants 50 gems. The first player-chosen build is the Town Hall: 30 gems and five minutes of real time, with optional gem spending to shorten the timer. This replaces its old outcome/task threshold. Gems replace Bricks in player-facing copy; work rewards still come from human decisions, while provider verification grants only a one-time game reward. Player construction lives in `gameplay.json`, separate from observed agent activity and the task board.
+
 - **2026-10-05**: Visible observation freshness remains separate from bridge connection and adapter health. Offline attached Sims pause and show grey plumbobs/last-known labels without altering truth; reminders wait for a fresh snapshot. Focus is visible outside panels and unavailable saved homes never filter notifications.
 
 

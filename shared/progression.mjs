@@ -1,15 +1,17 @@
-// Progression (phase 2, docs/GAMEPLAY.md): bricks and home levels, derived from human decisions only.
+// Progression: gems from the first provider connection and human decisions; home levels from outcomes.
 //
-// - Bricks come from tasks YOU accepted that have review notes, and from outcomes YOU marked reached.
+// - Work gems come from tasks YOU accepted with review notes and outcomes YOU marked reached.
 //   They are recomputed from productivity.json every time; there is no stored balance to edit or farm.
 // - Agent activity (tool calls, tokens, sessions, time) never counts. Agents cannot accept tasks or mark
 //   outcomes reached through the Agent World helper.
-// - Spending only unlocks cosmetic catalog items (style.unlocks). Un-accepting a task removes its bricks;
+// - Spending unlocks decor and the Town Hall. Un-accepting a task removes its gems;
 //   items you already unlocked stay yours, but a negative balance blocks new unlocks until it recovers.
 
 import { DECOR } from './style.mjs';
+import { CONNECTION_GEMS, gameplaySpent, townHallState } from './gameplay.mjs';
 
-export const BRICKS = { acceptedTask: 10, outcomeReached: 25 };
+export const GEMS = { acceptedTask: 10, outcomeReached: 25 };
+export const BRICKS = GEMS; // compatibility for older imports
 
 export const LEVELS = [
   { level: 1, name: 'Cottage' },
@@ -28,11 +30,12 @@ export const COMMONS = [
   { id: 'park', name: 'Park', outcomes: 1, tasks: 3 },
   { id: 'cafe', name: 'Café', tasks: 5 },
   { id: 'plaza', name: 'Plaza fountain', outcomes: 3 },
-  { id: 'townhall', name: 'Town hall', outcomes: 5, tasks: 15 },
+  { id: 'townhall', name: 'Town Hall' },
 ];
 
 /** "Reach 1 outcome, or accept 3 tasks with review notes" */
 export function commonsHint(c) {
+  if (c.id === 'townhall') return 'Build with gems';
   const parts = [];
   if (c.outcomes) parts.push(`reach ${c.outcomes} outcome${c.outcomes === 1 ? '' : 's'}`);
   if (c.tasks) parts.push(`earn ${c.tasks} task review credits`);
@@ -57,7 +60,7 @@ export const itemLevel = (item) => DECOR[item]?.level || 1;
  * Everything earned and spent, recomputed from the board and the style document.
  * @returns {{ earned:number, spent:number, balance:number, levels:Object<string,number>, ledger:Array }}
  */
-export function progress({ tasks = [], plans = [] } = {}, style = {}) {
+export function progress({ tasks = [], plans = [] } = {}, style = {}, gameplay = {}) {
   const ledger = [];
   const rewardedDays = new Set();
   for (const t of [...tasks].sort((a, b) => String(a.acceptedAt || a.updatedAt || '').localeCompare(String(b.acceptedAt || b.updatedAt || '')) || a.id.localeCompare(b.id))) {
@@ -85,10 +88,12 @@ export function progress({ tasks = [], plans = [] } = {}, style = {}) {
     });
   }
   ledger.sort((a, b) => Date.parse(b.at || 0) - Date.parse(a.at || 0));
+  if (gameplay.connection) ledger.push({ kind: 'connection', id: 'first-connection', title: `${gameplay.connection.provider === 'claude' ? 'Claude Code' : 'Codex'} connected`, bricks: CONNECTION_GEMS, at: gameplay.connection.at });
+  ledger.sort((a, b) => Date.parse(b.at || 0) - Date.parse(a.at || 0));
   const earned = ledger.reduce((n, e) => n + e.bricks, 0);
-  const spent = (style.unlocks || []).reduce((n, item) => n + itemPrice(item), 0);
+  const spent = (style.unlocks || []).reduce((n, item) => n + itemPrice(item), 0) + gameplaySpent(gameplay);
   const counts = { outcomes: ledger.filter((e) => e.kind === 'outcome').length, tasks: ledger.filter((e) => e.kind === 'task' && !e.capped).length };
-  const commons = COMMONS.filter((c) => (c.outcomes && counts.outcomes >= c.outcomes) || (c.tasks && counts.tasks >= c.tasks)).map((c) => c.id);
+  const commons = COMMONS.filter((c) => c.id === 'townhall' ? townHallState(gameplay).status === 'built' : (c.outcomes && counts.outcomes >= c.outcomes) || (c.tasks && counts.tasks >= c.tasks)).map((c) => c.id);
   return { earned, spent, balance: earned - spent, levels, ledger, counts, commons };
 }
 

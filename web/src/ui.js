@@ -170,13 +170,29 @@ export class UI {
 
   // ---- Status, clock, intro --------------------------------------------------------
 
-  setConnection(state, view = connectionView(null, false)) {
-    this.status.title = view.detail;
-    this.status.setAttribute('aria-label', `${view.text}. ${view.detail}`);
+// <<<<<<< ai-features
+//   setConnection(state, view = connectionView(null, false)) {
+//     this.status.title = view.detail;
+//     this.status.setAttribute('aria-label', `${view.text}. ${view.detail}`);
+// =======
+  setConnection(state, live = 0) {
+    this.status.title = state === 'live' ? (this.gameLinked ? 'Bridge connected. Agent state is the last received observation, not an adapter health check.' : 'Bridge connected. Link Codex or Claude Code with Mayor Martin to welcome agents into town.') : 'Current activity unavailable. Received observations and your planning are preserved.';
+// >>>>>>> gameplay-improvement
     this.connectionState = state;
+    this.liveCount = live;
     this.status.dataset.state = state;
-    this.status.querySelector('.text').textContent = state === 'connecting' ? 'Connecting…' : view.text;
+// <<<<<<< ai-features
+//     this.status.querySelector('.text').textContent = state === 'connecting' ? 'Connecting…' : view.text;
+// =======
+    this.status.querySelector('.text').textContent =
+      state === 'live' ? (this.gameLinked ? (live ? `Live · ${live} session${live === 1 ? '' : 's'}` : 'Live · no attached sessions') : 'Town not linked') : state === 'connecting' ? 'Connecting…' : 'Offline · last known activity';
+// >>>>>>> gameplay-improvement
     if (state === 'offline') $('#intro .intro-status .text').textContent = "Can't connect yet. Is `npm run dev` still running?";
+  }
+
+  setGameLinked(linked) {
+    this.gameLinked = linked;
+    this.setConnection(this.connectionState || 'connecting', this.liveCount || 0);
   }
 
   setClock(label, hour, mode) {
@@ -467,11 +483,20 @@ export class UI {
 
   /** Your agents: a flat list of every agent with its status (same words as its bubble) and when it was last seen. */
   renderRoster(sims, lots, selected) {
-    if(this.rosterView==='projects')return;
-    const stale = this.connectionState !== 'live';
-    $('#roster-count').textContent = sims.length ? `${sims.length} agent${sims.length === 1 ? "" : "s"} · ${sims.filter((s) => s.truth).length} active` : '';
-    if (!sims.length) {
-      const html = `<div class="empty">Add your first project to give your agents a home.<br><br><button type="button" onclick="document.querySelector('[data-roster-view=projects]').click()">Add a project</button></div>`;
+// <<<<<<< ai-features
+//     if(this.rosterView==='projects')return;
+//     const stale = this.connectionState !== 'live';
+//     $('#roster-count').textContent = sims.length ? `${sims.length} agent${sims.length === 1 ? "" : "s"} · ${sims.filter((s) => s.truth).length} active` : '';
+//     if (!sims.length) {
+//       const html = `<div class="empty">Add your first project to give your agents a home.<br><br><button type="button" onclick="document.querySelector('[data-roster-view=projects]').click()">Add a project</button></div>`;
+// =======
+    const live = sims.filter((s) => s.truth).length;
+    $('#roster-count').textContent = lots.length ? `${lots.length} home${lots.length === 1 ? '' : 's'} · ${live} ${this.connectionState === 'live' ? 'attached' : 'last known sessions'}` : '';
+    if (!lots.length) {
+      const html = this.gameLinked
+        ? `<div class="empty">No agents yet.<br>Start Claude Code or Codex in any project folder and its agent moves in here.</div>`
+        : `<div class="empty">Your town is waiting for its first agents.<br>Talk to Mayor Martin to link Codex or Claude Code.</div>`;
+// >>>>>>> gameplay-improvement
       if (this.html.roster !== html) this.rosterBody.innerHTML = this.html.roster = html;
       return;
     }

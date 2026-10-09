@@ -227,7 +227,7 @@ export class BuildMode {
       : '';
     if (owned) return `<div class="unlock-prompt"><b>${escapeHtml(d.label)}</b>${levelNote}<button data-unlock-cancel>OK</button></div>`;
     const enough = balance >= itemPrice(item);
-    return `<div class="unlock-prompt"><b>${icon('lockOpen')} Unlock ${escapeHtml(d.label)} for ${itemPrice(item)} bricks?</b>
+    return `<div class="unlock-prompt"><b>${icon('lockOpen')} Unlock ${escapeHtml(d.label)} for ${itemPrice(item)} gems?</b>
       <p>You have ${Math.max(0, balance)}.${enough ? ' Works in every home.' : ` ${itemPrice(item) - Math.max(0, balance)} more to go.`}</p>${levelNote}
       <div><button data-unlock ${enough ? '' : 'disabled'}>Unlock</button><button data-unlock-cancel>Not now</button></div></div>`;
   }

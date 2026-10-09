@@ -87,7 +87,7 @@ export class WorkCenter {
         } catch (err) { this.message(err.message); }
       }
       if (b.hasAttribute('data-undo-milestone')) {
-        if (!confirm('Undo the last reached outcome? The house goes back a level and its bricks are removed.')) return;
+        if (!confirm('Undo the last reached outcome? The house goes back a level and its gems are removed.')) return;
         const plan = this.data.plans.find(p => p.project === this.project);
         try { await this.post('/api/milestone', { project: this.project, version: plan?.version, action: 'undo', confirmed: true }); this.message('Last reached outcome undone.'); } catch (err) { this.message(err.message); }
       }
@@ -314,7 +314,7 @@ export class WorkCenter {
         <div class="plan-side"><span class="stars" title="${esc(levelName(level))}">${'★'.repeat(level)}<i>${'☆'.repeat(MAX_LEVEL - level)}</i></span>
           <div class="row-actions"><button class="chip-link" data-edit-plan>${icon('pencil')} Edit</button>${p?.outcome ? `<button class="chip-link" data-reach>${icon('flag')} Reached</button>` : ''}</div></div>
         <div class="reach-confirm" ${this.reachOpen && p?.outcome ? '' : 'hidden'}><label><input type="checkbox" name="reachConfirm" ${this.reachChecked ? 'checked' : ''} /> Yes, this outcome is reached</label>
-          <small>+${BRICKS.outcomeReached} bricks${level < MAX_LEVEL ? ` · grows into a ${esc(levelName(level + 1))}` : ''}</small><button class="primary" data-reach-confirm>Confirm</button></div>
+          <small>+${BRICKS.outcomeReached} gems${level < MAX_LEVEL ? ` · grows into a ${esc(levelName(level + 1))}` : ''}</small><button class="primary" data-reach-confirm>Confirm</button></div>
         ${reached.length ? `<details class="reached"><summary>${reached.length} reached</summary><ul>${reached.map(m => `<li>${esc(m.outcome)} <small>${esc(ago(m.reachedAt))}</small></li>`).join('')}</ul><button class="link-btn" data-undo-milestone>Undo the last one</button></details>` : ''}
       </article>`;
       const needs = b.attention.length

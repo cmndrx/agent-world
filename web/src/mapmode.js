@@ -67,9 +67,9 @@ export class MapMode {
   frame() {
     const rows = this.plotCount() / 3;
     this.framedRows = rows;
-    const center = new THREE.Vector3(LOT_W * 0.75, 0.12, ((rows - 1) * LOT_D) / 2);
+    const center = new THREE.Vector3(LOT_W * 0.4, 0.12, ((rows - 1) * LOT_D) / 2 - 3);
     const t = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
-    const fit = Math.max((LOT_W * 4.1) / (2 * t * this.camera.aspect), (rows * LOT_D + 16) / (2 * t));
+    const fit = Math.max((LOT_W * 4.8) / (2 * t * this.camera.aspect), (rows * LOT_D + 24) / (2 * t));
     this.onToggle(true, center, Math.min(420, fit * 1.05));
   }
 

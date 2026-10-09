@@ -1,10 +1,10 @@
-// Progress panel (phase 2): bricks, home levels and where they came from. Everything shown is derived
-// from the human's own decisions on the board (shared/progression.mjs), never from agent activity.
+// Progress panel: gems, home levels and their provenance. Work rewards derive from human decisions.
 
 import { BRICKS, COMMONS, LEVELS, MAX_LEVEL, commonsHint, levelName } from '../../shared/progression.mjs';
 import { COLLECTIBLES } from '../../shared/collectibles.mjs';
 import { CROPS, growth } from '../../shared/garden.mjs';
 import { DECOR } from '../../shared/style.mjs';
+import { townHallState } from '../../shared/gameplay.mjs';
 import { icon } from './icons.js';
 import { escapeHtml as esc } from './sim.js';
 
@@ -44,7 +44,7 @@ export class ProgressPanel {
   setData(data) {
     Object.assign(this.data, data);
     const p = this.data.progress;
-    if (p) this.chip.innerHTML = `${icon('brickWall')}<span>${p.balance} brick${p.balance === 1 ? '' : 's'}</span>`;
+    if (p) this.chip.innerHTML = `${icon('gem')}<span>${p.balance} gems</span>`;
     if (this.dialog.open) this.render();
   }
 
@@ -77,8 +77,8 @@ export class ProgressPanel {
         <button class="chip-btn" data-plan="${esc(h.project)}">Plan</button></li>`;
     }).join('');
     const ledger = p.ledger.slice(0, 10).map((e) => {
-      const what = e.kind === 'outcome' ? `Outcome: ${esc(e.title || 'Untitled')}` : `Task: ${esc(e.title)}${e.capped ? ' (daily cap)' : ''}`;
-      return `<li class="${e.bricks ? '' : 'muted-row'}"><b>+${e.bricks || 0}</b><span>${what}<small>${esc(this.homeName(e.project))}${e.at ? ` · ${esc(new Date(e.at).toLocaleDateString())}` : ''}</small></span></li>`;
+      const what = e.kind === 'connection' ? esc(e.title) : e.kind === 'outcome' ? `Outcome: ${esc(e.title || 'Untitled')}` : `Task: ${esc(e.title)}${e.capped ? ' (daily cap)' : ''}`;
+      return `<li class="${e.bricks ? '' : 'muted-row'}"><b>+${e.bricks || 0}</b><span>${what}<small>${e.project ? esc(this.homeName(e.project)) : 'First connection'}${e.at ? ` · ${esc(new Date(e.at).toLocaleDateString())}` : ''}</small></span></li>`;
     }).join('');
     const openSpaces = (p.commons || []).length;
     const foundKinds = Object.keys(COLLECTIBLES).filter((k) => this.data.found?.[k] > 0).length;
@@ -86,13 +86,14 @@ export class ProgressPanel {
     const box = (ic, title, count, body, open = false) => `<details class="collect" ${open ? 'open' : ''}><summary>${icon(ic)} <b>${title}</b> <span class="pill">${count}</span></summary>${body}</details>`;
     this.dialog.innerHTML = `<header class="panel-head"><span class="panel-icon reward">${icon('trophy')}</span><div><h2>Rewards</h2><small>Just for fun · from your decisions</small></div>
         <button class="icon-btn" data-close aria-label="Close">${icon('x')}</button></header>
-      <div class="brick-balance"><span class="big">${icon('brickWall')} ${p.balance}</span><span>bricks<small>${p.earned} earned · ${p.spent} spent</small></span>
+      <div class="brick-balance"><span class="big">${icon('gem')} ${p.balance}</span><span>gems<small>${p.earned} earned · ${p.spent} spent</small></span>
         <button data-build>${icon('hammer')} Spend</button></div>
-      <div class="earn-pills"><span class="pill">${icon('flag')} +${BRICKS.outcomeReached} outcome reached</span><span class="pill">${icon('check')} +${BRICKS.acceptedTask} reviewed task <small>1/day per home</small></span></div>
+      <div class="earn-pills"><span class="pill">${icon('plug')} +50 first connection</span><span class="pill">${icon('flag')} +${BRICKS.outcomeReached} outcome reached</span><span class="pill">${icon('check')} +${BRICKS.acceptedTask} reviewed task <small>1/day per home</small></span></div>
       <h3 class="sec" style="margin:12px 0 6px">Homes</h3><ul class="lvl-list">${homes || '<li class="muted-row">No homes yet.</li>'}</ul>
       ${box('landmark', 'Town square', `${openSpaces}/${COMMONS.length}`, `<ul class="lvl-list">${COMMONS.map((c) => {
         const open = (p.commons || []).includes(c.id);
-        return `<li><span class="lvl-stars">${open ? icon('check') : icon('lock')}</span><span class="lvl-home"><b>${esc(c.name)}</b><small>${open ? 'Open' : esc(commonsHint(c))}</small></span></li>`;
+        const hint = c.id === 'townhall' && townHallState(this.data.gameplay).status === 'building' ? 'Under construction' : commonsHint(c);
+        return `<li><span class="lvl-stars">${open ? icon('check') : icon('lock')}</span><span class="lvl-home"><b>${esc(c.name)}</b><small>${open ? 'Open' : esc(hint)}</small></span></li>`;
       }).join('')}</ul>`)}
       ${box('sparkles', 'Finds', `${foundKinds}/${Object.keys(COLLECTIBLES).length}`, `<div class="mini-tiles">${Object.entries(COLLECTIBLES).map(([k, c]) => {
         const n = this.data.found?.[k] || 0;
@@ -102,9 +103,9 @@ export class ProgressPanel {
       ${box('images', 'Photos', this.data.photos || 0, `<button class="chip-btn" data-album>${icon('images')} Open album</button>`)}
       ${box('clock', 'Recent', p.ledger.length, `<ul class="ledger">${ledger || '<li class="muted-row">Nothing yet.</li>'}</ul>`)}
       <footer class="panel-foot"><span></span><details class="info-note"><summary>${icon('info')} How rewards work</summary><ul>
-        <li>Only your decisions count: reaching outcomes, and accepting reviewed tasks.</li>
+        <li>Your first Codex or Claude Code connection gives 50 gems. Your decisions also count: reaching outcomes and accepting reviewed tasks.</li>
         <li>Task rewards are capped at one per home per day, so small tasks don't pay more.</li>
         <li>Each outcome grows its house a level (${LEVELS.map((l) => esc(l.name)).join(' → ')}).</li>
-        <li>Agents can't earn bricks. Finds, gardens and photos never earn bricks.</li></ul></details></footer>`;
+        <li>Agents can't earn gems. Finds, gardens and photos never earn gems.</li></ul></details></footer>`;
   }
 }

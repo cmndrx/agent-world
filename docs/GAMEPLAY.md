@@ -10,7 +10,7 @@ neighborhood, and watching projects' houses grow as you accept real work. It nev
    counted at most once per day. No rewards for tool calls, tokens, session counts or time running: that
    would reward waste and let an agent farm progress. Nothing decays and there are no streaks. Synthetic
    (fake demo) events never count outside demo mode. Businesses also **upgrade by use**, which the human
-   asked for and is measured in different days of that kind of work, never volume. Bricks, home levels and
+   asked for and is measured in different days of that kind of work, never volume. Gems, home levels and
    catalog unlocks still come only from human decisions (rule 2).
 2. **Rewards follow human decisions and play.** Only tasks you accept with review notes, outcomes you mark
    reached, and in-game play (exploring, decorating) count. Agents cannot accept tasks
@@ -101,26 +101,25 @@ Ideas for later:
   pants, and an accessory (glasses, cap, beanie, headphones, flower).
 - Functional stations (desks, chairs) stay put so the activity view keeps working.
 
-### 2. Progression (bricks, house levels, catalog): shipped
+### 2. Progression (gems, house levels, catalog): shipped
 
-- **Bricks** come from tasks you accepted with review notes. They are derived from your task history, never
-  stored as a counter you could edit.
+- **Gems** come from your first verified Codex or Claude Code connection, tasks you accepted with review notes, and reached outcomes. Work rewards are derived from your task history.
 - **House levels** (Cottage, House, Villa, Manor, Estate) rise when you mark a project's
   outcome reached. Higher levels unlock exterior upgrades and decor tiers for that home.
-- **Catalog:** basics stay free, nicer items cost bricks, and milestone items are exclusive.
+- **Catalog:** basics stay free, nicer items cost gems, and milestone items are exclusive.
 - A small in-world celebration plays when you accept a task. It is derived from your action, not from agent activity.
 
 As built (`shared/progression.mjs`):
-- **Bricks:** +10 at most once per project per server-local calendar day for newly accepted tasks with review notes (accepted without notes earns 0; existing accepted credits are preserved); +25 per outcome you mark reached. Recomputed from `productivity.json` every time. Un-accepting removes them. Items you already unlocked stay yours, but a negative balance blocks new unlocks.
+- **Gems:** +50 once for the first verified provider connection; +10 at most once per project per server-local calendar day for newly accepted tasks with review notes (accepted without notes earns 0; existing accepted credits are preserved); +25 per outcome you mark reached. Work rewards are recomputed from `productivity.json`; the connection grant and construction spending live in `gameplay.json`. Un-accepting removes that task's gems. Unlocked items remain owned, but a negative balance blocks new spending.
 - **Levels:** 1 + outcomes reached (capped at 5): Cottage, House (porch, awning, porch lights), Villa (garden arch, hedge), Manor (fountain, flag), Estate (lantern path, golden plumbob statue). Shown on the house sign.
 - **Marking an outcome reached:** Work → Now → *Reached*, which needs a confirmation checkbox (`POST /api/milestone`, `confirmed: true`). *Undo the last one* corrects mistakes.
-- **Catalog:** 10 free basics. Others cost 10 to 60 bricks; aquarium, record player, snack fridge, bird bath and picnic table need a House, and the arcade needs a Villa. Unlocks are global (`style.unlocks`) and validated server-side against the derived balance. New placements must be unlocked and fit the home's level. Decor already in place is never removed.
-- **UI:** the bricks chip opens a Progress panel (balance, rules, homes and levels, a ledger with provenance). Confetti and a toast play when you accept a task; fireworks when a home levels up. These only trigger on live changes, never on page load.
+- **Catalog:** 10 free basics. Others cost 10 to 60 gems; aquarium, record player, snack fridge, bird bath and picnic table need a House, and the arcade needs a Villa. Unlocks are global (`style.unlocks`) and validated server-side against the derived balance. New placements must be unlocked and fit the home's level. Decor already in place is never removed.
+- **UI:** the gems chip opens a Progress panel (balance, rules, homes and levels, a ledger with provenance). Confetti and a toast play when you accept a task; fireworks when a home levels up. These only trigger on live changes, never on page load.
 
 ### 3. Neighborhood: shipped
 
 - Map mode: arrange houses and name streets.
-- Public spaces unlocked by neighborhood milestones (park, plaza, café, a town-hall trophy case).
+- Public spaces unlocked by neighborhood milestones (park, plaza, café). The Town Hall is the first timed build, introduced through Mayor Martin's animated 3D game character. His initial dialogue is scripted; a verified provider claim links the town even if the CLI was already signed in. Observed agent data remains saved but residents, homes and downtown activity stay hidden until that claim, which does not create an observed work session. The active site has animated builders and a crane, with a countdown sign that opens build details.
 - Pets per home (flavor), seasonal themes and weather.
 - Exploration collectibles found while looking around (click to collect) (seed packets, gnomes, rare plants), unrelated to agents.
 
@@ -133,7 +132,7 @@ As built:
   | Park | 1 reached outcome or 3 tasks |
   | Café | 5 tasks |
   | Plaza fountain | 3 outcomes |
-  | Town hall | 5 outcomes or 15 tasks |
+  | Town Hall | 30 gems and five minutes of construction; 5 gems expedites one minute |
 
   "Tasks" means credited reviews: new credits are limited to one per project per day, and legacy accepted credits are preserved. The town hall holds one trophy per reached outcome, up to 10. Locked spaces show a signpost with the requirement; signs fade when the camera is over another street.
 - **Pets** (Build mode, Paint tab): none, cat, dog or bunny, per home (`home.pet`). Pets wander the lot on the nav grid, nap, and come say hi when you zoom in close. They never stand in for an agent.
@@ -141,7 +140,7 @@ As built:
 - **Finds** (`shared/collectibles.mjs`, `web/src/explore.js`):
   - Four finds a day sparkle in yards, placed deterministically from the date and the homes. Walk within about 1.3 m to pick one up.
   - The server checks that the id is one of today's spawns and not already collected. The first of each kind unlocks a Found decor item: veggie patch, blue tulips, clover patch, crystal lamp or golden gnome.
-  - Finds never give bricks.
+  - Finds never give gems.
   - The Progress panel lists the town square, your finds and how many are left today.
 
 ### 4. Play and polish: shipped
@@ -163,7 +162,7 @@ As built:
   - The bridge stamps the planting time, so the client can't backdate it.
   - Crops show four stages and never wilt. Harvest whenever you like.
   - The first harvest of each crop unlocks Harvest decor: a tomato crate, a sunflower vase and a pumpkin stack.
-  - Gardens never give bricks.
+  - Gardens never give gems.
 - **Visuals** (`web/src/fx.js`). Ambience only; all effects are patched into existing materials, so draw calls don't change.
   - Foliage sways in the wind, more in rain.
   - Outdoor surfaces that face up get patchy snow, or a wet sheen with sky-tinted puddles. Rooms stay dry.

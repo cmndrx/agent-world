@@ -24,6 +24,9 @@ import { setLightPools } from './models.js';
 import { BRICKS, homeLevel, levelName, progress } from '../../shared/progression.mjs';
 import { Celebrations } from './celebrate.js';
 import { ProgressPanel } from './progress.js';
+import { MayorOnboarding } from './onboarding.js';
+import { MayorCharacter } from './mayor-character.js';
+import { emptyGameplay, townHallState, visibleResidents } from '../../shared/gameplay.mjs';
 import { escapeHtml } from './sim.js';
 import { Commons } from './commons.js';
 import { Seasons } from './seasons.js';
@@ -78,6 +81,7 @@ const scenery = new Scenery(scene);
 scenery.ensureRows(1);
 // Phase 3 (docs/GAMEPLAY.md): town square, seasons and weather (ambience).
 const commons = new Commons(scene);
+const mayorCharacter = new MayorCharacter(commons);
 const seasons = new Seasons(scene, env, scenery);
 seasons.set({ season: settings.season, weather: settings.weather });
 const weatherFx = new WeatherFx(scene);
@@ -89,6 +93,11 @@ const downtown = new Downtown(scene);
 let city = emptyCity();
 let demoMode = false;
 let bridgeReady = false;
+function applyCityVisibility() {
+  const visible = gameplay.connection ? city : emptyCity();
+  downtown.set(visible);
+  census?.setCity(visible, !!gameplay.connection && demoMode && city.demo);
+}
 // Street life (made up): off-duty residents sometimes walk to their workplace downtown and back.
 const streetLife = new StreetLife(scene, { downtown });
 
@@ -114,8 +123,11 @@ let census = null; // Census, created below
 let photos = []; // photo album (newest first)
 // Progression (phase 2): derived from the human's board + style; see shared/progression.mjs.
 let board = { tasks: [], plans: [] };
-let prog = progress(board, style);
+let gameplay = emptyGameplay();
+let gameplayLoaded = false;
+let prog = progress(board, style, gameplay);
 let progressPanel = null; // created below
+let mayor = null;
 const celebrations = new Celebrations(scene);
 let wardrobe = null; // Wardrobe, created below
 const sound = new Sound();
@@ -212,6 +224,7 @@ function endSession(sessionId) {
   syncLibrarySessions();
 }
 
+// <<<<<<< ai-features
 function applySnapshot({ selectedProjects: chosen=null, households: hs, sessions, projects = [], conversations = [], plans = [], tasks = [], passes, runner }) {
   selectedProjects=chosen===null?null:new Set(chosen);
   const visible=p=>selectedProjects===null||selectedProjects.has(p.project);
@@ -225,12 +238,19 @@ function applySnapshot({ selectedProjects: chosen=null, households: hs, sessions
   passCard.setData({passes,runner,tasks,sessions,conversations});
   work.setData({ households:hs, plans, tasks, conversations });
   library.setData({ households:hs, projects, conversations });
+// =======
+// function applySnapshot({ households: hs, sessions, projects = [], conversations = [], plans = [], tasks = [], passes, runner }) {
+//   const { households: visibleHouseholds, sessions: visibleSessions } = visibleResidents(gameplay, hs, sessions);
+//   passCard.setData({passes,runner,tasks,sessions:visibleSessions,conversations});
+//   work.setData({ plans, tasks, conversations });
+//   library.setData({ projects, conversations });
+// >>>>>>> gameplay-improvement
   replaying = true;
-  hs.forEach(applyHousehold);
-  const live = new Set(sessions.map((s) => s.session));
+  visibleHouseholds.forEach(applyHousehold);
+  const live = new Set(visibleSessions.map((s) => s.session));
   for (const id of [...sessionToSim.keys()]) if (!live.has(id)) endSession(id);
   // Primary sessions first so visitors can find their parent.
-  [...sessions].sort((a, b) => (a.parent_session ? 1 : 0) - (b.parent_session ? 1 : 0)).forEach(applySession);
+  [...visibleSessions].sort((a, b) => (a.parent_session ? 1 : 0) - (b.parent_session ? 1 : 0)).forEach(applySession);
   replaying = false;
   syncLibrarySessions();
   // Don't fire "still waiting" reminders for waits that began before we connected.
@@ -244,7 +264,8 @@ function applySnapshot({ selectedProjects: chosen=null, households: hs, sessions
     if (pick) camFocus.copy(pick.lot.toWorld(0, 2)).setY(0.12);
     setTimeout(() => {
       ui.hideIntro();
-      lookAt(camFocus, { distance: 24, duration: 2.4 });
+      if (mayor?.dialog.open) focusTownHall();
+      else lookAt(camFocus, { distance: 24, duration: 2.4 });
     }, 250);
   }
 }
@@ -274,11 +295,12 @@ function connect() {
       providerConnections = m.connections || null;
       ui.setDemo(!!m.demo);
       style = m.style || emptyStyle();
+      gameplay = m.gameplay || emptyGameplay();
+      gameplayLoaded = true;
       photos = m.photos || [];
       city = m.city || emptyCity();
       demoMode = !!m.demo;
-      downtown.set(city);
-      census?.setCity(city, demoMode && city.demo);
+      applyCityVisibility();
       album?.setPhotos(photos);
       board = { tasks: m.tasks || [], plans: m.plans || [] };
       applySnapshot(m);
@@ -288,13 +310,15 @@ function connect() {
     }
     else if (m.type === 'connections') { providerConnections = m.connections; refreshProviderConnections(); }
     else if (m.type === 'style') { style = m.style || emptyStyle(); applyStyleAll(); refreshProgress(); if (build.active) build.render(); }
+    else if (m.type === 'gameplay') applyGameplay(m.gameplay);
     else if (m.type === 'city') {
       const before = city;
       city = m.city || emptyCity();
-      downtown.set(city);
-      census?.setCity(city, demoMode && city.demo);
-      applyRoles();
-      celebrateCity(before, city);
+      applyCityVisibility();
+      if (gameplay.connection) {
+        applyRoles();
+        celebrateCity(before, city);
+      }
     }
     else if (m.type === 'photos') { photos = m.photos || []; album?.setPhotos(photos); }
     else if (m.type === 'catalog') { if(selectedProjects!==null){m.projects=m.projects.filter(p=>selectedProjects.has(p.home));m.conversations=m.conversations.filter(p=>selectedProjects.has(p.project));} library.setData({ projects: m.projects, conversations: m.conversations }); work.setData({ conversations: m.conversations }); passCard.setData({conversations:m.conversations}); syncLibrarySessions(); }
@@ -317,10 +341,21 @@ function connect() {
       }
       if(removed.length){if(!households.size)camFocus.set(0,.12,0);ui.projectsPanel.setHomes([...households.values()]);applyLayout();explore?.sync();fetch('/api/state').then(r=>r.json()).then(applySnapshot).catch(()=>setBridgeConnection(false,'offline'));}
     }
-    else if (m.type === 'household') applyHousehold(m.household);
-    else if (m.type === 'session') applySession(m.session);
-    else if (m.type === 'session_end') endSession(m.session);
+    else if (m.type === 'household' && gameplay.connection) applyHousehold(m.household);
+    else if (m.type === 'session' && gameplay.connection) applySession(m.session);
+    else if (m.type === 'session_end' && gameplay.connection) endSession(m.session);
   };
+}
+function applyGameplay(next) {
+  const wasConnected = !!gameplay.connection;
+  gameplay = next || emptyGameplay();
+  applyCityVisibility();
+  refreshProgress();
+  if (!wasConnected && gameplay.connection) {
+    fetch('/api/state').then(response => response.ok ? response.json() : null).then(snapshot => {
+      if (snapshot && gameplay.connection) applySnapshot(snapshot);
+    }).catch(() => {});
+  }
 }
 function setBridgeConnection(ready, state) {
   bridgeReady = ready;
@@ -355,12 +390,17 @@ function applyLayout() {
   weatherFx.setRooms([...lots.values()].map(({ group: { position: p } }) => [p.x - 7.25, p.z - 5.25, p.x + 7.25, p.z + 5.25]));
 }
 
-/** Recompute bricks and levels, then update houses, the chip and the catalog. */
+/** Recompute gems and levels, then update houses, the chip and the catalog. */
 function refreshProgress() {
-  prog = progress(board, style);
+  prog = progress(gameplay.connection ? board : { tasks: [], plans: [] }, gameplay.connection ? style : emptyStyle(), gameplay);
+  ui.setGameLinked(!!gameplay.connection);
   for (const lot of lots.values()) lot.setLevel(prog.levels[lot.project] || 1);
-  commons.set(prog.commons, prog.counts.outcomes);
-  progressPanel?.setData({ progress: prog, households: [...households.values()], found: style.found || {}, harvest: style.harvest || {}, gardens: style.gardens || {}, photos: photos.length, remaining: explore?.remaining ?? 0 });
+  const hallStatus = townHallState(gameplay).status;
+  commons.set(prog.commons, prog.counts.outcomes, hallStatus, gameplay.townhall?.readyAt);
+  if (gameplayLoaded) mayorCharacter.setTownHallStatus(hallStatus);
+  mayorCharacter.setConnection(gameplay.connection?.provider);
+  progressPanel?.setData({ progress: prog, gameplay, households: gameplay.connection ? [...households.values()] : [], found: style.found || {}, harvest: style.harvest || {}, gardens: style.gardens || {}, photos: photos.length, remaining: explore?.remaining ?? 0 });
+  mayor?.setData(gameplay, prog.balance);
   if (build?.active) build.render();
 }
 
@@ -371,15 +411,15 @@ function celebrateChanges(before, next) {
     if (t.status !== 'accepted' || old.get(t.id)?.status === 'accepted') continue;
     const lot = lots.get(t.project);
     if (lot) celebrations.confetti(lot.toWorld(0, 0.5));
-    const reward = progress(next, style).ledger.find(e => e.kind === 'task' && e.id === t.id)?.bricks || 0;
-    cheer(`You accepted “${escapeHtml(t.title)}”${reward ? ` · <b>+${reward} bricks</b>` : ' · acceptance is your review decision, not a score'}`);
+    const reward = progress(next, style, gameplay).ledger.find(e => e.kind === 'task' && e.id === t.id)?.bricks || 0;
+    cheer(`You accepted “${escapeHtml(t.title)}”${reward ? ` · <b>+${reward} gems</b>` : ' · acceptance is your review decision, not a score'}`);
   }
   const plans = new Map(before.plans.map((p) => [p.project, p]));
   for (const p of next.plans) {
     if ((p.milestones?.length || 0) <= (plans.get(p.project)?.milestones?.length || 0)) continue;
     const lot = lots.get(p.project);
     if (lot) celebrations.fireworks(lot.toWorld(0, 0));
-    cheer(`<b>${escapeHtml(households.get(p.project)?.name || 'Your home')}</b> grew into a ${levelName(homeLevel(p))}! · <b>+${BRICKS.outcomeReached} bricks</b>`);
+    cheer(`<b>${escapeHtml(households.get(p.project)?.name || 'Your home')}</b> grew into a ${levelName(homeLevel(p))}! · <b>+${BRICKS.outcomeReached} gems</b>`);
   }
 }
 
@@ -518,6 +558,9 @@ function lookAt(point, { distance = rig.distanceTarget, duration } = {}) {
   camFocus.copy(point).setY(0.12);
   rig.flyTo(camFocus, { distance, duration });
 }
+function focusTownHall() {
+  lookAt(new THREE.Vector3(commons.group.position.x, 0.12, commons.group.position.z - 14), { distance: 25, duration: 1.6 });
+}
 
 const ui = new UI({
   onRename: async (sim, name) => {
@@ -559,6 +602,7 @@ function applySettings() {
   seasons.set({ season: settings.season, weather: settings.weather });
   if (pipeline.setting !== settings.quality) pipeline.setQuality(settings.quality);
   for (const lot of lots.values()) lot.wallMode = build?.active ? 'down' : settings.walls;
+  commons.wallMode = build?.active ? 'down' : settings.walls;
   document.getElementById('roster').classList.toggle('collapsed', settings.roster === 'collapsed');
   ui.renderDock(settings, sound.enabled, pipeline.level);
 }
@@ -660,6 +704,10 @@ function pick() {
   const hit = raycaster.intersectObjects([...sims.values()].map((s) => s.root), true)[0];
   return hit ? sims.get(hit.object.userData.simKey) : null;
 }
+function pickMayor() {
+  raycaster.setFromCamera(pointer, camera);
+  return raycaster.intersectObject(mayorCharacter.world.root, true).some(hit => hit.object.userData.mayor);
+}
 function pickFind() {
   raycaster.setFromCamera(pointer, camera);
   return raycaster.intersectObjects(explore.hitTargets(), false)[0]?.object.userData.findId || null;
@@ -680,6 +728,7 @@ renderer.domElement.addEventListener('click', (e) => {
   if (rig.suppressClick || mapMode.active) return;
   setPointer(e);
   if (build.active) return build.click(pickDecor());
+  if (!photo.active && pickMayor()) { mayor.open(); return; }
   const find = !photo.active && pickFind();
   if (find) return explore.collect(find);
   const sim = pick();
@@ -696,10 +745,12 @@ renderer.domElement.addEventListener('dblclick', (e) => {
   if (lot) lookAt(lot.toWorld(0, 1.5), { distance: 22 });
   else {
     const p = rig.groundAt(e.clientX, e.clientY);
-    if (p) lookAt(p, { distance: Math.max(16, rig.distanceTarget * 0.7) });
+    if (commons.containsTownHall(p)) focusTownHall();
+    else if (p) lookAt(p, { distance: Math.max(16, rig.distanceTarget * 0.7) });
   }
 });
 labels.domElement.addEventListener('click', (e) => {
+  if (e.target.closest('[data-mayor-world], [data-townhall-detail]')) { mayor.open(); return; }
   const b = e.target.closest('.bubble');
   if(b){const sim=sims.get(b.dataset.simKey);select(sim);if(e.target.closest('[data-prompt-sim]'))openAgentChat(sim);}
 });
@@ -739,7 +790,9 @@ function frame() {
   rig.update(dt, focus);
   build.update();
   celebrations.update(dt);
-  commons.update(dt, t, env.night, rig.target);
+  commons.peek = commons.containsTownHall(rig.target) && !mapMode.active;
+  commons.update(dt, t, env.night, rig.target, camera);
+  mayorCharacter.update(t, !!mayor?.dialog.open, dt);
   downtown.update(dt, t, env.night, rig.target);
   landscape.update(dt, t, env.night, null);
   streetLife.enabled = settings.streetLife !== 'off' && !mapMode.active && !build.active;
@@ -776,13 +829,14 @@ function frame() {
     const h = pick();
     // The home under the pointer nudges its roof up (a hint that double-click looks inside).
     const hoverLot = !photo.active && !mapMode.active && lastClient.x >= 0 ? lotAt(lastClient.x, lastClient.y) : null;
+    commons.hovered = !photo.active && !mapMode.active && lastClient.x >= 0 && commons.containsTownHall(rig.groundAt(lastClient.x, lastClient.y));
     for (const lot of lots.values()) lot.hovered = lot === hoverLot;
     if (h !== hovered) {
       if (hovered) hovered.hovered = false;
       hovered = h;
       if (h) h.hovered = true;
     }
-    renderer.domElement.style.cursor = h || (!photo.active && pickFind()) ? 'pointer' : '';
+    renderer.domElement.style.cursor = h || (!photo.active && (pickMayor() || pickFind())) ? 'pointer' : '';
   }
   pipeline.setOutlined(build.active ? [build.hoverDecor, build.selectedObject].filter(Boolean) : [selected, hovered].filter(Boolean).map((s) => s.root));
 
@@ -1033,11 +1087,17 @@ function openWardrobe(sim) {
   }
 }
 
-const experience = new Experience({ work, onConversations: () => library.open(), leavePlay: () => { if (build.active) build.exit(); if (mapMode.active) mapMode.exit(); if (photo.active) photo.exit(); }, action: name => ui.h.onAction(name), pets: () => { if (!build.active) build.enter(selected?.lot); build.tab = 'pets'; build.render(); } });
+const experience = new Experience({ work, onConversations: () => library.open(), onMayor: () => mayor.open(), leavePlay: () => { if (build.active) build.exit(); if (mapMode.active) mapMode.exit(); if (photo.active) photo.exit(); }, action: name => ui.h.onAction(name), pets: () => { if (!build.active) build.enter(selected?.lot); build.tab = 'pets'; build.render(); } });
+mayor = new MayorOnboarding({
+  character: mayorCharacter,
+  onConnections: () => experience.open('sources'),
+  onFocusTownHall: () => focusTownHall(),
+  onChange: next => { if (next) applyGameplay(next); else refreshProgress(); },
+});
 
 // Debug handle for the console.
 window.agentWorld = {
-  garden, photo, album, weatherFx, get passCard() { return passCard; }, downtown, census, streetLife, landscape, city: () => city, sims, lots, player, rig, worldBounds, lookAt, sound, env, pipeline, focusSim, library, work, build, wardrobe, style: () => style, commons, seasons, explore, mapMode };
+  garden, photo, album, weatherFx, get passCard() { return passCard; }, downtown, census, streetLife, landscape, city: () => city, sims, lots, player, rig, worldBounds, lookAt, sound, env, pipeline, focusSim, library, work, build, wardrobe, style: () => style, commons, mayorCharacter, seasons, explore, mapMode };
 
 connect();
 frame();
