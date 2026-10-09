@@ -265,7 +265,7 @@ export function resolveActivity(truth) {
       }
       if (reason === 'input') return { app: 'question', title: 'Question', label: 'Has a question for you', detail: `Answer it in ${where}`, prose: true, pose: 'wave', at: 'wait' };
       if (reason === 'interrupted') return { app: 'interrupted', title: 'Stopped', label: 'Stopped, waiting for you', detail: `Reply in ${where} to continue`, prose: true, pose: 'wave', at: 'wait' };
-      return { app: 'yourturn', title: 'Your turn', label: 'Done, your turn', detail: `Reply in ${where} to keep it going`, prose: true, pose: 'wave', at: 'wait' };
+      return { app: 'question', title: 'Needs you', label: 'Needs you', detail: `Reply in ${where}`, prose: true, pose: 'wave', at: 'wait' };
     }
 
     case 'error': {

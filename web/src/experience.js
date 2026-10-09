@@ -1,3 +1,4 @@
+import { connectionView, CONNECTION_MEANING } from '../../shared/connections.mjs';
 import { ConnectedUsage } from './usage.js';
 import { observedLabel } from '../../shared/freshness.mjs';
 import { icon } from './icons.js';
@@ -16,6 +17,7 @@ export class Experience {
     document.getElementById('work-open').addEventListener('click', () => this.setMode('work'));
     document.getElementById('play-open').addEventListener('click', () => { this.setMode('play'); this.open('play'); });
     document.getElementById('sources-open').addEventListener('click', () => this.open('sources'));
+    document.getElementById('status').addEventListener('click', () => this.open('sources'));
     this.dialog.addEventListener('click', e => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.hasAttribute('data-close')) this.dialog.close();
@@ -44,6 +46,13 @@ export class Experience {
     if (view === 'sources') this.refresh = setInterval(() => this.refreshConnection(), 15000);
 
   }
+  setConnections(view) {
+    this.connections = view;
+    if (this.dialog.open && this.view === 'sources') {
+      const el = this.dialog.querySelector('[data-provider-connections]');
+      if (el) el.textContent = view.providers.map(p => `${p.label}: ${p.status}`).join(' · ');
+    }
+  }
   refreshConnection() {
     if (!this.dialog.open || this.view !== 'sources') return;
     this.dialog.querySelector('[data-bridge-status]').textContent = this.work.connected ? 'Live bridge · observations below are history' : 'Offline · current activity unavailable';
@@ -70,10 +79,8 @@ export class Experience {
       return { cls: '', text: observedLabel({lastObservedAt:latest}) };
     };
     const row = (ic, label, st, source = '') => `<div class="row-card"><span class="row-icon">${icon(ic)}</span><div class="row-main"><b>${label}</b><small><span class="dot ${st.cls}"></span> <span ${source ? `data-source-age="${source}"` : ''}>${st.text}</span></small></div></div>`;
-    return `<p class="connection-summary" data-bridge-status>${this.work.connected ? 'Live bridge · observations below are history' : 'Offline · current activity unavailable'}</p>${row('terminal', 'Codex', status('codex'), 'codex')}${row('terminal', 'Claude Code', status('claude-code'), 'claude-code')}${row('messageCircle', 'ChatGPT & Claude chats', { cls: 'saved', text: 'Saved links only' })}
+    return `<p class="connection-summary" data-provider-connections>${(this.connections || connectionView(null, false)).providers.map(p => `${p.label}: ${p.status}`).join(' · ')}</p><p class="connection-summary">${CONNECTION_MEANING}</p><p class="connection-summary" data-bridge-status>${this.work.connected ? 'Live bridge · observations below are history' : 'Offline · current activity unavailable'}</p>${row('terminal', 'Codex', status('codex'), 'codex')}${row('terminal', 'Claude Code', status('claude-code'), 'claude-code')}${row('messageCircle', 'ChatGPT & Claude chats', { cls: 'saved', text: 'Saved links only' })}
       <div data-connected-usage></div>
-      <h3 class="sec" style="margin:14px 0 8px">Start here</h3>
-      <ol class="steps"><li><span>${icon('target')}</span>Set an outcome</li><li><span>${icon('plus')}</span>Add a task</li><li><span>${icon('eye')}</span>Review & accept</li></ol>
       <div class="row-actions" style="justify-content:flex-start"><button class="primary" data-go="work">${icon('briefcase')} Open Work</button><button data-go="conversations">${icon('messageCircle')} Chats</button></div>
       <footer class="panel-foot"><span></span><details class="info-note"><summary>${icon('info')} What's not covered</summary><ul>
         <li>“Last observed” is history, not an adapter health check. Connection status is shown above.</li>

@@ -82,3 +82,28 @@ test('character names are unique across projects', () => {
   const names = Object.values(w.households).flatMap((h) => h.characters.map((c) => c.name));
   assert.equal(new Set(names).size, names.length);
 });
+
+test('runner threads stay on the requested resident and ownership survives observer restart',()=>{
+ let owner=null;
+ const w=new World({residentOwner:(_project,_source,id)=>id==='run'?owner:null});
+ w.apply(ev({kind:'session_start',session:'external',ts:at(0)}));
+ w.apply(ev({kind:'session_start',session:'run',ts:at(1)}));
+ assert.equal(w.sessions.get('run').slot,2);
+ owner=3;w.syncResidentOwnership();
+ assert.equal(w.sessions.get('run').slot,3);
+ assert.equal(w.catalog.snapshot().conversations.find(c=>c.id==='run').residentSlot,3);
+ assert.equal(w.sessions.get('external').slot,1);
+ const restored=new World({households:JSON.parse(JSON.stringify(w.households)),catalog:JSON.parse(JSON.stringify(w.catalog.snapshot()))});
+ restored.apply(ev({kind:'session_start',session:'run',ts:at(2)}));
+ assert.equal(restored.sessions.get('run').slot,3);
+ restored.apply(ev({kind:'session_end',session:'run',ts:at(3)}));
+ restored.apply(ev({kind:'state',session:'run',state:'thinking',ts:at(4)}));
+ assert.equal(restored.sessions.get('run').slot,3);
+ assert.equal(restored.catalog.snapshot().conversations.filter(c=>c.id==='run').length,1);
+});
+
+test('observed isolated workspace activity stays in its logical home with real execution provenance',()=>{
+ const w=new World({projectHome:(directory,source,id)=>directory==='/isolated'&&id==='work' ? '/p':null,residentOwner:(project,source,id)=>project==='/p'&&id==='work'?2:null});
+ w.apply(ev({project:'/isolated',kind:'state',session:'work',conversation:{id:'work'},state:'editing',detail:{target:'file.js'},ts:at(0)}));
+ assert.equal(w.sessions.get('work').project,'/p');assert.equal(w.sessions.get('work').sourceProject,'/isolated');assert.equal(w.sessions.get('work').slot,2);assert.equal(w.sessions.get('work').lastEventAt,t0);assert.equal(w.households['/isolated'],undefined);
+});

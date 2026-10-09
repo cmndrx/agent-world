@@ -1,0 +1,8 @@
+import {createHash} from 'node:crypto';import fs from 'node:fs';import path from 'node:path';import {execFile} from 'node:child_process';import {promisify} from 'node:util';const exec=promisify(execFile);
+const git=async(project,args)=>{try{return (await exec('git',['-C',project,...args],{maxBuffer:1024*1024,timeout:15000})).stdout;}catch{throw new Error('Review scope could not be read. Check Git reference/repository, or narrow changes below 1 MB.');}};
+export async function reviewContext(project,review){
+ const head=(await git(project,['rev-parse','--verify','HEAD'])).trim();let ref=null,diff;
+ if(review.scope==='changes'){diff=await git(project,['diff','--no-ext-diff','--no-textconv','HEAD','--']);const names=(await git(project,['ls-files','--others','--exclude-standard','-z'])).split('\0').filter(Boolean);for(const name of names){const file=path.join(project,name),stat=fs.lstatSync(file);if(!stat.isFile()){diff+='\nUntracked non-regular file: '+name;continue;}if(stat.size>256*1024)throw new Error('Untracked review file exceeds 256 KB: '+name);const bytes=fs.readFileSync(file);diff+='\nUntracked file: '+name+'\n'+(bytes.includes(0)?'[binary contents unavailable]':bytes.toString('utf8'));if(Buffer.byteLength(diff)>1024*1024)throw new Error('Review input exceeds 1 MB. Narrow the changes.');}}
+ else {ref=(await git(project,['rev-parse','--verify',review.ref+'^{commit}'])).trim();diff=await git(project,review.scope==='base'?['diff','--no-ext-diff','--no-textconv',ref+'...'+head,'--']:['show','--format=fuller','--no-ext-diff','--no-textconv',ref,'--']);}
+ return {head,ref,scope:review.scope,diff,diffHash:createHash('sha256').update(diff).digest('hex'),capturedAt:new Date().toISOString()};
+}

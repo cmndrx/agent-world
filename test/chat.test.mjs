@@ -46,3 +46,18 @@ test('provider identity separates same UUID chats, titles and replies',()=>{
  const conversations=[{source:'codex',project:'/sample',id:one,title:'Codex title'},{source:'claude-code',project:'/sample',id:one,title:'Claude title'}];
  assert.equal(chatThreads(runs,'/sample',1,conversations)[0].title,'Codex title');assert.equal(chatThreads(runs,'/sample',1,conversations,'claude')[0].title,'Claude title');assert.equal(chatMessages([runs[1]])[1].provider,'claude');
 });
+
+test('each resident lists only owned observed and recorded conversations, including after restart',()=>{
+ const conversations=[{source:'codex',project:'/sample',id:one,title:'First',residentSlot:1},{source:'codex',project:'/sample',id:two,title:'Second',residentSlot:2}];
+ assert.deepEqual(chatThreads([],'/sample',1,conversations).map(t=>t.id),[one]);
+ assert.deepEqual(chatThreads([],'/sample',2,JSON.parse(JSON.stringify(conversations))).map(t=>t.id),[two]);
+ const runs=[run('original',one,{slot:2}),run('legacy-copy',one,{slot:1})];
+ assert.deepEqual(chatThreads(runs,'/sample',1,conversations),[]);
+ assert.deepEqual(chatThreads(runs,'/sample',2,conversations).map(t=>t.id).sort(),[one,two].sort());
+});
+
+test('dedicated scheduled conversations appear only for their resident before first run and merge into the established chat',()=>{
+ const schedule={id:'task',title:'Daily task',project:'/project',slot:1,provider:'codex',dedicated:true,thread:null};
+ const rows=chatThreads([],schedule.project,1,[],'codex',[schedule]);assert.equal(rows.length,1);assert.equal(rows[0].id,'scheduled:task');assert.equal(rows[0].title,'Daily task');assert.equal(chatThreads([],schedule.project,2,[],'codex',[schedule]).length,0);
+ const id='12345678-1234-1234-1234-123456789abc',runs=[{scheduleId:'task',project:schedule.project,slot:1,provider:'codex',conversationSession:id,title:'Daily task'}];const ready=chatThreads(runs,schedule.project,1,[],'codex',[schedule]);assert.equal(ready.length,1);assert.equal(ready[0].id,id);
+});

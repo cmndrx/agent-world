@@ -1,6 +1,506 @@
+# Commit and push verification (October 9, 2026)
+
+- User authorized committing and pushing the accumulated changes on `ai-features`.
+- Standard `npm test` on Node 18.16.0: **203/203 passed**, without `NODE_OPTIONS` or the polling preload. The earlier watcher EMFILE failure did not reproduce in this run; this does not establish that its underlying intermittent condition is fixed.
+- `npm run app:build` passed. `codesign --verify --deep --strict` passed; all packaged `dist` (8), `bridge` (22), `shared` (26) and `adapters` (8) files matched the current build/source byte for byte.
+- Existing bundle-size, disabled-asar, missing-author and skipped-notarization notices remain. The live bridge returned HTTP 200. No real prompts, scheduling changes, queue changes or app restart were performed in this verification pass.
+- Next useful step: evaluate starter-team delegation with a human-authorized real task and check the original chat's final return report; retain the intermittent Inbox watcher error as an unresolved reliability item.
+
+# Latest implementation pass — Live overlay counts provider observer contacts (October 9, 2026)
+
+- Scoped implementation on `ai-features`, HEAD `8f2ad9b`; preserved the large existing uncommitted change set. No commit, push, publication, real prompt, queue/task/schedule edit, acceptance, authentication change or provider spending. No delegation. This is reported implementation/check evidence, not human acceptance.
+- Changed this pass: `shared/connections.mjs`, `bridge/connections.mjs`, `adapters/contact.mjs`, `adapters/codex/tail.mjs`, `adapters/claude-code/hook.mjs`, `bridge/server.mjs`, `web/src/main.js`, `web/src/ui.js`, `web/src/experience.js`, `web/index.html`, `test/connections.test.mjs`, `README.md`, `CONCEPT.md`, this file and `docs/screenshots/provider-connections-qa.png`. Other Git differences predate the pass.
+- Evidence investigation: live packaged API reported both CLIs installed, 3 attached sessions and one running pass; CLI discovery resolved existing Codex/Claude executable paths without invoking them. Current sources have a persistent Codex log tailer and short-lived Claude hooks, no persistent Claude health channel. Saved chats are metadata; event timestamps and successful turns are history. Process listing was denied by the sandbox. Authentication/cloud connectivity was not probed or inferred.
+- Exact supported meaning, visible on the button tooltip/accessibility label and in Connections: **fresh local activity-observer contact**. Codex writes a five-second lease only while the rollout root is readable; the bridge checks tailer PID liveness and expires its lease after 20 seconds. Claude supported hooks write per-session 30-second contact leases; SessionEnd clears only that session. Multiple sessions/observers count once per provider, giving 0/1/2. Health leases are isolated from canonical events, residents/city and queue files. The Codex watcher now closes on an asynchronous error and continues its preexisting polling fallback, necessary for observer health under the observed OS watcher rejection. No Inbox audit fix was made.
+- Bridge snapshots and two-second health messages carry provider contact status even with no session events. UI expires health at ten seconds, respects provider lease deadlines each second, clears counts on SSE disconnect and restores current evidence on reconnect. Live is now a button opening Connections, which keeps contact status separate from last-observed conversation history. Demo/saved chats/CLI installation/account authentication never generate a connected count.
+- Focused `node --test test/connections.test.mjs`: **3/3 passed** (rerun after final code). Isolated fixtures cover none/Codex-only/Claude-only/both, multiple contacts from each provider, per-session ends, dead tailer, 20/30-second expiry, future/malformed leases, reconnect, bridge loss and stalled health. Actual spawned Claude hook and Codex tailer fixtures verify contact emission and termination without provider execution. Fake contacts used temporary AGENT_WORLD_HOME only; Codex fixture also isolated CODEX_HOME.
+- Standard `npm test`, Node 18.16.0: **203 tests, 196 passed, 4 failed, 3 cancelled**. Failing API groups still encounter the previously documented asynchronous Inbox FSWatcher EMFILE crash; no claim of a normal full-suite pass. A Node 24.19.0 retry also aborted on refused bridge connections. An Electron Node 22 attempt using the directory argument failed test discovery and is not a valid suite result. With a **test-only preload** at `/tmp/aw-polling-fixture.cjs` forcing synchronous watcher setup failure and the existing polling fallback, `NODE_OPTIONS='--require /tmp/aw-polling-fixture.cjs' npm test`: **203/203 passed**. That qualified result does not repair or certify normal Inbox watcher operation.
+- UI QA: independent headless Chrome launch was blocked by sandbox SIGABRT; managed Chrome successfully inspected the built UI on isolated port 4789, runner disabled and CLI paths nonexistent. The isolated bridge used the same test-only polling preload. Observed Live 0, Codex-only 1 despite two contacts, Claude-only 1, both 2, contact disconnection/expiry back to 0, renewed contacts back to 2, bridge shutdown → unavailable for both, and automatic bridge reconnection → current 0 without page reload. Live button opens the visible definition/history distinction. Screenshot: `docs/screenshots/provider-connections-qa.png`. Read-only isolated API verified zero runs and zero proposals. No Send, real prompt or queue mutation. Temporary server and QA tab were closed.
+- `npm run app:build` completed. `codesign --verify --deep --strict 'release/mac-arm64/Agent World.app'` passed. Byte comparisons matched all **dist 8, bridge 22, shared 26 and adapters 8** packaged files. Syntax checks for changed bridge/adapters/client modules and `git diff --check` passed. Build retains existing Vite chunk-size/electron-builder packaging warnings.
+- **Safe reopen still required:** real API on 4777 still reports one running pass and lacks the new connections field, so its existing window/bridge/tailer were deliberately not restarted or reloaded. The new package is built; runtime adoption awaits a safe human reopen after approved/queued/running work settles. Existing Claude hooks must reference the updated adapter; settings were not altered.
+- Detection limits: this is observer contact, **not authenticated provider/cloud connectivity or proof a native desktop app is open**. Codex observer can stay connected without an active conversation. Claude can expire during idle time or a long tool operation, and abrupt shutdown remains connected only until the lease expires. There is no supported persistent Claude liveness source in this pass. Missing hooks cannot establish contact; real-provider idle/reconnect behavior and current installed-hook routing remain unverified. No further pass is approved or executed; human review and a safe reopen remain outstanding.
+
+# Latest pass — starter team and scoped task handoffs (October 9, 2026)
+
+- First added home receives three assigned responsibilities: slot 1 Assistant, slot 2 Junior developer, slot 3 Researcher. Starter-home marker persists with households; import/list alone still does not import other homes. Existing names/history are preserved. Current native Electron/API verified Otto → Assistant, Nell → Junior developer, Milo → Researcher. Role labels appear in roster, Watch activity and prompter; explicit responsibilities override inferred specialties only in that team. No synthetic live events or city credit.
+- Added shared/team.mjs, bridge/handoffs.mjs and shared/pass-team.schema.json. A new Send captures the project roster as scoped delegation authorization; new team schedules also capture it (old schedules unchanged). Agents return bounded structured handoffs; roles map to exact same-project residents, provider/model/effort are inherited, first recipient chat is new and existing request-owned chats can resume. Runs stay serial. Earlier prerequisites supply recorded evidence before dependent work executes, including descendant reports. Each queued recipient has its own chat row. Original chat shows provenance/status/report/Open chat; automatic prompts identify their teammate or Team report request rather than the human.
+- After all parts settle, one report-only pass resumes the original exact conversation with teammate reports. Limits: three handoffs per response, six per request, depth two; final pass cannot delegate. Invalid/self/unknown-role requests reject atomically. Failure pauses dependent work, no retry. Interruptions still require human inspection; resolve updates proposal status so inspected failures return to the coordinator. Stop from original or recipient chat cancels remaining group queue and stops the current game-owned child. Existing file changes remain. Finished reports never accept tasks/reward progress. Voice and isolated-worktree requests do not enable this team loop.
+- Final full Node 18 suite: 200/200. Tests cover starter/idempotent/persisted responsibilities, dependencies/evidence, ownership, no cross-provider chat rows, invalid/self/unapproved handoffs, budgets/depth, failure, interruption inspection, group cancellation and original-chat Stop targeting. Actual spawned fixture CLIs verify Assistant → Researcher → developer → report for both Codex and Claude, with exact original-thread resume. No paid provider runs or real prompt/queue/schedule edits during QA. Real-model decomposition quality is not established by fixtures.
+- Isolated Chrome QA verified three role labels/cards, queued handoff status/links, recipient-owned chat and attributed incoming instruction, Stop cancels both queued parts, and the recorded combined report appears in original chat. Disposable home/server/browser cleaned up (home retained in temp for evidence). Screenshots: docs/screenshots/team-handoffs-qa.png, team-return-report-qa.png, starter-team-electron.png. No app errors observed; one unrelated browser extension error appeared after reload.
+- Final npm run app:build completed; strict deep codesign passed; all dist (8), bridge (21) and shared (25) packaged files matched checkout. Syntax/diff whitespace checks passed. Safely reopened Electron after zero running/interrupted/approved work and no composer draft. Verified current three roles via native UI and API. Existing unrelated uncommitted work preserved; no commit/push.
+- Next useful validation: a human-submitted bounded real project prompt to Otto (Assistant), then inspect delegation quality, returned checks and actual output in the recipient chat. This pass did not submit that real prompt or claim live-provider teamwork is proven.
+
+# Latest pass — work clothes removed
+
+- Removed role work clothes completely:
+  - `buildUniform` (apron and lanyard) is deleted from `web/src/models.js`, along with `Sim.applyUniform` and the uniform on street-life walkers and the 3D portraits;
+  - the wardrobe's "Work clothes · Wear them / Hide them" option is gone;
+  - `shared/style.mjs` no longer stores `uniform`. Old saved `uniform: false` values are ignored on the next save.
+- Roles stay (the role card in the agent panel, street-life destinations); they just don't change what a resident wears. GAMEPLAY.md is noted.
+- **Checks:**
+  - **QA** (isolated demo): Quinn in the world and in the panel portrait without an apron; wardrobe text has no "Work clothes".
+  - **Tests:** npm test 189/189.
+  - **Build:** app:build, strict codesign and dist/style parity passed. The bridge's style module changed, so a full reopen is cleanest. No commit or push.
+
+# Latest pass — apron work clothes fixed
+
+- **Bug:** the role "apron" (`buildUniform` in `web/src/models.js`) was a flat box panel with box straps placed for a torso squashed to z 0.82. The breathing animation (sim.js, and the new portraits) resets `torso.scale.z` to 1, so the real torso is round and the flat panel's edges stuck out of the sides of the shirt. It was very visible on the prompter's waist-up avatar (human's screenshot of Otto).
+- **Fix:** the apron is now curved open-cylinder shells that wrap the round torso: a skirt over the belly, a white waist tie, a narrower bib and a lighter pocket. Tube straps run from the bib corners over the shoulders to the back of the neck. Shell materials are DoubleSide clones, and `bakeable()` now excludes non-FrontSide materials so merging keeps them two-sided. The lanyard is unchanged.
+- **Checks:**
+  - **QA** (isolated demo): waist-up portraits of four apron-wearing Sims (green, pink, blue and orange aprons on contrasting shirts) plus the thinking pose; in-world close-up of Quinn. The apron sits flush with no protrusions.
+  - **Tests:** npm test full suite passed.
+  - **Build:** app:build, strict codesign and dist parity passed. ⌘R in the running app. No commit or push.
+
+# Latest pass — avatar portrait polish and no more Sims sharing a spot
+
+- **Portraits (`avatar-portrait.js`):**
+  - Reframed: the bust shows chest to crown and the waist view hips to crown, so buns, curls and hats are no longer clipped. Narrower FOV, 3/4 yaw, slight high angle.
+  - Studio lighting: RoomEnvironment PMREM fill (0.22), a warm key, cool back rim, warm side rim and low bounce; exposure 0.9.
+  - Before the change, renders were flat and pastel, and dark hair or skin lost its edges.
+- **Spot reservations (`sim.js`):** `lot.claims` maps each spot to the Sim holding it; claimed in `decide()` and released on re-decide, leave and dispose.
+  - Flavor picks choose only free spots. When all of a kind are taken they try the other activities, then a free standing spot one body-width from others.
+  - Truth targets (desk, wait, off-duty couch or wander) take priority. The target is claimed before the displaced flavor Sim re-decides, so it can't pick the same spot. Two truth targets on one spot send the second to a free wander or standing spot (couch dozing becomes standing).
+  - Visitors take free guest spots.
+- **Separation (`separateSims`, called each frame in main):** standing Sims in the same lot closer than 0.62 m ease apart, onto walkable cells only. Sims seated at a desk or on the couch hold still.
+- **Checks:**
+  - **QA** (isolated demo): forced every Sim in online-store to re-decide 30 times toward the couch. 0 duplicate claims, stationary pairs at least 0.85 m apart, distinct couch seats in the screenshot. Large portrait grid (6 Sims, bust) plus waist idle and thinking inspected before and after.
+  - **Tests:** npm test full suite passed.
+  - **Build:** app:build, strict codesign and dist parity passed. ⌘R in the running app. No commit or push.
+
+# Latest pass — live 3D avatars (You badge, agent panel, wardrobe, prompter overlay)
+
+- **New `web/src/avatar-portrait.js`:** `AvatarPortrait` renders the same `buildPerson` model (plus work-clothes uniform) into a 2D canvas.
+  - One shared offscreen WebGLRenderer (600×800, alpha, ACES) draws each visible portrait in turn at 30 fps via viewport, scissor and drawImage, so there is only one extra GL context.
+  - Framing modes: `bust` (head and shoulders) and `waist`.
+  - Idle: breathing (torso scale and body bob), randomized blinks (occasional double), slow head glance and tilt, small weight shift.
+  - Thinking: right hand to chin via the now-exported `armIK` from sim.js, other arm folded across the waist, head tilted.
+  - Portraits rebuild when the look or role changes. Non-persistent ones dispose when their canvas leaves the DOM; hidden ones skip rendering.
+- **"You" badge:** bust portrait. **Wardrobe:** waist preview, mounted through the new `mountPreview` hook. Both portraits are persistent.
+- **Agent panel header:** a bust portrait of the agent replaces the SVG, with the status ring kept. Roster and toasts keep the SVG portraits.
+- **Prompter overlay:** a `popover="manual"` element so it sits above the modal.
+  - Shows a waist-up portrait of the resident, a name pill and a "…" thought bubble.
+  - The thinking pose and bubble are on while a game run is running for that resident (`PassCard.promptRunning()`).
+  - On windows ≥1240 px the prompter shifts right to make room; narrower windows hide the overlay. The overlay closes with the dialog.
+  - `main.js` passes `resident(project, slot)`, and the debug handle now exposes `passCard`.
+- **Checks:**
+  - **QA** (isolated demo, hidden Electron capture): badge, panel and wardrobe canvases present; large test renders of bust, waist and thinking poses inspected (fixed the IK NaN from a missing bodyY, the framing and the other arm); prompter overlay in day, plus night with a page-only fake running entry showing the thinking pose and bubble.
+  - **Tests:** npm test full suite passed.
+  - **Build:** app:build, strict codesign and dist parity passed. Client-only: ⌘R in the running app. No commit or push.
+
+# Latest pass — prompter sidebar icons and Scheduled view upgrade
+
+- **Prompter sidebar (`pass-card.js`):** the full-width "New chat" and "Scheduled" pills are now a header row: "<Name>’s chats" with two 32 px icon buttons, Scheduled (calendar-clock) and New chat (square-pen, accent-tinted). Same `data-scheduled` and `data-new-chat` hooks, with aria-labels and tooltips.
+- **Scheduled view (`schedules.js`):**
+  - Sidebar header: back-arrow icon, "Scheduled", "+" icon. The task list is slim rows with a status dot (grey when paused) and "Daily · 9:00 AM".
+  - Main view: title and description with an accent "New task" pill.
+  - Compact task cards: icon tile (repeat, calendar, or pause), title, schedule chip, Paused chip, a two-line clamped instruction, one meta line (provider · state · next run · last run). The duplicate "Paused" message is suppressed.
+  - Icon actions: open chat, pause/resume, edit, delete (red hover).
+  - The empty state has an icon tile.
+- **Editor:** glass card with the shared header icon, tighter fields and pill selects.
+- **New icons:** squarePen, calendarClock, play, pause, repeat.
+- **Checks:**
+  - **QA:** an isolated non-demo AGENT_WORLD_HOME (scheduling is disabled in demo), with the selected-projects file pointed at the fake homes. The runner was enabled only so the API would accept creates. Three future schedules were created (earliest the next morning); one was paused. Prompter sidebar, Scheduled view (day and night) and editor captured; contrast checker 0 failing. The bridge was stopped and the QA home deleted, so nothing ran.
+  - **Tests:** npm test full suite passed.
+  - **Build:** app:build, strict codesign and dist parity passed. ⌘R in the running app shows it. No commit or push.
+
+# Latest pass — explicit Claude scheduling (October 8, 2026)
+
+- Schedule a task now has Run with: Codex or Claude Code. Available installed providers only; defaults to the current chat provider. Switching a new task provider resets captured model/effort to that provider’s preferences, avoiding Codex model IDs in Claude tasks. Editing locks the task’s provider and the API rejects provider changes; create a new task to switch.
+- Existing scheduler routes Claude tasks through the Claude Code runner, creates a dedicated session on first run and resumes its exact UUID for repeats. Added an isolated spawned Claude fixture verifying init/result handling, provider, structured response, observed model, requested --model/--effort and subsequent --resume, with a nonexistent Codex executable proving no fallback. Claude Code 2.1.292 installed locally; no real provider execution/sign-in entitlement check was performed.
+- Focused scheduling/chat tests: 15/15. Full Node 18 suite: 189/189. Syntax and diff whitespace checks passed. Isolated Chrome QA created a future Claude task from a Codex chat, verified Claude-owned chat row/Open chat and locked provider on edit, then deleted the disposable schedule and closed server/browser. No real prompt/queue/schedule writes, acceptance or paid execution during QA. Screenshot: docs/screenshots/claude-scheduling-editor-qa.png.
+- npm run app:build completed; strict deep codesign passed, and all dist (8), bridge (20), shared (23) packaged files matched source. Electron safely reopened after zero running/interrupted/approved work and no unsent composer draft. Existing changes preserved; no commit/push. The app must remain open and computer awake; Claude’s configured tool permissions apply and unavailable/denied tools can fail a run and pause recurrence.
+
+# Latest pass — dedicated scheduled conversations and quarter-hour times (October 8, 2026)
+
+- New scheduled tasks appear immediately in the selected resident’s chat list as their own scheduled conversation. The first run starts a separate provider chat; repeating runs resume that exact task chat. The selected existing conversation contributes model/effort preferences only. No fabricated provider session IDs; sending/voice remain disabled until a real conversation is established. Scheduled runs retain Stop controls.
+- Time picker now offers all 96 quarter-hour options (00:00–23:45). Create/edit API rejects off-quarter times. Future legacy schedules detach from old chats without changing authorized times; already-dispatched one-time work retains its original chat/history. No real schedules, queue records or provider prompts were changed during verification.
+- Final Node 18 suite: 188/188 passed. Focused scheduling/chat: 14/14. Fixture CLI proves first execution excludes resume/old chat ID, while the repeat explicitly resumes the newly established thread. Legacy running-task preservation and resident-owned placeholder/merge checks passed. No paid-provider execution claimed.
+- Isolated Chrome QA verified 15-minute picker options, future task creation while an existing chat was selected, immediate dedicated row, Open chat, reload persistence, waiting copy and disabled Send, then removed the disposable schedule and closed isolated server/browser. Screenshot: docs/screenshots/scheduled-dedicated-chat-qa.png.
+- Final npm run app:build completed; strict deep codesign passed after packaging completed, and all dist (8), bridge (20), shared (23) files matched packaged bytes. Diff whitespace passed. Safely reopened Electron only after the existing real scheduled run finished and API confirmed zero running/interrupted/approved work. Native world/prompter reopened; no new real scheduled tasks were created. Existing audit and uncommitted changes preserved. No commit/push.
+
+# Latest pass — audit only (October 8, 2026)
+
+- Report: [AUDIT_2026-10-08.md](AUDIT_2026-10-08.md). Honest verdict: distinctive working prototype with substantial safeguards, but chat, review and world progression need a more coherent daily loop.
+- Fresh `npm test` on Node 18.16.0: 186 tests, 179 passed, 4 failed, 3 cancelled. CLI API subset failed again; diagnostic child stderr proved both isolated bridges crashed on an unhandled asynchronous `FSWatcher` `EMFILE` error. Inbox catches setup exceptions but has no watcher error listener; its polling fallback does not survive that crash. Live packaged bridge remained responsive.
+- Read-only native inspection covered world/prompter, Connections and Work Now. Seven older review items and an older next action contrasted with newer chat work. No real prompts, queue changes, acceptance, schedules or provider spending. Existing uncommitted work preserved; only audit documentation added/updated.
+- `/api/state` HTTP 200; port 4777 verified as packaged bridge. Strict deep codesign passed; all dist (8), bridge (20) and shared (23) packaged file hashes matched checkout. Diff whitespace check passed. No fresh build or restart: no application/UI changes, and current work remained active.
+- One proposed next pass only, not approved or executed: recover asynchronous Inbox watcher errors with an isolated regression, rerun affected API checks, then package/signature/asset verification. Full details and limits are in the audit report. No production-readiness, performance or real-provider certification claimed.
+
+# Previous pass — local prompt scheduling
+
+- Added Scheduled to each resident’s prompter, with a list/sidebar and a Schedule a task editor matching the reference structure. Create/update once, daily and weekly; time zone, title, pause/resume/delete and same-chat navigation. Empty instruction disables Create. Provider/model/effort captured from the selected chat; attachments excluded.
+- bridge/schedules.mjs persists schedules in the existing PassStore transaction. Due occurrences atomically enter the authorized queue and advance nextAt; no duplicate pending occurrence and one catch-up after missed times. First-run new conversation is retained for recurrence. DST covered. Failure/interruption pauses recurrence; removal pauses project schedules. Queue/result ownership and local-origin guards retained.
+- Full Node 18 suite: 186/186 passed, including 5 scheduler tests and a real spawned fixture CLI that returned a structured response into the exact resumed chat. API rejects foreign origins, missing residents and foreign chat IDs. No paid-provider execution, real schedules, prompts, queue edits, acceptance, publishing, commits or pushes during QA.
+- Isolated Chrome QA: create daily, pause, edit weekly, persistence/reload, resume, delete, Open chat, and disabled empty Create verified. No prompts dispatched during UI QA; existing fixture chat preserved. Screenshots: docs/screenshots/scheduling-editor-qa.png and scheduling-list-qa.png.
+- Final npm run app:build completed; strict deep codesign and all dist/bridge/shared packaged bytes verified. Safely reopened with zero active/interrupted/queued game work and zero real schedules. Verified Scheduled in the real Electron prompter; left its empty view open. Screenshot: docs/screenshots/scheduling-electron.png. Isolated server and browser closed.
+- Limitations: local bridge must run/computer awake; no background/cloud scheduling, notifications beyond existing chat/activity behavior, or scheduled attachments. Real provider scheduling remains untested; fixture runner boundary is verified.
+
+# Latest pass — fence, couch and traveling-tag fixes
+
+- **Fence (`web/src/lot.js`):** the yard now ends at `YARD_Z = 7.45`, short of the lot-side sidewalks (z ±7.7). The front fence and side fences no longer cross the sidewalk. Front-yard items moved inside it:
+  - mailboxes and the Conversation shelf sign (z 7.0), corner bushes, the back trees, the front wander spots;
+  - the level-3 arch and hedge (z 7.2 / 6.95), the level-4 fountain and flag (now beside the house), the level-5 path lanterns (one pair at z 6.3);
+  - the stepping stones (2 instead of 5).
+  - Build-mode "in the yard" validation uses the same bound. The human's real style.json has no decor past it; demo QA decor at z 7.5 now sits just outside.
+- **Couch (`web/src/sim.js`):** the `relax` and `doze` poses (couch-only) use `COUCH_Y = -0.31` instead of the desk-chair height, so Sims sit on the cushions rather than sinking into them.
+- **Traveling tag (`streetlife.js`, CSS):** the two-line card is now a slim one-line pill, "Name · Traveling" (~96×19 px). It anchors just above the head (y 2.35, bottom edge on the point), so it never covers the walker.
+- **Checks:**
+  - **QA** (isolated demo :4778/:5178, hidden Electron capture): fence corners and the street side, Lola on the couch close up, a forced street-life trip with the walker fully visible under the pill.
+  - **Tests:** npm test 181/181. `git diff --check` clean.
+  - **Build:** `npm run app:build`, strict codesign and dist parity passed. Client-only change: ⌘R in the running app. No commit or push.
+
+# Latest pass — Projects view visual cleanup
+
+- The Agents/Projects switch in Your agents is now a compact segmented control: soft track, white selected pill, no full-accent block.
+- The oversized "Create new" and "Import existing" buttons are replaced by an action row:
+  - home count on the left, small pills "New" (accent tint, folder-plus icon) and "Import" (ghost, folder-input icon), and a small refresh icon.
+  - Behavior and data attributes are unchanged. The import list's new close button also clears `importing`.
+- **Project list:** compact rows like the agent list. Each has an accent house tile, name, "Observed folder · N residents" and a monospace path. The trash icon shows only on hover or focus, centered at the right with a warm hover; no more bordered card with a bottom trash row.
+- **Import list and New form:** soft cards, each with a small header and close button.
+  - Import rows end in an "Add" pill, or a muted "Added".
+  - The form has tighter fields, a solid accent "Add project" and a ghost "Cancel".
+  - The status message is an info row and is hidden when empty.
+- **New icons:** folderPlus, folderInput.
+- **Checks:**
+  - **QA** (isolated demo :4778/:5178, hidden Electron capture): default list, New form and import list (page-only mocked list response, because demo rejects local projects), in day and at night. Contrast checker 0 failing.
+  - **Tests:** npm test full suite passed. `git diff --check` clean.
+  - **Build:** `npm run app:build`, strict codesign verify and dist parity passed. Client-only change: ⌘R in the running app shows it. No commit or push.
+
+# Latest pass — project trash icon
+
+- Replaced project-card Remove text with the existing Lucide trash icon; accessible removal label and preservation tooltip retained. Removal behavior unchanged.
+- Syntax and diff checks passed. npm run app:build completed; strict deep signature and packaged asset parity verified. Safe reopen performed with no active/queued game work.
+
+# Latest pass — remove a project home
+
+- Added Remove to each Your Projects card, with local-origin/selected-home validation. Removes only the explicit world selection, preserving files, Codex projects, resident identities and history for re-import. Rejects running or queued game work and active voice.
+- Live removal detaches home/residents and refreshes visible catalogs without reloading the app or interrupting other projects. Last removal restores the vacant lot.
+- Focused project API suite 5/5 passed: removal origin guard, persisted empty selection, read-only list after removal, files/identity preserved, repeated-removal rejection and re-import identity. Isolated browser verified immediate 0 projects/0 homes, vacant lot and success message; no console errors. Screenshot: docs/screenshots/project-removal-qa.png. Real user project remains selected; no real removal during QA.
+- Final npm run app:build completed; strict deep signature passed after signing finished, and dist/bridge/shared packaged assets match. Safe Electron reopen performed with 0 running/interrupted/approved game work; real selected project retained.
+
+# Latest pass — explicit project onboarding
+
+- Removed automatic Codex project imports from list requests. New persistent world selection starts empty and preserves existing households/history without deleting files or Codex projects.
+- Empty world shows a vacant lot with Add your first project. Projects sidebar offers Create new and Import existing, with per-project explicit import and Already added state. Small-window project navigation remains accessible.
+- Tests: full Node 18 suite 181/181 passed, including read-only listing, explicit import, invalid import rejection and selected folder persistence. Isolated browser verified vacant-lot CTA, read-only import browsing (0 homes), explicit import (1 home/off-duty resident). Final app:build completed; strict deep codesign passed and dist/bridge/shared bytes match the package. Safe Electron reopen performed after verifying 0 game-owned active/queued runs. Real Codex registry and household history preserved.
+
+## Latest pass: local Codex projects in sidebar, one home per folder (2026-10-08)
+
+User asked for a Projects view inside Your agents and local Codex project creation, with every project represented by a home.
+
+- New Agents/Projects sidebar switch, sorted project list, Add project form (name, folder, create-if-missing), refresh and home focus. Existing observed folders remain visible. Inputs retain the retry key unless edited; failures are surfaced; no global account configuration is modified.
+- bridge/local-projects.mjs uses installed Codex 0.160.0 experimental project/list and project/create (validated against generated protocol). Paginates, canonicalizes local primary roots, skips missing folders, serializes creates and reuses existing root entries. Creates at most the requested folder, preserves all existing files and retains newly created folders after provider failure. No turn/thread execution.
+- /api/codex-projects is a guarded local-origin JSON POST. List registers valid local roots as homes; create registers only confirmed metadata. Duplicate canonical folders reuse one home. Provisioning slot 1 produces a persistent off-duty resident; sessions and work queues remain unchanged. Demo rejects real project mutation.
+- Node 18 full suite 181/181; five new focused tests cover protocol initialization, deduplication/files, errors, pagination, API origin/persistence and no fabricated activity. Syntax and diff checks pass. Real CLI verification used empty isolated CODEX_HOME, created a project, then verified durable listing. Browser UI in isolated AGENT_WORLD_HOME/CODEX_HOME created a second project: success feedback, 2 homes, 2 residents, 0 sessions/runs/proposals. Final list and Add form visually checked.
+- npm run app:build succeeded after final styling. Completed codesign --verify --deep --strict passed; dist/bridge/shared files exactly match the package. Real Electron safely reopened; loaded Agents/Projects tabs verified. Left Agents selected; existing project homes will import when Projects is opened. No real project registry writes during QA, commits, pushes, prompts or spending. Isolated QA resources are separate from the user's registry.
+
+Known bounds: local projects only, primary root for multi-root projects; no cloud ChatGPT synchronization. Prompt execution still uses existing folder/session routing. Native Codex projectId assignment for game-created conversations remains a future step; do not claim conversation membership merely from matching folders. Opening the real Projects view imports available registry roots as homes, which can increase the rendered world; large-world performance is not verified by the two-home QA.
+
+## Latest pass: remove Connections Start here section (2026-10-08)
+
+Scoped human authorization: remove the Start here section from the overlay plug-icon modal. Removed only its heading and three instructional cards in `web/src/experience.js`; Open Work, Chats, usage, source observations and coverage notes remain. Updated the corresponding README description. Preserved pre-existing uncommitted work.
+
+Checks actually run: `node --check web/src/experience.js`, `git diff --check`, `npm run app:build`, and `codesign --verify --deep --strict --verbose=2` passed. SHA-256 comparisons confirmed all 49 files in packaged dist/bridge/shared match this checkout; built JavaScript omits Start here. Chrome visual/accessibility QA of the refreshed production build on temporary Vite preview port 5189 confirmed the Connections modal has no heading/cards and retains Open Work and Chats. Preview used the configured read-only bridge proxy; no sample metadata/events were created. Temporary tab and preview server were closed.
+
+Limits: full test suite was not run for this markup-only removal. Build retains existing large-chunk and packaging warnings; package is ad-hoc signed, not notarized. GET `/api/state` succeeded; process inspection via `ps` was sandbox-denied, so bridge process identity was not verified. State reported one running run/proposal; no app quit/restart was attempted. Running Electron window still needs a safe reopen after active/approved/queued work finishes; native refreshed-window verification remains pending. No queue/task mutations, prompts, acceptance, spending, messages, commits, pushes or publishing were performed. Stop after this pass; no next pass proposed.
+
+## Latest pass: Claude conversation effort selector (2026-10-08)
+
+User authorized adding Claude effort selection. Installed CLI help confirms --effort accepts low/medium/high/xhigh/max. Official Claude model configuration says supported levels and caps depend on model/policy and unsupported requests can be reduced; the UI describes requested effort rather than claiming effective reasoning.
+
+- Same composer model menu now has Default/Low/Medium/High/Extra high/Max slider for Claude, with effort in the pill. Reset effort preserves selected Claude model. Default omits the CLI flag.
+- Effort is isolated by provider/project/thread, persisted locally, recovered from the most recent run when a new thread establishes its UUID, and pinned into each authorized prompt. Resumed runs pass --effort with the exact --resume session. No global Claude settings are changed.
+- Backend rejects Codex-only or unknown effort values for Claude. /api/models includes requested effort separately from actual reported model identity.
+- Full Node 18 suite: 176/176. Additional updated runner test verifies Default omits --effort and preserves UUID; focused suite passes. npm run app:build passed, completed signature verification passed, dist/bridge/shared packaged bytes match.
+- No real prompts, auth/config changes, queue mutations, commits or pushes. Native app reopened after no game-owned running/interrupted/approved/queued work and no open draft were confirmed. Native Electron UI verified: Claude Opus menu shows the effort slider; incrementing Default to Low updates its title and pill to Claude Opus Low; Reset effort restores Default while preserving Claude Opus. Restored original effort and submitted no prompt. Actual paid/provider execution with the new effort remains unverified.
+
+## Latest pass: per-conversation Claude model selection (2026-10-08)
+
+User authorized adding Claude model selection. Verified installed Claude Code 2.1.292 --help supports --model and --resume; official model configuration documents Sonnet/Opus/Haiku aliases.
+
+- Composer model menu supports Claude Sonnet, Opus, Haiku and configured default, keeping the current Claude session. Preferences are isolated by provider/project/thread and saved locally. Last requested alias from run records restores a new chat's selection after its UUID is created.
+- /api/models is provider-aware. Claude returns supported CLI aliases, not a claimed live account catalog. Foreign-provider thread queries fail. Last actual model is recorded from the Claude init event and displayed separately from requested selection.
+- Proposals validate Claude choices. Runner passes --model for new and resumed Claude runs; default omits override. Configured effort is preserved. Exact resident ownership and execution permissions remain intact.
+- Full Node 18 suite: 174/174. Updated isolated API tests: 2/2. Mock runner verified --model with --resume and unchanged permission flags. No real Claude prompts, spending, queues or authentication changes.
+- npm run app:build passed; completed package codesign --verify --deep --strict passed, dist/bridge/shared match the package. Reopened only after confirming no game-owned running/interrupted/approved/queued work and no open draft. Native Electron verification: switched Otto to Claude, saw Default/Sonnet/Opus/Haiku options, selected Opus and verified the composer pill changed to Claude Opus, then restored configured default. No prompt submitted. Left Claude controls open for review. Actual account/model execution remains unverified. No commit or push.
+
+## Latest pass: Codex voice transport and composer controls (2026-10-08)
+
+User requested spoken prompting and replies through the Codex route. Implemented bridge/voice.mjs, /api/voice and scoped SSE, web/src/voice.js and composer microphone controls. Exact conversation ownership, local-origin guards, one active execution, pending approval exclusion and explicit tool approvals are preserved. Transcript text is actual returned speech; no fake activity or raw recording is persisted. Voice call runs end as cancelled or failed, never as accepted work. macOS microphone usage description added.
+
+## Codex voice (experimental, 2026-10-08)
+
+The Codex composer has a microphone button for the selected resident and conversation. It starts a thread-scoped app-server realtime session, captures mono PCM audio, plays returned audio, and shows provider-authored live transcripts. Mute and End voice controls are available during a call; closing the drawer ends the call and interrupts associated execution. Conversation/provider switching and text sends are locked during voice. Only one call can run, and approved/queued execution must finish first. Command/file permission requests require a human decision. Raw audio is held in memory, never saved by Agent World; returned transcript text is saved to that resident's chat.
+
+**Current blocker:** the installed Codex CLI 0.160.0 rejected both default and v3 realtime connections with `realtime conversation requires API key auth`. Thread initialization succeeded but zero audio chunks were returned. ChatGPT sign-in alone has not worked for this route. No API-key login, paid fallback, or authentication change was performed. UI/transport wiring is implemented, but two-way audio, speech quality and microphone permission behavior are not verified end to end. This must not be described as working subscription-backed voice.
+
+Checks so far: full Node 18 suite 171/171 before final canonical transcript streaming changes; focused transport/API suite 9/9 after them. Final full Node 18 suite: 172/172. `npm run app:build` succeeded; `codesign --verify --deep --strict` passed. All 8 dist files, 18 bridge files and 23 shared files match the package; microphone usage description is present. Native microphone permission, live audio and voice UI interaction are unverified. Current API snapshot had no running/interrupted runs or approved passes. No queues in the real game were changed, no commits/pushes, no auth changes, no microphone recording. The existing running Electron process needs a safe quit/reopen to load its new bridge; it was not restarted during this pass.
+
+Next: resolve Codex voice authentication via a supported route before promising live voice. If API-key auth is chosen, obtain explicit user direction, document billing/auth effects and verify genuine microphone input plus returned speech. Do not silently replace existing ChatGPT login or use unsupported private endpoints. Scheduling, handoffs and project creation remain separate roadmap work.
+
+## Latest pass: "Your projects" panel becomes "Your agents" (2026-10-07)
+
+Human asked to rename the left panel to "Your agents" and, for now, show only the list of agents with their status and when they were last seen.
+
+- `web/index.html`: title "Your agents"; collapse label "Collapse agent list".
+- `web/src/ui.js` `renderRoster`/`rosterRow`:
+  - A flat list replaces the project groups. Sorted by needs-you, error, working, idle, then off duty, alphabetical within each.
+  - Each row: portrait with status ring, name, status (the same `Sim.statusText` the bubble uses, so Traveling appears while walking; "Offline" while observation is disconnected) and last seen.
+  - Last seen is "Now" for active sessions; otherwise relative time from the observation timestamp or `character.lastSeen`, with the full date in the tooltip, or "Never".
+  - Count reads "N agents · M active". Clicking a row still focuses the agent.
+  - Removed the now-unused stateText/appChip/WAIT_REASON and the conversationLabel/brandOf imports. Off-duty rows are no longer faded, for readability.
+- **CSS:** new `.agent-row` layout.
+- **README:** controls table updated.
+
+Checks:
+- **QA** (isolated demo :4778/:5178, hidden Electron capture): day and night show the title, "9 agents · 5 active", rows like "Kai · Explore helper | Traveling | Now" and "Iris | Off duty | 2d ago". Contrast checker 0 failing in both modes. Clicking a row opened that agent's panel.
+- **Tests:** npm test 165/165.
+- **Build:** `npm run app:build`, codesign verify and dist parity are in the build step below. The running app needs ⌘R (client-only change).
+
+## Latest pass: no "Done, your turn"; bubbles show only name and status (2026-10-07)
+
+Human asked to remove "Done, your turn" completely (agent panel card, bubble status, everything), have finished agents return to their usual routine, and limit bubbles to name plus status, with "Traveling" while walking.
+
+- **Truth normalization (`shared/schema.mjs` `normalizeEvent`):** `waiting_for_user` with reason `turn_complete` is recorded as `idle` with no detail. Inbox reads (live and replay) and adapter emits both pass through it, so no client path ever sees a finished-turn wait. Permission and question waits are unchanged.
+- **Removed finished-turn surfaces:** the "Done, your turn" activity and agent-view label, the toast text, the WAIT_REASON entry, the finish cheer and the finish chime choice. Idle agents already fall through to flavor activities (verified in QA: couch, coffee, books, globe, wander).
+- **Bubbles (`sim.js` `statusText`):** icon, name and one short status only: Working, Needs your OK / Has a question / Needs you, Error, Idle, Off duty, or Traveling while the Sim has a path (navigation icon). No activity text, conversation line, targets or wait timer. Chip mode now includes the status; zoomed-far icons are unchanged; offline still shows "Last seen …".
+- **Street-life walkers:** the tag is now name plus Traveling, or Off duty while at the business, restyled like a bubble.
+- **Docs:** README, plus CONCEPT's mapping table and a new section.
+
+Checks:
+- **Tests:** npm test 165/165 (new `test/schema.test.mjs`; updated activity and agent-view expectations; the turn-boundary fallback keeps older records working).
+- **QA stack** (isolated demo :4778/:5178, hidden Electron capture):
+  - Bubble texts in day were all name plus status, including "Eli · Explore helper · Traveling".
+  - 60 s sampling saw Working, Off duty, Traveling, Needs your OK, Error and Idle, with 0 "your turn" anywhere on the page.
+  - Idle agents went to their routine.
+  - An idle agent's panel shows an "Idle" card.
+- **Build:** `npm run app:build`, codesign verify, dist and schema parity.
+- **Running app:** the open Electron app still runs the old bridge and tailer in memory, so it needs quit and reopen (⌘R alone updates only the bubbles and client). Not restarted by the agent. No commit or push.
+
+## Latest pass: model picker with effort slider, provider toggle and Connect an app redesign (2026-10-07)
+
+Human feedback: the model selector should look like their reference (pill "GPT-6.1 Sol Medium ⌄"; popover with a big effort title, model name with ›, reset icon, and a stepped slider), the Codex/Claude dropdown placement was unappealing, and Connect an app still looked out of theme. Their screenshot was the stale window: the package already had the previous restyle, but the open window hadn't been reloaded.
+
+- **Model picker (`web/src/conversation-models.js`, rewritten):**
+  - Quiet pill: model, muted effort, chevron. The popover is a segmented Codex | Claude Code toggle, then a brain icon, the accent effort title, "Model ›" (opens a model-list view with back arrow, check and descriptions) and a reset button (clears model and effort).
+  - The effort slider is a range input over the model's supported efforts, with a custom track, fill, stop dots and white thumb, plus the effort description underneath.
+  - Claude shows a "configured model" card. A locked provider shows a reason.
+  - Effort and model choices are per project/thread and apply to the next message. The prompter defers live re-renders while the slider is dragged.
+- **Provider:** the composer `<select>` is removed. `PassCard.setProvider()` replaces its change handler; same lock rule as before (disabled while the resident is busy or sending).
+- **Effort end to end:**
+  - `bridge/models.mjs` exposes each model's `efforts` and `defaultEffort` from Codex `model/list`, filtered to known values (`EFFORTS`, `validEffort`).
+  - `bridge/passes.mjs` validates `effort` (rejected for Claude) and pins it on the proposal, the run and any next proposal.
+  - `bridge/pass-runner.mjs` passes `-c model_reasoning_effort=<effort>` to Codex.
+- **Connect an app (`web/src/computer-use.js`):**
+  - Added a Codex ⇄ app hero whose link is dashed, then animates while busy, turns green with a check when verified and red when failed.
+  - The field has a labelled input with the app's initial badge, quick-pick chips (Agent World, Finder, Safari, Notes, Xcode; they only fill the field) and a full-width accent "Request app access".
+  - Approval card has App and Risk rows (risk chip colored by level), Always allow / Allow once / Deny, then a note. Status line with tones; footer with Cancel or "Reads the app only".
+  - Fixed night primary buttons (a night rule outranked `.primary`), and greens darkened for white-text contrast.
+- **Icons:** rotateCcw, chevronRight.
+
+Checks:
+- **Tests:** npm test 163/163, including new effort tests (CLI receives `-c model_reasoning_effort=high`; invalid and Claude effort are rejected) and the catalog-efforts test.
+- **QA stack:** isolated demo on :4778/:5178, captured through a hidden Electron/CDP window.
+  - Picker in day and night: pill, popover, slider moved Low→Medium updated both the pill and the title, model list, Claude view. Uses a page-only `/api/models` mock with the real Codex catalog shape, since demo returns unavailable.
+  - Connect an app initial, approval and verified states in day and night via a page-only fetch mock.
+  - Contrast checker 0 failing on all of the above.
+- **Build:** `npm run app:build`; codesign verify passed; dist and changed bridge files match the package.
+- **Running app (:4777):** already serves the new UI (⌘R), but its bridge process is the old code, so the effort slider shows no levels until the app is quit and reopened. Checked the live queue: no approved or running passes. Not restarted by the agent. No commit or push.
+
+## Latest pass: UI visual upgrade across menus and modals, including the new ones (2026-10-07)
+
+Human asked for a visual pass over every menu and modal so the newer additions match the rest. QA ran on an isolated stack (AGENT_WORLD_HOME scratch, demo, runner off, :4778/:5178). Full-resolution captures came from a hidden offscreen Electron window over CDP, with a WCAG checker run in day (noon) and night. The checker's gradient bug, which overstated failures, was fixed mid-pass.
+
+- **Connect an app (`computer-use.js`, CSS):**
+  - Was a dark, browser-default dialog in both themes. It now uses the shared panel head (plug icon, title, subtitle, icon close), a themed input and pill buttons.
+  - The approval card is accent-tinted with an App / Details / Provider risk list and Always allow (primary) / Allow once / Deny (warm text).
+  - The status line has tones (info, busy with a spinning hourglass, good, bad), and Cancel connection sits in a footer.
+  - Logic and data attributes are unchanged. Approval state was previewed with a page-only fetch mock; nothing reached Codex or the bridge.
+- **Prompter's newer pieces (`pass-card.js`, CSS):**
+  - Search has an icon and themed field (the `.pass-card input` specificity clash is fixed).
+  - Archived chats and Back to chats are icon rows aligned with the list. Thread archive and restore use Lucide icons instead of ▣/↶ and appear on hover like rename.
+  - The provider select is a pill matching the model pill, with a theme chevron and themed options. The attach button is a soft round button. Attachment chips are accent pills.
+  - Workspace and review-finding reports are themed cards with tighter type and inline code chips. Execution notes use ink-3, and Stop is a warm pill.
+  - Dark-only hard-coded greys are replaced by tokens, so all of these read in day as well.
+- **Review dialog:** the output link uses accent-ink (was default blue, 1.4:1 at night) and the night consent row is readable. "Review recorded" and "Task handoff" got header icons and icon close buttons.
+- **Chats:** home filters are horizontal chips like Work's home row.
+- **Connections:** the usage box is a filled card.
+- **Every modal's close button:** one size (32 px circle, 16 px icon, same hover). Before there were 12.5, 18 and 22 px variants plus text ×.
+- **New icons:** archive, archiveRestore, search.
+
+Checks:
+- **Contrast checker, day and night:** 0 failing on Work, Chats, Play, Connections, Rewards, Downtown, Album, the prompter (empty, plus a sample conversation with attachments, review findings, worktree report and Stop injected page-only), the model and usage popovers, Connect an app (form and approval), Review work, New task, the agent drawer, and the walls, quality and help menus.
+- **Tests:** npm test 161/161.
+- **Build:** `git diff --check` clean. `npm run app:build` passed; `codesign --verify --deep --strict` passed; packaged `dist/` matches the build byte-for-byte.
+- **Running app:** the open Electron app (:4777, PID 18801) already serves the new asset hashes from its bundle, so a window reload (⌘R) shows the update. It was not restarted or reloaded by the agent, and nothing queued or running was touched. No commit or push.
+
+## Latest pass: simpler chat list and composer Send / Stop (2026-10-07)
+
+Human requested names only in the conversation sidebar, removal of the imported-message/provider explanatory paragraph and inline Stop buttons, and one composer icon: empty while active → square Stop, typed draft → Send arrow. Implemented those changes, accessible labels/types and filled square icon. Empty Stop bypasses required textarea validation. Stop targets only the displayed resident/provider/conversation game run (or queued prompt), never unrelated or external observed work. Stop-requested runs disable repeat Stop while still allowing typed follow-ups.
+
+Implemented explicit human-message enqueue support because the prior backend rejected active-run sends. Preserve active/approved proposals, approve follow-ups independently, serialize execution through existing runner lock and resume exact owned UUID. Messages sent before first UUID depend on that proposal; a failed start pauses dependent work instead of creating a fresh chat. Multiple queued messages remain visible. A model’s suggested next pass cannot replace human queued messages. Existing non-enqueue proposal approval safeguards and interrupted-run inspection gates remain. No actual provider prompts or real queue mutations during tests.
+
+Checks: Node18 full suite 160/160 passed; final focused queue/chat/composer regression checks 28/28 passed, including the added displayed-run targeting check (161 total tests after that addition). npm run app:build passed; final codesign --verify --deep --strict passed and all dist assets, bridge/passes.mjs and shared/chat.mjs match the package. Safely reopened idle Electron (zero running/approved game passes) and refreshed final frontend; native UI confirms names-only sidebar, missing paragraph and idle Send arrow. Screenshot docs/screenshots/composer-sidebar-electron.png. The Send/Stop transition and serialized follow-ups were verified with isolated store fixtures and a UI-method harness; paid-provider execution was not exercised. Existing unrelated changes preserved, no commit or push.
+
 # Agent World next-pass handoff
 
-As of 2026-10-06. This is a development handoff, not proof of release readiness. Recheck Git, listeners and live state when resuming.
+As of 2026-10-07. This is a development handoff, not proof of release readiness. Recheck Git, listeners and live state when resuming.
+
+## Latest pass: require and run Electron builds after updates (2026-10-07)
+
+Human requested a new Electron build whenever an application update is made. Added the requirement to AGENTS.md and README.md: run npm run app:build after application code/UI updates, verify signature and packaged asset parity, and do not interrupt queued/approved/running work to restart. This requirement does not expand pass scope or authorize publishing/queue changes.
+
+Executed npm run app:build successfully, including the prior Watch activity footer removal. codesign --verify --deep --strict passed. All eight dist files and all bridge/shared files match the packaged copies byte-for-byte. Built-JS assertions confirmed the footer Watch activity button is absent and Connect an app remains. git diff --check passed. Existing large-client-chunk, missing author, disabled asar and skipped notarization warnings remain. No full test suite rerun for documentation/build-only changes.
+
+Updated package: release/mac-arm64/Agent World.app. Running Electron :4777 PID 87042 was left open; this runner pass must finish before a safe restart. No claim of refreshed running-window visuals. Reopen the built package when no queued/approved/running work would be interrupted; local ad-hoc rebuilds may require renewed human OS consent, as recorded below. No prompt, queue/task mutation, future approval, acceptance, spend, commit, push or publish. Existing uncommitted changes preserved. Stop after this pass; no next pass executed or proposed in the queue.
+
+## Latest pass: remove Watch activity from prompter footer (2026-10-07)
+
+Scoped human authorization: remove the Watch activity text next to Connect an app at the bottom of the prompter. Removed only that button markup in web/src/pass-card.js; Connect an app and the separate activity drawer remain. Preserved existing uncommitted work. No queue/task/planning metadata changes, prompts, future-pass approval, commit, publish or push.
+
+Checks actually run: node --check web/src/pass-card.js passed; npm run build passed with the existing large-chunk warning; git diff --check passed. Targeted source assertions confirmed the footer button is absent, Connect an app remains and the activity drawer title remains. Live :4777 root returned HTTP 200; lsof identifies its Electron listener cwd as this checkout's release/mac-arm64/Agent World.app/Contents/Resources/app. Process command inspection via ps was denied by the environment. Browser verification was attempted but the in-app browser provider was unavailable. No visual verification claimed.
+
+Runtime limit: built dist is updated, but the running Electron package was not rebuilt or restarted during this approved runner pass. It still contains its prior snapshot and may still show the removed button. Full test suite not rerun for this one-button markup removal. No next pass executed or queue proposal created. Stop after this pass; packaged refresh and visual review would require a separately authorized pass.
+
+## Latest pass: confirm Electron computer-use access after human OS approval (2026-10-07)
+
+Human reported completing all requested approvals and asked whether setup is good and how to see it in the UI. Verified the live packaged app without rebuilding or changing permissions. Milo's prior read-only run 3c3dad21-effc-401f-ae56-78fbe75e49d1 FAILED after the filesystem gate cleared: Codex desktop currently owns conversation 01a11890-d6d7-7161-aeb8-7231dfbc4503. CLI reported that the prompt was not executed, with no automatic retry. Do not infer native-tool use from that run or silently move it to a new conversation.
+
+From Milo's actual Electron prompter, clicked Connect an app → Request app access for Agent World. Fresh setup connection 7a2d229f-06e5-4f12-8e91-9c19834381b4 returned status=verified, message “Native app access verified.” at 2026-10-08T00:11:46.246Z. No approval was requested again and no model turn was started. UI visibly shows the same verified message with Agent World as the target. Screenshot docs/screenshots/computer-use-verified-electron.png. Left that verified modal open for the human. This proves native access to THIS app in the packaged setup connection; it does not mean every app is allowed, prove editing/actions, or resolve conversation ownership. Normal game-prompt computer-use execution remains unverified because the existing test chat is owned by Codex desktop. Human can explicitly choose New chat in the game or continue the existing chat in Codex. No new chat, extra prompt, grant, acceptance, commit, push, or rebuild this pass. Documentation-only changes; git diff --check passed.
+
+The previous startup/OS-gate notes below are historical, superseded by this observed packaged verification. The ad-hoc rebuild/signature caveat still applies to future builds.
+
+## Latest pass: verify human app approval and fix first-use response parsing (2026-10-07)
+
+Human selected Always allow in the actual Electron setup flow, then requested verification. Live /api/state recorded choice=always but unavailable with message “## Computer Use”. A fresh direct Codex app-server call returned isError=false and TWO text blocks: introductory Computer Use documentation, then the real Window: Agent World native state. No approval was requested in that fresh connection, establishing saved native-app permission for this target. Fixed bridge/computer-use.mjs to inspect all text blocks instead of only the first; documentation alone still does not count as successful app access. Added the documentation-before-window regression test. Focused service/API tests: 11/11 passed. Electron production build and final codesign verification passed; reopened the rebuilt app. Existing work preserved; no commit/push.
+
+IMPORTANT: repeated packaged startup stall now has concrete OS evidence. macOS tccd logged “Failed to match existing code requirement” for dev.agentworld.app / kTCCServiceSystemPolicyDocumentsFolder after the rebuild, followed by AUTHREQ_PROMPTING with no completion. Ad-hoc code hashes differ across builds. A sampled normal CLI process blocks inside current_dir/getcwd/open before recording a new turn. This is a separate macOS folder-access consent from the user's saved Codex native-app approval. System Settings → Privacy & Security → Files & Folders → Agent World was opened and expanded. Documents Folder shows ON for the existing grant, but macOS still awaits the renewed signature-specific request. No OS or native-app permission was granted by the agent. Do not manipulate TCC records or signature requirements to bypass consent. For repeatable release updates, use legitimate stable developer signing; do not claim that local ad-hoc rebuilds retain OS approvals.
+
+Authorized one bounded read-only native-access prompt through Milo's EXISTING game test conversation 01a11890-d6d7-7161-aeb8-7231dfbc4503. Run 3c3dad21-effc-401f-ae56-78fbe75e49d1 is waiting on the OS permission before a new turn/tool call. Prompt restricts inspection to Agent World and two visible labels; prohibits modifications, other apps, substitute HTTP/shell/source inspection and next work. Do not resubmit or create duplicate chats. After the human approves Documents access for the current build, verify this existing run's actual tool result and game feedback. Until then ordinary Electron prompting remains unverified. Screenshot of the exact Settings screen: docs/screenshots/computer-use-documents-settings.png. System Settings and game left open for the human; no pending approval was accepted automatically.
+
+## Latest pass: in-game Codex computer-use approval (2026-10-07)
+
+Human requested a self-service game flow for native application access. Located the bundled computer-use policy code: native app selection calls nodeRepl.createElicitation with provider metadata (app, risk/warning, persistence). Existing codex exec runs have no game handler for that request. A real direct app-server probe received mcpServer/elicitation/request with Agent World, get_app_state and session/always choices; probe declined without granting access. This is a supported protocol path, not editing provider permission files.
+
+Added bridge/computer-use.mjs and guarded POST /api/computer-use. A separate ephemeral app-server thread directly calls cua_repl.js / cua.getApp; no model turn, prompt queue mutation or durable conversation. Provider-generated native-app requests are surfaced with a fresh approval ID and offered persistence choices; unknown requests are declined. Human decisions alone grant access. Origin, resident ownership, stale response, cancellation, timeout, input quoting, response size and old-connection shutdown guards apply. Native interface return alone sets verified for this setup connection. Normal codex exec prompting retains its prior fixed execution policy.
+
+Added web/src/computer-use.js and Connect an app in the Codex prompter footer. Modal accepts a native application name/bundle ID, presents the actual request and provider warning/risk, explains Always allow vs Allow once, and reports connecting/verified/unavailable/cancelled honestly. Closing cancels pending requests. Demo mode disables real app connections. README, CONCEPT and skill navigation updated. Existing changes preserved; no commit/push.
+
+Checks: Node18 full suite 155/155 passed after startup-timeout and connection-lifecycle guards. Initial Node22 npm test directory invocation failed to discover test/; reran the project's Node18 suite successfully. Focused service/API tests and the final production Electron build passed. Final ad-hoc codesign verification passed and packaged computer-use.mjs SHA256 matched the checkout; reopened the final app. First desktop UI test found API fallthrough to the conversation handler; corrected return and added integration regression coverage. Closing during an in-flight request cancels that exact connection; stale polls cannot replace a reopened dialog. Startup has a separate 20-second timeout; interactive approval has a three-minute timeout. Setup runs in the temporary directory, disables shell snapshots and personal memories, and removes inherited parent-chat identity/IPC variables; ordinary prompts retain existing behavior. No provider stderr or native interface text is retained in setup state. Protocol diagnostics contain only method/id/error flags.
+
+Verified real UI: an isolated AGENT_WORLD_HOME bridge on :4788, launched from this development environment, displayed the real provider request “Allow Computer Use to use Agent World?” with dev.agentworld.app, low risk and Always allow / Allow once / Deny inside the game. Screenshot: docs/screenshots/computer-use-approval-qa.png. Closed/cancelled the test; zero proposals/runs and no saved approval. No model inference was started. Temporary QA server/tab cleaned up.
+
+IMPORTANT OPEN BLOCKER: packaged Electron-owned app-server initializes but stalls at thread/start before a permission request. Same ComputerUse class, Electron Node binary, working directory and reproduced GUI environment work when launched from this development shell. Provider sampling found a blocked filesystem read_dir; earlier startup also logged shell-snapshot timeout. Exact cause is unresolved; do not claim TCC, shell configuration or inherited identity as the proven cause. Changing cwd, parent-context variables and disabling optional initialization features has NOT established standalone packaged success. Final build includes a clear startup timeout rather than an indefinite spinner. Development-browser flow is verified; standalone Electron approval flow is not ready. The in-game button exists, but packaging success is not runtime success.
+
+Next work: isolate the packaged process's filesystem startup stall without bypassing macOS/provider restrictions. After that, let the human choose app approval in the game, then run a separately authorized ordinary game prompt to prove saved access. Never click Allow once/Always allow on their behalf. No claim that all apps or first-time OS permission installation work without ChatGPT; installed/authenticated Codex and its native service remain prerequisites. Existing source changes remain uncommitted/unpushed.
+
+## Latest pass: start human app-approval flow (2026-10-07)
+
+Human requested starting the approval process. This desktop chat could read Agent World through cua.getApp, but a second actual game-runner attempt in Milo’s existing test chat still returned "Computer Use was not approved to use Agent World" (run 01ce15e5-02d5-4e9e-a428-2fc4b6e5e4f8). Thus current-chat permission is not proof of saved access for the independent CLI. Computer Use declined access to Codex itself for safety; no workaround or settings edit attempted. Used the supported Codex navigation and task-message tools to open thread 01a11890-d6d7-7161-aeb8-7231dfbc4503 and start one explicitly human-authorized desktop read-only request for Agent World access. Human should approve via the app’s permission UI, using Always allow if desired. The desktop retry also completed with the same app-approval denial; no approval dialog was confirmed. Human must review Computer Use app permissions in desktop settings. Saved permission and subsequent game-runner access remain to be verified. No code changes, build, commit or push.
+
+## Latest pass: real game-launched computer-use connection test (2026-10-07)
+
+On explicit human authorization, submitted one read-only test prompt to idle Milo through the running Electron bridge on :4777, using the actual fixed-policy Codex runner. Run c9bdd0a8-63ee-4ee1-9ae8-7b2210a9dcad; Codex thread 01a11890-d6d7-7161-aeb8-7231dfbc4503. Verified the raw rollout tool call mcp__cua_repl.js invoking cua.getApp("dev.agentworld.app") and its tool output: "Computer Use was not approved to use Agent World". This establishes tool availability and a responding permission gate, not successful native UI access/control. Runner returned the blocked report to Milo’s game chat with next:null; no files/settings/messages were changed by that test. No retries or permission overrides. No suite/build needed for this verification and documentation-only pass.
+
+Next: human grants Agent World app access in Codex/ChatGPT Computer Use permissions (a saved app approval may be needed for non-interactive runs), then explicitly retry the same bounded native-interface test from Milo’s chat. Verify real labels/screenshots before claiming desktop control works. Keep permission denial separate from successful task outcome.
+
+## Latest pass: remove worktree option from prompter (2026-10-07)
+
+Human requested removing Use isolated Git worktree for this new chat. Removed the checkbox, its draft state/change handlers/provider carry-over and isolate request field from the prompter. New game chats use the project checkout. Existing worktree conversations retain their workspace; no merge/removal or metadata rewrite. Preserved other pending work. Syntax and git diff --check passed; no extra tests added for this narrow UI removal. npm run app:build and codesign --verify --deep --strict passed. All packaged dist assets match the checkout and the worktree checkbox text is absent from built JS. Reopened Electron on :4777 (PID 89251), /api/state responded, and native UI/screenshot docs/screenshots/no-worktree-option-electron.png confirmed the checkbox is gone from a new-chat composer. No suite rerun for this narrow UI removal; prior backend behavior remains covered by the preceding 146-test pass. No real prompts, queue mutations, commit or push.
+
+## Latest pass: fixed prompt policy and settings removal (2026-10-07)
+
+Human requested removing all newly added bottom Run settings controls and fixing their values. Removed ExecutionControls component, event handlers, preference submission and settings CSS. Existing provider/model/attachment/worktree controls and historical findings remain. New workflow always Prompt; Codex workspace-write, shell=true, workspace shell network=true, web_search=live; Claude configured dontAsk permissions, shell tools available, WebSearch/WebFetch allowed where supported. Both inherit CLI MCP/plugins; Codex inheritance is supported and requires no forced-off fallback. Claude configured sandbox/network/tool rules still apply.
+
+Fixed policy is applied at proposal validation, claim and runner startup. Override requests fail, old queued preferences cannot re-enable reviews, and old completed records are preserved. No changes to global CLI config, credentials, plugin installation or real queue metadata. Node18 full suite 146/146 passed, including fixed-policy rejection, old queued preference replacement, and mocked Codex/Claude exact CLI argument delivery. Source syntax and git diff --check passed. Desktop refresh checked zero approved/running/interrupted game runs and an empty native composer before closing the old app. npm run app:build and codesign --verify --deep --strict passed; packaged execution policy/runner/store and all dist assets match source. Reopened Electron :4777 listener PID 78685 and verified /api/state. Native UI and docs/screenshots/fixed-policy-electron.png confirm no Run settings or review/permission/search/MCP controls; existing composer controls remain. No real prompt/service calls were submitted. App remains open. Inherited packaging warnings remain. Preserved pending changes; no commit or push.
+
+## Latest pass: reviews, integrations, search and execution controls (2026-10-07)
+
+Authorized scope: code review workflows, MCP/plugins, supported web search, configurable execution access. Preserved all prior pending changes; no commit or push. Run settings in the composer pins preferences to each message and reuses recorded settings for its chat; running turns are unchanged.
+
+Implemented structured review workflow with changed-files/branch/commit scopes, bounded Git input and recorded HEAD/reference/diff digest/time. Reviews use the existing structured prompt CLI (not Codex native exec review), return validated P0–P3 file/line/impact findings in chat, and forbid fixes/acceptance/next execution. Zero findings is a reported result, not correctness evidence. Reviews/read-only access disable external integrations; Claude read-only restricts built-in tools rather than providing an OS sandbox.
+
+Codex: read-only/workspace-write, shell tool and workspace shell-network toggles, default/off/cached/live search, unattended approval_policy=never. Claude: configured dontAsk, explicit acceptEdits with permission-prompts=none, read tools only, shell deny and default/off/on WebSearch/WebFetch. No dangerous permission bypass controls. Web/MCP availability remains provider/account/managed-policy dependent; configuration is not observed use.
+
+Integration catalog returns configured MCP/plugin names/enabled metadata only, never secrets; Codex MCP list JSON plus local user/project plugin tables, Claude MCP/settings metadata. Selection emits per-run config/settings, not global writes. Up to four trusted HTTPS endpoints (no embedded credentials/query/fragment), optional Codex server tool allow lists; private per-run Claude MCP JSON. Missing inventory/selections fail explicitly instead of falling back. Plugin install/OAuth login remains in the provider CLI; Refresh configured tools reloads the list. Workspace-managed plugin choices can override local preferences. Actual authenticated service calls, new plugin installation and real inference remain unverified.
+
+Evidence: Node18 final full suite **146/146 passed**, including the final preflight cancellation regression. Earlier focused execution suite **6/6 passed** after the Claude search-allow change. Tests include Git scopes without source mutation, settings pinning, private/redacted integration configs, missing selection failure, Codex mock review findings, Claude merged command/web/MCP denials without bypass, and Stop during async integration preflight preventing any instruction process from starting. Build/syntax/diff checks passed; installed Codex accepted setting keys with read-only mcp list, no model turn. Isolated AGENT_WORLD_HOME/browser mock on :4789 verified selection, connection draft add/remove, review defaults, returned reported finding, and provider-specific Claude controls. No console errors. docs/screenshots/run-settings-qa.png is explicitly mock evidence. No real prompt, service calls, acceptance or spend.
+
+Desktop refresh: checked no approved/running/interrupted game-controlled executions and no visible unsent composer before closing the old app. Final npm run app:build succeeded, ad-hoc codesign --verify --deep --strict passed, and all built assets plus execution/review/integration modules match the checkout. Reopened packaged app at :4777, listener PID 64601; /api/state responded. Native UI confirmed Milo’s empty owned list and Run settings with Workflow, Permissions, Web search, shell/network and MCP/plugins controls. docs/screenshots/run-settings-electron.png shows the actual refreshed app, with an empty prompt; no settings were submitted. Native accessibility IDs changed during observed SSE/model updates, so the final expansion used its verified screenshot position. Closed the isolated QA server/tab. External observed agents were not stopped. Inherited large-chunk, disabled asar, missing author and skipped notarization warnings remain; this is a local ad-hoc package.
+
+Limits: Git diff max1 MB, untracked file max256 KB. Diff content is captured at execution start; later source reads can change unless using an isolated worktree. Claude hooks and managed configuration remain outside its built-in tool restriction. Codex shell toggle governs its default shell tool; arbitrary configured external tools are separate. Plugin inventory covers standard user/project local tables, not a remote marketplace or complete workspace-managed catalog. No game-owned interactive permission/OAuth prompt transport.
+
+## Latest pass: direct prompt tools (2026-10-07)
+
+Human authorized attachments, cancel/stop, isolated worktrees and conversation management. Preserved all pending resident-ownership and overlay work on ai-features; no commit or push.
+
+Implemented private home/resident-bound, integrity-checked image/text uploads (four files, 5 MB each, 256 KB text; 20,000 text characters passed), Codex image flags and Claude Read paths; no PDF/binary documents. Added queued cancellation and Stop for current game-owned CLI process groups, including escalation for surviving descendants. Cancellation retains edits and gives an explicit chat result. External agent processes are not controlled.
+
+New chats can execute in an isolated Git worktree with HEAD plus tracked/untracked source changes captured at execution time; ignored files are excluded. Follow-ups reuse the registered workspace. Replies expose branch/path/Open in VS Code; no automatic merge/removal. World observations map the worktree back to its logical resident/home while retaining actual sourceProject provenance. Resident/provider lists now search, archive and restore with ownership/API guards and active-work protection; archive hides local entries without deleting provider history.
+
+Verification: Node 18.16.0 full suite **139/139 passed**, including real temporary Git snapshots/reuse, native attachment delivery via mock CLI, descendant process cancellation, origin/ownership guards, persistent archive/restore, and observed worktree provenance. Production build, packaging and git diff --check passed. Inherited large chunk, disabled asar/missing author/notarization warnings remain. Completed ad-hoc signature verification passed; packaged attachment/workspace/runner/server/chat/index hashes match checkout.
+
+Actual browser QA used isolated AGENT_WORLD_HOME and mock CLI on :4789, with explicit Demo labeling: upload brief.md, new worktree chat, returned mock reply, continued chat in same worktree, Stop with clear cancellation, search no-match, archive and restore. No browser console errors. Screenshot docs/screenshots/prompt-tools-qa.png is isolated mock evidence, not real provider inference. No real prompts, queue changes, acceptance or spending. Private draft uploads persist on disk after removal; no cleanup/retention policy yet. Claude image reading remains subject to its configured tool permissions; actual authenticated provider execution remains unverified.
+
+Before desktop refresh, read-only live state showed no approved, running or interrupted game-controlled executions, and the native UI had no unsent composer. Closed the app, rebuilt and reopened release/mac-arm64/Agent World.app. External observed sessions were not stopped. Refreshed listener PID 40422 served /api/state on :4777. Native Electron UI confirmed Milo’s empty owned list, Search chats, Archived chats, Attach files and isolated-worktree checkbox; screenshot docs/screenshots/prompt-tools-electron.png. The app remains open with an empty composer. Closed the temporary QA tab/server. Recheck live state before any future refresh.
+
+## Latest scoped pass: rebuild packaged app (2026-10-06)
+
+Approved instruction: rebuild the app. Preserved all uncommitted source/docs/screenshots. Ran `npm run app:build` successfully: Vite built 170 modules and electron-builder 26.8.0 packaged Electron 39.8.10 for macOS arm64 at `release/mac-arm64/Agent World.app`, with an ad-hoc signature. Latest overlay removal and resident conversation ownership are included.
+
+Checks actually run: `codesign --verify --deep --strict --verbose=2` passed (valid on disk, satisfies Designated Requirement); SHA-256 comparisons matched packaged electron/main.cjs, bridge/world.mjs, bridge/server.mjs, shared/chat.mjs, shared/pass-conversations.mjs, dist/index.html and the built JS/CSS assets to the checkout; packaged index.html has no id="needs" strip. `node --check electron/main.cjs` and `git diff --check` passed. No test suite or visual QA ran during this packaging-only pass.
+
+Build warnings: inherited 1,014.45 KB client chunk, missing package author, disabled asar and skipped notarization. This is a local ad-hoc signed app, not a notarized release. Read-only pass metadata showed running work, and lsof confirmed the existing :4777 listener PID 4426 remained running. Did not quit/restart the app or change queue state. Reopen the rebuilt app after the current pass finishes to load the new client/code; live rendering remains unverified. No publishing, push, spend, outside-chat messages, acceptance, approvals or next-pass execution. This single pass stops here; no next pass proposed.
+
+## Latest scoped pass: remove overlay Needs you strip (2026-10-06)
+
+Approved instruction: remove the yellow Needs you tag and the adjacent agent cards to its right on the overlay. Removed the entire `#needs` / `#needs-list` strip from `web/index.html`, its UI references/listener/render method, the obsolete `onPromptKey` handler and its CSS/layout rules. Kept the shared pop-in animation used by toasts. Roster layout now starts directly below the top bar. The separate project roster, activity drawer, world-space waiting signals, edge arrows and Work attention view remain. README, CONCEPT and the skill navigation reference document the current entry points.
+
+Preserved all existing uncommitted resident-ownership work, desktop-refresh documentation and two untracked resident-chat screenshots. This pass changes only `web/index.html`, `web/src/ui.js`, `web/src/main.js` (one obsolete callback removal), `web/src/style.css`, README, CONCEPT, the navigation reference and this handoff. No real metadata, queue/task changes, prompts, approvals, acceptance, spending, outside-chat messages, commit, push or publishing. Stops after this single pass; no next pass proposed or executed.
+
+Checks actually run:
+- `node --check web/src/ui.js`, `node --check web/src/main.js`, and `git diff --check`: passed.
+- `node --test test/agent-view.test.mjs test/freshness.test.mjs`: 5/5 passed. Full suite not run for this narrow UI removal.
+- `npm run build`: passed, 170 modules; inherited large-chunk warning (1,014.45 KB JS).
+- Source-reference scan: no remaining needs-list, needs-label, renderNeeds, onPromptKey or #needs overlay references in web sources. Sim's unrelated simulated needs remain.
+
+Runtime/limits: lsof identified :4777 PID 4426 with cwd `release/mac-arm64/Agent World.app/Contents/Resources/app`; no :5177 listener was found. Read-only shell HTTP request to :4777 failed. Computer Use app inspection returned “Computer Use was not approved to use Agent World”; no app action or screenshot occurred. The packaged Electron app was not rebuilt/restarted during this pass and still uses its existing copy. Actual rendering, interaction and mobile layout remain unverified for this removal. Source/build checks are not production-live evidence.
+
+## Latest pass: apply resident-owned chats to the running Electron app (2026-10-06)
+
+Human reported that the resident-owned-chat implementation was not visible. Verified the live :4777 listener was the packaged Electron app, rooted in release/mac-arm64/Agent World.app/Contents/Resources/app. Its shared/chat.mjs hash differed from the checkout and its world code had no residentSlot handling. This was a stale packaged release, not evidence that the new source had reached the desktop. The old Milo modal exposed Otto's recorded chats, consistent with the previous prompt-recipient override.
+
+Preserved the pending ai-features implementation. All 131 tests passed fresh on Node 18.16.0; production build and git diff --check passed. After rechecking zero approved/running/interrupted executions and no unsent input, quit the old app using the native UI, ran npm run app:build successfully, verified its ad-hoc signature with codesign --verify --deep, and reopened the packaged app. Packaged shared/chat.mjs and bridge/world.mjs hashes now match the checkout. README now explains that source/build changes require rebuilding/reopening the packaged app and refreshing a reused bridge.
+
+Verified actual desktop UI via native accessibility: Otto's list contains three Codex threads, Nell's list contains three different Codex threads, Milo's Codex list is empty and its prompt recipient is Milo. The live API independently confirms those exact resident counts and no shared valid thread IDs; eight observed catalog records now have persisted residentSlot fields after replay of actual history. No fabricated events or planning/queue mutations. Historical wrongly-routed prompts remain with their recorded first owner rather than being guessed or rewritten. Earlier app message history still is not imported.
+
+Screenshots actually inspected: docs/screenshots/resident-chats-nell.png and docs/screenshots/resident-chats-milo.png. Nell's screenshot contains a historical desktop-writer conflict reply; it was not produced by this pass. Native UI snapshots/actions occasionally went stale as the observed activity changed; refreshed before retrying. Actual new provider inference remains unverified; no real prompts, approvals, retries, acceptance, spending, messaging other chats, Git commit or push performed. The refreshed packaged app remains open. Existing Codex desktop-writer constraints are independent of resident ownership.
+
+## Previous scoped pass: resident-owned conversations and prompt routing (2026-10-06)
+
+Approved scope: each agent has its own conversations in the prompter, and a prompt addressed to a clicked agent executes for that agent. Work stopped after this pass. Checkout: `/Users/blacksatoshi/Documents/Projects/agent-world`, branch `ai-features`, starting HEAD `8f2ad9b`. Starting Git status was clean; no reset, commit, push or publishing performed.
+
+Implemented:
+- Prompter recipient comes from the clicked resident's home and slot; it no longer switches recipients by looking up a prior run attached to the observed thread. Helper entry uses its parent resident. Switching residents clears an unfinished rename form.
+- Owned observed chats join that resident's recorded chat list, with provider separation. Exact thread ownership gates selection, continuation and rename entry. Legacy duplicated runs remain untouched: the first run containing that thread identifies its single owner. Unassigned saved app links remain in the project shelf; earlier app messages are not imported.
+- Proposal and approval API paths reject cross-resident continuation. PassStore rejects nonexistent resident slots when household characters are available and refuses conflicting thread identities. The runner rejects conflicting ownership/invalid returned identity without fallback or retry.
+- Catalog metadata persists `residentSlot` for observed primary chats. World assignment honors recorded runner ownership and persisted conversation ownership. A runner identity arriving after the observer corrects the resident association without synthesizing events or changing observation timestamps. The client clears a former resident's attachment when a session moves and prevents older-session updates from replacing newer observed activity.
+- Fresh and continued sends wait while the selected resident is observed working. Existing queue records were not migrated or modified by this pass.
+
+Changed source: `shared/pass-conversations.mjs`, `shared/chat.mjs`, `bridge/world.mjs`, `bridge/server.mjs`, `bridge/passes.mjs`, `bridge/pass-runner.mjs`, `web/src/pass-card.js`, `web/src/main.js`. Regression coverage: `test/pass-conversations.test.mjs`, `test/chat.test.mjs`, `test/world.test.mjs`, `test/passes.test.mjs`. README and CONCEPT explain the ownership behavior.
+
+Checks actually run:
+- Final focused command: `node --test test/pass-conversations.test.mjs test/chat.test.mjs test/world.test.mjs test/passes.test.mjs`: **37/37 passed**, including owned chat lists after persistence/restart, foreign resident/provider/home exclusion, cross-resident resume and returned identity rejection, busy recipient gating, and a mock CLI fresh prompt for resident two whose early observed event was reassigned from resident one to resident two. Mock execution used temporary projects/stores only, never a paid provider.
+- Full explicit suite: `node --test test/*.test.mjs`: **131 tests; 127 passed, 4 failed**. The four failures were the existing catalog API integrations exiting at bridge startup (`Bridge exited: 1`). This full run preceded only the final nonexistent-resident guard; the final focused run covered that guard.
+- `npm run build`: passed, 170 modules, inherited large-chunk warning (1,015.54 KB JS). All eight changed source modules passed `node --check`; `git diff --check` passed.
+- Isolated UI server attempted with scratch `AGENT_WORLD_HOME`, runner disabled, port 4789 and `dist/`: startup failed with **listen EPERM 127.0.0.1:4789**. No temporary server remained running. No browser interaction with the updated UI was possible; no screenshot is claimed.
+
+Runtime and uncertainties:
+- `lsof` identified :4777 PID 86134 as the packaged Electron app, cwd `release/mac-arm64/Agent World.app/Contents/Resources/app`. The :5173 Vite listener belongs to sibling remotion-vfx, not this project. `ps` was denied and shell read-only HTTP connection to :4777 failed. Computer-use inventory confirmed Agent World running and no Chrome Agent World tab.
+- The running packaged app was neither repackaged nor restarted; it does **not** load this checkout's updated source/build. Actual desktop interaction and authenticated provider execution remain unverified. This pass establishes source/build and isolated mock evidence, not production-live or human acceptance.
+- Legacy external conversations without persisted ownership acquire it when their real events are replayed; unobserved saved links are never assigned an invented agent. Concurrent sessions owned by one resident retain separate truth records; the client displays its most recent observed session.
+
+No real home metadata, queue/proposal/task state, acceptance, spending or chats were changed. No real prompts, outside-chat messages, future approvals or follow-up execution occurred. No next pass is proposed. Review this diff and the checks above; do not infer authorization to relaunch or execute work from this handoff.
 
 ## Git checkpoint: Electron app and accumulated updates (2026-10-06)
 

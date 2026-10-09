@@ -13,13 +13,15 @@ import { plumbobFor } from '../../shared/schema.mjs';
 import { activityKey, appName, resolveActivity } from './activity.js';
 import { buildLaptop } from './furniture.js';
 import { icon, STATE_ICON } from './icons.js';
-import { buildContactShadow, buildPerson, buildPlumbob, lookFromSeed, PLUMBOB_COLORS, PROVIDER_COLORS, buildUniform } from './models.js';
+import { buildContactShadow, buildPerson, buildPlumbob, lookFromSeed, PLUMBOB_COLORS, PROVIDER_COLORS } from './models.js';
 import { conversationLabel } from '../../shared/conversations.mjs';
 import { Screen } from './screens.js';
 
 const SPEED = 2.5;
 const FLOOR_Y = 0.12;
 const SIT_Y = -0.42;
+// The couch cushions sit higher than a desk chair seat; sitting there uses this so Sims rest on top of them.
+const COUCH_Y = -0.31;
 
 // Desk geometry in the seated Sim's local frame (+z forward, +x = the Sim's left). Matches buildDesk().
 const KEYS_Y = 0.7;
@@ -72,7 +74,7 @@ const _v = new THREE.Vector3();
  * Solve shoulder/elbow angles so the hand reaches `target` (Sim-local coordinates), given the
  * spine pose already in T. Writes armLx/armLz/elbowL (side 1) or armRx/armRz/elbowR (side −1).
  */
-function armIK(T, side, target, build = 1) {
+export function armIK(T, side, target, build = 1) {
   _e.set(T.lean, T.twist, 0, 'XYZ');
   _q.setFromEuler(_e).invert();
   _v.set(target[0], target[1] - (0.9 + T.bodyY), target[2]).applyQuaternion(_q);
@@ -197,20 +199,6 @@ export class Sim {
     if (key === this.roleKey) return;
     this.roleKey = key;
     this.roleInfo = info;
-    this.applyUniform();
-  }
-
-  applyUniform() {
-    if (this.uniform) {
-      this.uniform.parent?.remove(this.uniform);
-      this.uniform.traverse((o) => o.isMesh && o.geometry.dispose());
-      this.uniform = null;
-    }
-    const info = this.roleInfo;
-    if (!info?.kind || this.look.uniform === false) return;
-    this.uniform = buildUniform(info.kind, info.color, this.look.build || 1, this.look.shirt);
-    this.uniform.traverse((o) => (o.userData.simKey = this.key));
-    this.parts.spine.add(this.uniform);
   }
 
   /** Truth state, or `off_duty` when no session is attached. */
@@ -231,7 +219,6 @@ export class Sim {
   setTruth(session) {
     const prevState = this.state;
     const prevAt = this.act.at;
-    const prevSince = this.truth?.since;
     this.truth = session;
     if (this.isVisitor && !this.roleName && session?.detail?.target) this.roleName = session.detail.target;
 
@@ -251,9 +238,6 @@ export class Sim {
     }
     this.screen.set(this.act, { project: this.lot.name, provider: session?.provider, source: session?.source, app: appName(session), conversation: session?.conversation ? conversationLabel(session.conversation) : null });
 
-    if (this.state === 'waiting_for_user' && session.detail?.reason === 'turn_complete' && prevState !== 'off_duty' && session.since !== prevSince) {
-      this.cheerUntil = performance.now() / 1000 + 1.8;
-    }
     if (this.state !== prevState || this.act.at !== prevAt) {
       if (this.state !== prevState) this.reminded = false;
       this.decide();
@@ -261,6 +245,7 @@ export class Sim {
   }
 
   leave() {
+    this.release();
     this.leaving = true;
     this.activity = { pose: 'laptop_walk', flavor: false };
     this.goTo(this.lot.stations.entrance);
@@ -290,26 +275,94 @@ export class Sim {
     return null; // idle: room for flavor
   }
 
+  // ---- Spot reservations: one Sim per seat or standing spot -------------------
+
+  /** Who holds a spot in this lot (lot.claims maps spot object → Sim). */
+  holder(spot) {
+    const h = (this.lot.claims ??= new Map()).get(spot);
+    return h && h !== this && !h.gone ? h : null;
+  }
+
+  claim(spot) {
+    this.release();
+    this.lot.claims.set(spot, this);
+    this.claimed = spot;
+  }
+
+  release() {
+    if (this.claimed && this.lot.claims?.get(this.claimed) === this) this.lot.claims.delete(this.claimed);
+    this.claimed = null;
+  }
+
+  /** A free spot from a list (random by default), or null. */
+  freeSpot(spots, pick = 'random') {
+    const free = spots.filter((s) => !this.holder(s));
+    if (!free.length) return null;
+    return pick === 'random' ? free[Math.floor(Math.random() * free.length)] : free[0];
+  }
+
+  /**
+   * Somewhere to just stand when every station is taken: the nearest free nav cell around a point,
+   * kept a body-width away from everyone else in the lot.
+   */
+  standingSpot(near) {
+    const nav = this.lot.getNav();
+    const others = [...(this.lot.claims?.entries() || [])].filter(([, h]) => h !== this && !h.gone).map(([s]) => s);
+    for (let r = 0; r < 8; r++) {
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2 + r;
+        const x = near.x + Math.cos(a) * (0.9 + r * 0.45);
+        const z = near.z + Math.sin(a) * (0.9 + r * 0.45);
+        if (!nav.walkable(x, z)) continue;
+        if (others.some((o) => Math.hypot(o.x - x, o.z - z) < 0.85)) continue;
+        return { x, z, face: near.face ?? 0, adHoc: true };
+      }
+    }
+    return { x: this.pos.x, z: this.pos.y, face: this.facing, adHoc: true };
+  }
+
   decide() {
     if (this.leaving) return;
     const target = this.truthTarget();
     if (target) {
+      // Real work and off-duty spots take priority: an idle Sim relaxing there moves on.
+      const holder = this.holder(target.spot);
+      if (holder && holder.activity?.flavor) {
+        this.claim(target.spot); // take it first, so the displaced Sim can't pick it again
+        holder.claimed = null;
+        holder.decide();
+      } else if (holder) {
+        // Two truth targets on one spot (e.g. off-duty Sims sharing a wander point): find another.
+        const alt = this.freeSpot(this.lot.stations.wander) || this.standingSpot(target.spot);
+        target.spot = alt;
+        if (target.pose === 'doze') target.pose = 'doze_stand';
+      }
       this.activity = { ...target, flavor: false };
     } else if (this.isVisitor) {
-      this.activity = { spot: this.desk().guests[this.guestIndex % 3], pose: 'laptop', flavor: false };
+      const guests = this.desk().guests;
+      const spot = [guests[this.guestIndex % 3], ...guests].find((g) => !this.holder(g)) || this.standingSpot(guests[0]);
+      this.activity = { spot, pose: 'laptop', flavor: false };
     } else {
-      // Simulation layer: pick a flavor activity from fake needs.
+      // Simulation layer: pick a flavor activity from fake needs, at a spot nobody else is using.
       const r = Math.random();
       let kind;
       if (this.needs.energy < 0.5 && r < 0.6) kind = 'coffee';
       else if (this.needs.fun < 0.5 && r < 0.6) kind = 'couch';
       else kind = ['wander', 'books', 'doodle', 'globe', 'coffee'][Math.floor(Math.random() * 5)];
-      const f = FLAVOR[kind];
-      const spots = this.lot.stations[f.station];
-      const spot = spots[Math.floor(Math.random() * spots.length)];
-      this.activity = { spot, pose: f.pose, flavor: true, label: f.label, kind };
+      let spot = this.freeSpot(this.lot.stations[FLAVOR[kind].station]);
+      if (!spot) {
+        // Everything for that is taken: try the other activities, then just stand somewhere free.
+        for (const k of ['wander', 'books', 'globe', 'doodle', 'coffee', 'couch'].sort(() => Math.random() - 0.5)) {
+          spot = this.freeSpot(this.lot.stations[FLAVOR[k].station]);
+          if (spot) { kind = k; break; }
+        }
+      }
+      const f = FLAVOR[spot ? kind : 'wander'];
+      if (!spot) spot = this.standingSpot(this.lot.stations.wander[0]);
+      this.activity = { spot, pose: spot.adHoc ? 'look' : f.pose, flavor: true, label: f.label, kind: spot.adHoc ? 'wander' : kind };
       this.flavorUntil = performance.now() / 1000 + f.min + Math.random() * (f.max - f.min);
     }
+    this.claim(this.activity.spot);
     if (!this.placed) {
       // First placement after load: appear in place rather than walking in.
       const s = this.activity.spot;
@@ -365,6 +418,7 @@ export class Sim {
       }
     }
     const walking = this.path.length > 0;
+    this.walking = walking;
     if (!walking && !this.arrived) {
       this.arrived = true;
       if (this.leaving) this.gone = true;
@@ -620,7 +674,7 @@ export class Sim {
       }
       case 'relax':
         sit();
-        T.bodyY = SIT_Y - 0.04;
+        T.bodyY = COUCH_Y;
         T.lean = -0.22;
         T.armLz = 0.5;
         T.armRz = -0.5;
@@ -631,7 +685,7 @@ export class Sim {
         break;
       case 'doze':
         sit();
-        T.bodyY = SIT_Y - 0.04;
+        T.bodyY = COUCH_Y;
         T.lean = -0.14;
         T.headX = 0.48 + Math.sin(t * 1.2) * 0.04;
         T.armLx = T.armRx = -0.35;
@@ -685,26 +739,31 @@ export class Sim {
     p.mouth.scale.set(1, pose === 'facepalm' ? 0.25 : 1, 1);
   }
 
+  /** The one-word-ish status shown under the name: never activity details, files or chat titles. */
+  statusText(stale) {
+    if (stale) return observedLabel(this.truth).replace('Last observed', 'Last seen');
+    if (this.walking) return 'Traveling';
+    const state = this.state;
+    if (state === 'off_duty') return 'Off duty';
+    if (state === 'waiting_for_user') return { permission: 'Needs your OK', input: 'Has a question' }[this.truth?.detail?.reason] || 'Needs you';
+    if (state === 'error') return 'Error';
+    if (state === 'idle' || state === 'done') return 'Idle';
+    return 'Working';
+  }
+
   updateLabel() {
     const state = this.state;
     // While observation is offline, the bubble only says when the agent was last seen (no stale activity).
     const stale = this.observationConnected === false && !!this.truth;
-    let text = stale ? observedLabel(this.truth).replace('Last observed', 'Last seen') : this.act.label;
-    if (this.observationConnected !== false && state === 'waiting_for_user') text = `${text} · ${formatDuration(this.waitSeconds)}`;
-    const target = this.act.detail;
-    const showDetail = !stale && (this.expanded || this.selected || this.hovered) && target && state !== 'off_duty' && !text.includes(target);
+    const text = this.statusText(stale);
     const compact = this.observationConnected !== false && this.labelMode === 'compact' && !this.selected && !this.hovered && state !== 'waiting_for_user';
-    // A chip keeps the truth (state icon and color) plus a name; the full bubble adds what and where.
+    // Every bubble is just the name and a short status (icons only when zoomed far out).
     const chip = this.observationConnected !== false && this.labelMode === 'chip' && !compact;
+    const stateIcon = icon(this.walking && !stale ? 'navigation' : STATE_ICON[state]);
     const html = compact
-      ? `<span class="b-icon">${icon(STATE_ICON[state])}</span>`
-      : chip
-        ? `<span class="b-icon">${icon(STATE_ICON[state])}</span><span class="b-text"><b>${escapeHtml(this.name)}</b></span>`
-        : `<span class="b-icon">${icon(STATE_ICON[state])}</span>` +
-        `<span class="b-text"><b>${escapeHtml(this.name)}</b>${canPromptFromStatus(this.truth)?`<button type="button" class="b-state" data-prompt-sim aria-label="${escapeHtml(text)} · Open chat">${escapeHtml(text)}</button>`:`<span class="b-state">${escapeHtml(text)}</span>`}` +
-        (this.truth?.conversation && !stale ? `<span class="b-conversation">${escapeHtml(conversationLabel(this.truth.conversation))}</span>` : '') +
-        (showDetail ? `<span class="b-target${this.act.prose ? ' prose' : ''}">${escapeHtml(target)}</span>` : '') +
-        `</span>`;
+      ? `<span class="b-icon">${stateIcon}</span>`
+      : `<span class="b-icon">${stateIcon}</span>` +
+        `<span class="b-text"><b>${escapeHtml(this.name)}</b>${canPromptFromStatus(this.truth)?`<button type="button" class="b-state" data-prompt-sim aria-label="${escapeHtml(text)} · Open chat">${escapeHtml(text)}</button>`:`<span class="b-state">${escapeHtml(text)}</span>`}</span>`;
     if (html !== this.labelHtml) {
       this.bubbleEl.innerHTML = html;
       this.labelHtml = html;
@@ -715,6 +774,13 @@ export class Sim {
       this.bubbleEl.className = cls;
       this.labelSize = null;
     }
+  }
+
+  /** Seated at a desk or on the couch: those stations are exclusive, so no nudging. */
+  get seated() {
+    if (this.walking) return false;
+    const pose = this.activity?.pose;
+    return (this.act?.at === 'desk' && !this.isVisitor && !this.activity?.flavor) || pose === 'relax' || pose === 'doze';
   }
 
   worldPosition() {
@@ -752,10 +818,10 @@ export class Sim {
     this.root = parts.root;
     this.root.traverse((o) => (o.userData.simKey = this.key));
     this.applyBadge();
-    this.applyUniform();
   }
 
   dispose() {
+    this.release();
     this.lot.group.remove(this.root);
     this.labelEl.remove();
     if (this.isVisitor) {
@@ -774,4 +840,31 @@ export function lookFromOverrides(overrides = {}) {
 
 export function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+
+/**
+ * Keep standing Sims in the same lot a body-width apart: overlapping pairs ease away from each
+ * other each frame (only onto walkable floor). Seated Sims hold their station and don't move.
+ */
+export function separateSims(sims, dt) {
+  const MIN = 0.62;
+  const list = [...sims].filter((s) => !s.gone && s.root.visible !== false);
+  for (let i = 0; i < list.length; i++) {
+    for (let j = i + 1; j < list.length; j++) {
+      const a = list[i], b = list[j];
+      if (a.lot !== b.lot) continue;
+      const dx = b.pos.x - a.pos.x, dz = b.pos.y - a.pos.y;
+      const d = Math.hypot(dx, dz);
+      if (d >= MIN) continue;
+      const aFixed = a.seated, bFixed = b.seated;
+      if (aFixed && bFixed) continue;
+      const nx = d > 1e-4 ? dx / d : Math.cos(i + j), nz = d > 1e-4 ? dz / d : Math.sin(i + j);
+      const push = Math.min(MIN - d, dt * 2.5);
+      const nav = a.lot.getNav();
+      const move = (s, sx, sz) => { const x = s.pos.x + sx, z = s.pos.y + sz; if (nav.walkable(x, z)) s.pos.set(x, z); };
+      if (aFixed) move(b, nx * push, nz * push);
+      else if (bFixed) move(a, -nx * push, -nz * push);
+      else { move(a, -nx * push / 2, -nz * push / 2); move(b, nx * push / 2, nz * push / 2); }
+    }
+  }
 }

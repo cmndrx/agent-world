@@ -87,7 +87,21 @@ import arrowRight from 'lucide-static/icons/arrow-right.svg?raw';
 import circleAlert from 'lucide-static/icons/circle-alert.svg?raw';
 import flag from 'lucide-static/icons/flag.svg?raw';
 
+import mic from 'lucide-static/icons/mic.svg?raw';
+import square from 'lucide-static/icons/square.svg?raw';
 import arrowUp from 'lucide-static/icons/arrow-up.svg?raw';
+import archive from 'lucide-static/icons/archive.svg?raw';
+import archiveRestore from 'lucide-static/icons/archive-restore.svg?raw';
+import search from 'lucide-static/icons/search.svg?raw';
+import rotateCcw from 'lucide-static/icons/rotate-ccw.svg?raw';
+import squarePen from 'lucide-static/icons/square-pen.svg?raw';
+import calendarClock from 'lucide-static/icons/calendar-clock.svg?raw';
+import play from 'lucide-static/icons/play.svg?raw';
+import pause from 'lucide-static/icons/pause.svg?raw';
+import repeat from 'lucide-static/icons/repeat.svg?raw';
+import folderPlus from 'lucide-static/icons/folder-plus.svg?raw';
+import folderInput from 'lucide-static/icons/folder-input.svg?raw';
+import chevronRight from 'lucide-static/icons/chevron-right.svg?raw';
 const RAW = {
   bellOff, bell, blocks, bookOpen, brain, chevronDown, circleCheck, circleHelp, clock, coffee, cpu, eye, gauge,
   globe, hand, hourglass, house, keyboard, layers, moon, navigation, panelLeft, pencil, sparkles, sun, sunrise,
@@ -97,7 +111,7 @@ const RAW = {
   map: mapIcon, cloudSun, cloudRain, cloudSnow, snowflake, leaf, flower, cat, dog, rabbit, gem, sprout, clover, treeDeciduous, landmark,
   camera, images, arrowLeft, shovel, flower2, store, building2, hardHat, info,
   briefcase, inbox, copy, externalLink, messageCircle, gamepad, plug, plus, listChecks, target, arrowRight, circleAlert, flag,
-  arrowUp,
+  arrowUp, square, mic, archive, archiveRestore, search, rotateCcw, chevronRight, folderPlus, folderInput, squarePen, calendarClock, play, pause, repeat,
 };
 
 const cache = {};

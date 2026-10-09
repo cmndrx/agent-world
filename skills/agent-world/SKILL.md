@@ -11,7 +11,7 @@ Help the human understand where attention is needed and advance real project wor
 
 Find the Agent World checkout. In this installation it is `/Users/blacksatoshi/Documents/Projects/agent-world`; repository links and this skill's scripts resolve against that checkout. Read `CONCEPT.md` and `README.md` first. For continued development, also read `docs/NEXT_PASS.md` and current Git changes. Treat the dated handoff as a starting point, then verify live state.
 
-The visual activity layer remains observation-only. The primary agent card also supports human-approved passes: a separate local runner uses the human-selected Codex or Claude Code CLI to execute exactly one displayed instruction after explicit approval. Previous task boards remain in history. Agents may propose a next pass but must never approve, resolve interrupted runs for the human, or launch their own follow-up. Execution approval is separate from accepting previous work.
+The visual activity layer remains observation-only. The primary agent card also supports human-approved passes: a separate local runner uses the human-selected Codex or Claude Code CLI to execute exactly one displayed instruction after explicit approval. Previous task boards remain in history. Agents may propose a next pass but must never approve, resolve interrupted runs for the human, or launch their own follow-up. For an explicitly authorized starter-team request, return scoped handoffs through the provided structured response; only the game runner routes them. Do not message provider chats or edit the queue directly. Execution approval is separate from accepting previous work.
 
 Read only the relevant reference:
 
@@ -64,8 +64,44 @@ The human clicks an agent to watch activity, then opens chat from its inactive s
 
 ## Continuing conversations
 
-Send now resumes the displayed Codex thread by exact UUID. The resident uses its latest game-launched chat, or its attached observed Codex chat if none. New conversation explicitly starts fresh. Busy observed conversations block Send; queued work waits for them. Do not resume a real conversation or submit a prompt on the human's behalf without task authorization. Tests use isolated homes and projects. Claude resumes exact game-created sessions only; ordinary Claude app chats and external Claude Code sessions are not resumed.
+Send now resumes the displayed Codex thread by exact UUID. The resident uses its latest game-launched chat, or its attached observed Codex chat if none. New conversation explicitly starts fresh. Human follow-up messages may be sent while work is active; queued work waits for it. An empty composer shows Stop for the displayed game-owned run or queued prompt; typing shows Send. Observed external sessions are never presented as stoppable game runs. Do not resume a real conversation or submit a prompt on the human's behalf without task authorization. Tests use isolated homes and projects. Claude resumes exact game-created sessions only; ordinary Claude app chats and external Claude Code sessions are not resumed.
 
 ## Models and usage
 
 Chat shows Codex account quota and per-conversation last observed models. Next message model is a user preference, not observed activity; it is pinned into the next authorized run. Do not claim a chosen model has executed before observing it. Model/usage RPCs are read-only and never submit prompts. Restart stale bridges only after checking no approved/running work would be interrupted. Do not select/send real work as part of UI tests.
+
+### Experimental voice
+The Codex composer microphone starts a call in that resident's selected chat. Human controls mute/end and tool permission decisions. Closing the drawer ends voice and interrupts associated work. Raw audio is transient; returned speech transcripts are recorded. Installed CLI testing returned `realtime conversation requires API key auth`; never promise ChatGPT-subscription voice or infer success from realtime/start acceptance. No authentication or paid fallback changes without user authorization.
+
+### Claude model selection
+Claude game-owned chats can select Sonnet, Opus, Haiku or configured default for the next message. Selection passes `--model` on the same exact resumed session. Show last reported init-event model separately from requested aliases; the alias list does not establish account entitlement. Do not run real prompts merely to verify the picker.
+
+Claude effort: Default or low/medium/high/xhigh/max requests are saved per conversation and passed to --effort on authorized sends. Default omits the flag. Requested effort is a preference; do not claim a confirmed effective level, and preserve the model when resetting effort.
+
+### Local Codex projects
+Use the sidebar Projects view to list local Codex project roots and register their homes; Add project connects an existing folder or creates one under an existing parent through the Codex project CLI protocol. A registered home receives an off-duty resident; never synthesize session events. Directory contents are preserved. Missing roots are skipped visibly and canonical duplicate folders reuse a home. CLI registry creation is distinct from cloud ChatGPT Projects and native conversation projectId membership. Tests must isolate both CODEX_HOME and AGENT_WORLD_HOME.
+
+### Explicit project onboarding (2026-10-08)
+Projects start empty with one vacant lot and Add your first project. Opening Projects only lists available Codex roots; Import existing adds a chosen project, while Create new registers a folder/project. selected-projects.json stores the explicit world selection independently from existing households, chats, files and the Codex registry. Existing automatically imported homes remain preserved but hidden until explicitly imported. Demo remains unchanged. No real projects were created/imported during QA.
+
+Project cards include Remove: removes the selected project and its home/residents from Agent World only. Local folders, Codex registry entries, conversations and recorded history are retained for re-import. Running/queued game work and active voice must finish or stop before removal. Removing the last home restores the vacant onboarding lot.
+
+## Scheduled prompts
+
+Inside a resident’s prompter, Scheduled → New task opens a reference-style Schedule a task dialog. Run with explicitly chooses Codex or Claude Code for new tasks (installed providers only). A task keeps its provider when edited; create another task to change it. Once, Daily and Weekly use the displayed IANA time zone and calendar wall time. Advanced contains the task name and time zone. Create/Save explicitly authorizes the exact stored instruction at those times, with the selected provider/model/effort and resident. Every new task appears immediately as its own scheduled conversation in that resident’s chat list. Its first run creates a new provider conversation, without continuing the selected chat; repeat runs reuse that task’s conversation. The time picker offers 15-minute increments, enforced by the API for create/edit. Already dispatched one-time tasks keep their original chat; future legacy schedules acquire a dedicated conversation without changing their authorized time. Responses and public reasoning summaries use the normal chat/runner path. Attachments are not scheduled in this pass.
+
+Schedules are persisted atomically alongside the pass queue in passes.json. The local scheduler checks every 10 seconds while the bridge/runner is running; the app must remain open and the computer awake. Missed times coalesce to one catch-up run. Only one pending occurrence per schedule is allowed. DST preserves wall time; nonexistent spring-forward times are skipped and duplicated fall-back times run once. A failed/interrupted/cancelled run pauses the schedule for explicit review/resume. Pausing cancels unstarted scheduled work; running work continues until stopped in chat. Edit/delete requires finishing/stopping an active occurrence. Removing a project pauses its schedules. No cloud account automation or background service is configured.
+
+Agents must not create, resume or edit real schedules without scoped human authorization. QA uses an isolated AGENT_WORLD_HOME and CODEX_HOME and fixture CLIs; scheduled responses do not imply accepted work.
+
+## Starter team and scoped handoffs
+
+The first added project receives three persistent residents: Assistant (slot 1), Junior developer (slot 2), Researcher (slot 3). Existing first-home names and chat ownership are preserved. Assigned responsibilities are planning metadata, distinct from observed activity and activity-derived downtown specialties; no sessions/events are invented. Further imported homes keep their existing onboarding.
+
+Sending a prompt to this team authorizes scoped delegation of that request within the project. The selected provider/model/effort are retained throughout the request. The runner gives each resident its responsibility and the roster. Agents choose relevant handoffs in a structured response: role, task title, scoped instruction and earlier prerequisite IDs. For example the Assistant can delegate website implementation to the Junior developer, optionally following a Researcher report. There is no keyword router or direct provider-to-provider messaging.
+
+The first handoff to a recipient starts a separate resident-owned conversation; subsequent handoffs in the same request can reuse an established recipient conversation. Earlier unrelated resident chats are never resumed automatically. Queued handoffs appear in the receiving resident’s list. The original chat shows sender → recipient, status, reported results and Open chat links. Automatic instructions are attributed to a teammate or Team report request, never to the human. After all parts settle, one final pass resumes the original conversation with recorded reports to summarize changes, checks, failures and unfinished work. A returned report does not accept tasks or grant world rewards.
+
+Runs remain sequential to avoid competing workspace edits. The graph is bounded to three handoffs per response, six per human request and two delegation levels, with no further delegation in the final report. Invalid/self/unknown-role handoffs are rejected atomically. Failed prerequisites pause dependent work; no automatic retry. Interrupted work still requires human inspection. Stop in the original or receiving chat cancels the remaining request queue and stops its active game-owned run; existing file changes remain. Publishing/pushing/spending are not included. New schedules in the starter team capture delegation authorization; existing schedules are not retroactively expanded. Isolated-worktree and voice runs do not enable this team workflow in this pass.
+
+Fixture CLIs verify execution/routing for Codex and Claude without provider spending. Intelligent task decomposition by a real model remains to be evaluated with real user prompts.

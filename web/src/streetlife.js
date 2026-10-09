@@ -6,12 +6,11 @@ import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { BUSINESSES, businessStage } from '../../shared/city.mjs';
 import { LOT_D } from './lot.js';
-import { buildContactShadow, buildPerson, buildUniform } from './models.js';
+import { buildContactShadow, buildPerson } from './models.js';
 import { escapeHtml as esc } from './sim.js';
 
 const SPEED = 1.45; // m/s, an easy stroll
 /** "coworking space" mid-sentence, but keep acronyms ("QA lab"). */
-const inline = (name) => (/^[A-Z]{2}/.test(name) ? name : name[0].toLowerCase() + name.slice(1));
 const MAX_TRIPS = 4;
 const EAST_GAP_X = 64; // the gap between the last home column and downtown
 const SIDEWALK = LOT_D / 2 - 3.4; // lot-side sidewalk, relative to a row's center
@@ -48,15 +47,13 @@ export class StreetLife {
     const pts = this.route(sim.lot, business);
     if (!pts) return;
     const parts = buildPerson(sim.look, {});
-    const info = sim.roleInfo;
-    if (info?.kind && sim.look.uniform !== false) parts.spine.add(buildUniform(info.kind, info.color, sim.look.build || 1, sim.look.shirt));
     parts.root.add(buildContactShadow(0.42));
     parts.root.position.copy(pts[0]);
     const el = document.createElement('div');
     el.className = 'street-tag';
-    el.innerHTML = `<b>${esc(sim.character.name)}</b> heading to the ${esc(inline(BUSINESSES[business].name))}<small>Just for fun · their agent is off duty</small>`;
+    el.innerHTML = `<div class="street-tag-pill"><b>${esc(sim.character.name)}</b><span>Traveling</span></div>`;
     const label = new CSS2DObject(el);
-    label.position.y = 2.6;
+    label.position.y = 2.35; // just above the head; the pill sits on this point, not centered over the walker
     parts.root.add(label);
     this.scene.add(parts.root);
     const legs = pts.slice(1).map((p, i) => p.distanceTo(pts[i]));
@@ -127,7 +124,7 @@ export class StreetLife {
         if (t > trip.stayUntil) {
           trip.phase = 'back';
           trip.dir = -1;
-          trip.el.innerHTML = trip.el.innerHTML.replace(/heading to the|at the/, 'heading home from the');
+          trip.el.querySelector('span').textContent = 'Traveling';
         }
       } else {
         trip.d += trip.dir * SPEED * dt;
@@ -135,7 +132,7 @@ export class StreetLife {
           trip.d = trip.total;
           trip.phase = 'stay';
           trip.stayUntil = t + 45 + Math.random() * 50;
-          trip.el.innerHTML = trip.el.innerHTML.replace('heading to the', 'at the');
+          trip.el.querySelector('span').textContent = 'Off duty';
         } else if (trip.phase === 'back' && trip.d <= 0) {
           this.end(key, t);
           continue;

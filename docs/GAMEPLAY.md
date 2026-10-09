@@ -46,7 +46,7 @@ never removes buildings. The ledger keeps only categories, never file names, pat
 **People and jobs** (step 3, shipped):
 - The bridge attributes each event to a person: a resident (home + desk slot) or a helper type (home + what it was delegated as, e.g. "Explore").
 - A resident's **role** is their most common kind of work, by days (ties go to the most recent). Tester, Clerk, Shipper, Researcher, Designer, Writer, Analyst and Manager each map to a downtown workplace.
-- Roles show as an apron in the workplace color (darkened when it's close to the shirt color, and placed below the provider badge), plus a role card in the inspect drawer that explains why. The wardrobe can hide the work clothes per resident (`uniform: false`).
+- (Work clothes were removed on 2026-10-09; roles no longer change what a resident wears.) Roles previously showed as an apron in the workplace color (darkened when it's close to the shirt color, and placed below the provider badge), plus a role card in the inspect drawer that explains why. The wardrobe can hide the work clothes per resident (`uniform: false`).
 - **Helper types start as interns** (a lanyard with an ID card). After working on 3 different days in a home they are **hired**: they get a stable staff name ("Eli · Explore helper"; the observed helper type stays visible) and a role of their own.
 - The City census lists everyone's job.
 
@@ -80,7 +80,7 @@ The eight landmarks:
   - along their row's sidewalk, through the east gap (x = 64) for later rows, then along main street;
   - they wait about 40 seconds before leaving, stay 45–95 seconds, and rest 2.5–5 minutes afterward;
   - at most 4 walkers at once.
-- While away, the real Sim stays at home hidden and keeps simulating. A walker figure in the same look and work clothes walks with a dashed "Just for fun · their agent is off duty" tag.
+- While away, the real Sim stays at home hidden and keeps simulating. A walker figure in the same look walks with a dashed "Just for fun · their agent is off duty" tag.
 - **Truth wins at once.** The moment a session attaches (or you select the resident), the walk ends and the real Sim is visible at home, going to its desk.
 - Toggle it in the Walls menu under "Street life" (`settings.streetLife`). It's paused in Build and Map mode.
 

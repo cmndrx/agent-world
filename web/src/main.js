@@ -1,15 +1,17 @@
+import { connectionView } from '../../shared/connections.mjs';
+import {assignedRole} from '../../shared/team.mjs';
 import { PassCard } from './pass-card.js';
 import { Experience } from './experience.js';
 import '@fontsource-variable/nunito';
 import * as THREE from 'three';
-import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
+import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { CameraRig } from './camera.js';
 import { Player } from './player.js';
 import { Environment } from './environment.js';
 import { Lot } from './lot.js';
 import { Pipeline } from './pipeline.js';
 import { Scenery } from './scenery.js';
-import { Sim } from './sim.js';
+import { Sim, separateSims } from './sim.js';
 import { Sound } from './sound.js';
 import { ConversationLibrary } from './conversations.js';
 import { shouldNotify } from '../../shared/productivity.mjs';
@@ -95,6 +97,8 @@ const streetLife = new StreetLife(scene, { downtown });
 const lots = new Map(); // project -> Lot
 const sims = new Map(); // key -> Sim
 const sessionToSim = new Map(); // session id -> sim key
+let selectedProjects=new Set();
+let emptyLot=null;
 const households = new Map(); // project -> household
 
 const charKey = (project, slot) => `${project}#${slot}`;
@@ -134,7 +138,10 @@ function ensureLot(household) {
 }
 
 function applyHousehold(h) {
+  if(selectedProjects!==null&&!selectedProjects.has(h.project))return;
+  if(emptyLot){scene.remove(emptyLot);emptyLot.traverse(o=>{if(o.isCSS2DObject)o.element.remove();o.geometry?.dispose();o.material?.dispose();});emptyLot=null;}
   households.set(h.project, h);
+  ui.projectsPanel.setHomes([...households.values()]);
   const isNew = !lots.has(h.project);
   const lot = ensureLot(h);
   lot.setLevel(prog.levels[h.project] || 1);
@@ -162,6 +169,7 @@ function applyHousehold(h) {
 }
 
 function applySession(s) {
+  if(selectedProjects!==null&&!selectedProjects.has(s.project))return;
   const lot = lots.get(s.project) || ensureLot(households.get(s.project) || { project: s.project, name: s.project.split('/').pop(), characters: [] });
   let key;
   if (s.slot != null) {
@@ -176,14 +184,20 @@ function applySession(s) {
       sims.set(key, new Sim({ key, lot, parent, seed: hashStr(s.session) }));
     }
   }
+  const previousKey = sessionToSim.get(s.session);
+  if (previousKey && previousKey !== key) {
+    const previous = sims.get(previousKey);
+    if (previous?.truth?.session === s.session) previous.setTruth(null);
+  }
   sessionToSim.set(s.session, key);
   const sim = sims.get(key);
+  if (sim.truth?.session !== s.session && sim.truth?.lastEventAt > s.lastEventAt) return;
   const before = sim.state;
   sim.setTruth(s);
   sim.observationConnected = bridgeReady;
   syncLibrarySessions();
   if (bridgeReady && !replaying && allowRoutine(s) && sim.state === 'waiting_for_user' && before !== 'waiting_for_user') {
-    sound.play(s.detail?.reason === 'turn_complete' ? 'turn_complete' : 'permission');
+    sound.play('permission');
     ui.toast(sim);
   }
 }
@@ -198,10 +212,19 @@ function endSession(sessionId) {
   syncLibrarySessions();
 }
 
-function applySnapshot({ households: hs, sessions, projects = [], conversations = [], plans = [], tasks = [], passes, runner }) {
+function applySnapshot({ selectedProjects: chosen=null, households: hs, sessions, projects = [], conversations = [], plans = [], tasks = [], passes, runner }) {
+  selectedProjects=chosen===null?null:new Set(chosen);
+  const visible=p=>selectedProjects===null||selectedProjects.has(p.project);
+  hs=hs.filter(visible);sessions=sessions.filter(visible);projects=projects.filter(p=>selectedProjects===null||selectedProjects.has(p.home));conversations=conversations.filter(visible);plans=plans.filter(visible);tasks=tasks.filter(visible);
+  if(!hs.length&&!emptyLot){
+    emptyLot=new THREE.Group();
+    const plot=new THREE.Mesh(new THREE.BoxGeometry(22,.15,20),new THREE.MeshStandardMaterial({color:0x96b782,roughness:1}));plot.receiveShadow=true;emptyLot.add(plot);
+    const button=document.createElement('button');button.className='first-project-lot';button.textContent='＋ Add your first project';button.addEventListener('click',()=>{document.querySelector('[data-roster-view="projects"]').click();ui.projectsPanel.importing=false;ui.projectsPanel.render();});
+    const label=new CSS2DObject(button);label.position.set(0,1.5,0);emptyLot.add(label);scene.add(emptyLot);
+  }
   passCard.setData({passes,runner,tasks,sessions,conversations});
-  work.setData({ plans, tasks, conversations });
-  library.setData({ projects, conversations });
+  work.setData({ households:hs, plans, tasks, conversations });
+  library.setData({ households:hs, projects, conversations });
   replaying = true;
   hs.forEach(applyHousehold);
   const live = new Set(sessions.map((s) => s.session));
@@ -234,6 +257,12 @@ function hashStr(s) {
 
 // ---- Bridge connection -----------------------------------------------------------------
 
+let providerConnections = null;
+function refreshProviderConnections() {
+  const view = connectionView(providerConnections, bridgeReady);
+  ui.setConnection(bridgeReady ? 'live' : ui.connectionState || 'connecting', view);
+  experience?.setConnections(view);
+}
 function connect() {
   ui.setConnection('connecting');
   const es = new EventSource('/api/stream');
@@ -242,6 +271,7 @@ function connect() {
   es.onmessage = (msg) => {
     const m = JSON.parse(msg.data);
     if (m.type === 'snapshot') {
+      providerConnections = m.connections || null;
       ui.setDemo(!!m.demo);
       style = m.style || emptyStyle();
       photos = m.photos || [];
@@ -256,6 +286,7 @@ function connect() {
       applyStyleAll();
       refreshProgress();
     }
+    else if (m.type === 'connections') { providerConnections = m.connections; refreshProviderConnections(); }
     else if (m.type === 'style') { style = m.style || emptyStyle(); applyStyleAll(); refreshProgress(); if (build.active) build.render(); }
     else if (m.type === 'city') {
       const before = city;
@@ -266,7 +297,7 @@ function connect() {
       celebrateCity(before, city);
     }
     else if (m.type === 'photos') { photos = m.photos || []; album?.setPhotos(photos); }
-    else if (m.type === 'catalog') { library.setData({ projects: m.projects, conversations: m.conversations }); work.setData({ conversations: m.conversations }); passCard.setData({conversations:m.conversations}); syncLibrarySessions(); }
+    else if (m.type === 'catalog') { if(selectedProjects!==null){m.projects=m.projects.filter(p=>selectedProjects.has(p.home));m.conversations=m.conversations.filter(p=>selectedProjects.has(p.project));} library.setData({ projects: m.projects, conversations: m.conversations }); work.setData({ conversations: m.conversations }); passCard.setData({conversations:m.conversations}); syncLibrarySessions(); }
     else if (m.type === 'passes') passCard.setData(m);
     else if (m.type === 'productivity') {
       passCard.setData({tasks:m.tasks});
@@ -276,6 +307,16 @@ function connect() {
       board = next;
       refreshProgress();
     }
+    else if(m.type==='selected-projects'){
+      const removed=selectedProjects===null?[]:[...selectedProjects].filter(p=>!m.projects.includes(p));selectedProjects=new Set(m.projects);
+      for(const project of removed){
+        if(selected?.lot.project===project){select(null);ui.close();}
+        for(const [key,sim] of sims)if(sim.lot.project===project){sim.dispose();sims.delete(key);for(const [id,k] of sessionToSim)if(k===key)sessionToSim.delete(id);}
+        const lot=lots.get(project);if(lot){scene.remove(lot.group);lot.group.traverse(o=>{if(o.isCSS2DObject)o.element.remove();});lots.delete(project);}
+        households.delete(project);
+      }
+      if(removed.length){if(!households.size)camFocus.set(0,.12,0);ui.projectsPanel.setHomes([...households.values()]);applyLayout();explore?.sync();fetch('/api/state').then(r=>r.json()).then(applySnapshot).catch(()=>setBridgeConnection(false,'offline'));}
+    }
     else if (m.type === 'household') applyHousehold(m.household);
     else if (m.type === 'session') applySession(m.session);
     else if (m.type === 'session_end') endSession(m.session);
@@ -284,12 +325,13 @@ function connect() {
 function setBridgeConnection(ready, state) {
   bridgeReady = ready;
   document.body.dataset.observation = ready ? 'live' : state;
-  ui.setConnection(state, liveCount()); library.setConnection(ready); work.setConnection(ready);
+  ui.setConnection(state, connectionView(providerConnections, ready));
+  experience?.setConnections(connectionView(providerConnections, ready)); library.setConnection(ready); work.setConnection(ready);
   passCard.setData({connected:ready});
   for (const sim of sims.values()) sim.observationConnected = ready;
   if (typeof experience !== 'undefined') experience.refreshConnection();
 }
-const liveCount = () => [...sims.values()].filter((s) => s.truth).length;
+setInterval(refreshProviderConnections, 1000);
 
 /** Plot order: the saved layout first, then any new homes in the first free plots. */
 function computePlots() {
@@ -382,6 +424,8 @@ function applyRoles() {
   for (const sim of sims.values()) {
     if (sim.character) {
       const person = city.people?.[residentKey(sim.lot.project, sim.character.slot)];
+      const fixed=assignedRole(sim.character.assignedRole);
+      if(fixed){sim.setRole({...fixed,workplace:'Project team',why:'Assigned project responsibility, not an inferred activity score.'});continue;}
       const r = roleOf(person);
       sim.setRole(r ? { title: r.title, business: r.business, color: BUSINESSES[r.business].color, kind: 'apron', workplace: workplace(r.business), why: roleWhy(person, `${sim.character.name}'s sessions`) } : null);
     } else if (sim.roleName) {
@@ -485,7 +529,6 @@ const ui = new UI({
   },
   onFocus: (key) => focusSim(key),
   onPrompt: (sim) => openAgentChat(sim),
-  onPromptKey: (key) => {focusSim(key);openAgentChat(sims.get(key));},
   onFocusLot: (project) => {
     const lot = lots.get(project);
     if (!lot) return;
@@ -748,6 +791,7 @@ function frame() {
   pipeline.setTiltStrength(photo.active ? (photo.tilt ? 0.85 : 0) : THREE.MathUtils.smoothstep(camDist, 30, 95) * 0.75);
   const busyLots = new Set();
   let waitingCount = 0;
+  separateSims(sims.values(), dt);
   for (const [key, sim] of sims) {
     sim.observationConnected = bridgeReady;
     sim.expanded = sim === near;
@@ -788,7 +832,7 @@ function frame() {
     lastClockLabel = t;
     ui.setClock(env.label(), env.hour, settings.time);
     ui.setNight(env.night > 0.55);
-    if (ui.status.dataset.state === 'live') ui.setConnection('live', liveCount());
+    if (ui.status.dataset.state === 'live') refreshProviderConnections();
   }
   declutter(sims.values(), camera, app.clientWidth, app.clientHeight);
   ui.setHint(selected ? null : near);
@@ -815,7 +859,7 @@ const work = new WorkCenter({
   onFocus: project => { settings.focusProject = project; saveSettings(); },
 });
 function openAgentChat(sim){if(sim){select(sim);passCard.open(sim,{observedThread:true});}}
-const passCard=new PassCard({onActivity:(run,sim)=>{const target=run? sims.get(sessionToSim.get(run.conversationSession)):sim;if(!target)return false;if(selected)selected.selected=false;selected=target;target.selected=true;followSelected=true;document.body.classList.add('inspecting');ui.open(target);return true;},residentName:(project,slot)=>households.get(project)?.characters.find(c=>c.slot===slot)?.name,onClose:()=>{if(selected)ui.open(selected);}});
+const passCard=new PassCard({onActivity:(run,sim)=>{const target=run? sims.get(sessionToSim.get(run.conversationSession)):sim;if(!target)return false;if(selected)selected.selected=false;selected=target;target.selected=true;followSelected=true;document.body.classList.add('inspecting');ui.open(target);return true;},residentName:(project,slot)=>households.get(project)?.characters.find(c=>c.slot===slot)?.name,resident:(project,slot)=>sims.get(charKey(project,slot)),onClose:()=>{if(selected)ui.open(selected);}});
 document.body.classList.add('pass-workflow');
 function allowRoutine(session) {
   return shouldNotify(session, households.has(settings.focusProject) ? settings.focusProject : '');
@@ -985,7 +1029,7 @@ function openWardrobe(sim) {
     rig.distanceTarget = 7;
   } else {
     ui.close();
-    wardrobe.open({ name: 'You', model: player, change: { kind: 'player' }, saved: style.player || null, preview: () => player.previewHtml() });
+    wardrobe.open({ name: 'You', model: player, change: { kind: 'player' }, saved: style.player || null, preview: () => player.previewHtml(), mountPreview: (slot) => player.mountPreview(slot) });
   }
 }
 
@@ -993,7 +1037,7 @@ const experience = new Experience({ work, onConversations: () => library.open(),
 
 // Debug handle for the console.
 window.agentWorld = {
-  garden, photo, album, weatherFx, downtown, census, streetLife, landscape, city: () => city, sims, lots, player, rig, worldBounds, lookAt, sound, env, pipeline, focusSim, library, work, build, wardrobe, style: () => style, commons, seasons, explore, mapMode };
+  garden, photo, album, weatherFx, get passCard() { return passCard; }, downtown, census, streetLife, landscape, city: () => city, sims, lots, player, rig, worldBounds, lookAt, sound, env, pipeline, focusSim, library, work, build, wardrobe, style: () => style, commons, seasons, explore, mapMode };
 
 connect();
 frame();

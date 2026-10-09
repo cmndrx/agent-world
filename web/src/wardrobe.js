@@ -80,11 +80,10 @@ export class Wardrobe {
         ${colors('pants', 'Pants')}
         ${colors('shoes', 'Shoes')}
         ${chips('accessory', 'Accessory', Object.entries(WARDROBE.accessory))}
-        ${t.model.roleInfo?.kind ? `<div class="ward-group"><h4>Work clothes · ${escapeHtml(t.model.roleInfo.title)}</h4><div class="chips">${[['show', 'Wear them'], ['hide', 'Hide them']]
-          .map(([v, name]) => `<button class="chip-btn${(this.draft.uniform === false ? 'hide' : 'show') === v ? ' on' : ''}" data-uniform="${v}">${name}</button>`).join('')}</div></div>` : ''}
       </div>
       <footer><button data-save class="primary">${icon('check')} Save outfit</button><button data-reset>Reset to original</button><button data-cancel>Cancel</button></footer>
       <p class="build-msg" role="status"></p>`;
+    if (t.mountPreview) t.mountPreview(this.panel.querySelector('[data-preview]'));
   }
 
   async onClick(e) {
@@ -94,13 +93,6 @@ export class Wardrobe {
       const field = b.dataset.field;
       this.draft[field] = field === 'hairStyle' ? Number(b.dataset.value) : b.dataset.value;
       this.target.model.setLook(this.draft); // live preview
-      this.render();
-      return;
-    }
-    if (b.dataset.uniform) {
-      if (b.dataset.uniform === 'hide') this.draft.uniform = false;
-      else delete this.draft.uniform;
-      this.target.model.setLook(this.draft);
       this.render();
       return;
     }
