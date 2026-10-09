@@ -44,6 +44,8 @@ Codex needs no setup. `npm run dev` tails `~/.codex/sessions` automatically (`np
 
 Remove the hooks any time with `npm run hooks:claude -- --remove`.
 
+`npm start` / `yarn start` builds the client and serves it at http://127.0.0.1:4777/. If a normal Agent World instance already serves that address, startup reuses it without launching another observer or runner. Other port conflicts stop before starting child processes. Dev/demo and custom-home launches require a free port; check for approved, queued or running work before stopping an existing server.
+
 ## Desktop app (Electron)
 
 **Applying source updates to the desktop app:** Every application code or UI update must include `npm run app:build` and package verification. the packaged app contains a snapshot of this checkout. Editing source or running `npm run build` does not refresh an already-running packaged app. After checking that no work is queued or running, quit Agent World, run `npm run app:build`, then reopen `release/mac-arm64/Agent World.app`. For checkout development, quit the packaged app and use `npm run app` instead. An existing bridge may be reused, so ensure the bridge also runs the updated code.

@@ -224,27 +224,20 @@ function endSession(sessionId) {
   syncLibrarySessions();
 }
 
-// <<<<<<< ai-features
 function applySnapshot({ selectedProjects: chosen=null, households: hs, sessions, projects = [], conversations = [], plans = [], tasks = [], passes, runner }) {
   selectedProjects=chosen===null?null:new Set(chosen);
   const visible=p=>selectedProjects===null||selectedProjects.has(p.project);
   hs=hs.filter(visible);sessions=sessions.filter(visible);projects=projects.filter(p=>selectedProjects===null||selectedProjects.has(p.home));conversations=conversations.filter(visible);plans=plans.filter(visible);tasks=tasks.filter(visible);
+  const { households: visibleHouseholds, sessions: visibleSessions } = visibleResidents(gameplay, hs, sessions);
   if(!hs.length&&!emptyLot){
     emptyLot=new THREE.Group();
     const plot=new THREE.Mesh(new THREE.BoxGeometry(22,.15,20),new THREE.MeshStandardMaterial({color:0x96b782,roughness:1}));plot.receiveShadow=true;emptyLot.add(plot);
     const button=document.createElement('button');button.className='first-project-lot';button.textContent='＋ Add your first project';button.addEventListener('click',()=>{document.querySelector('[data-roster-view="projects"]').click();ui.projectsPanel.importing=false;ui.projectsPanel.render();});
     const label=new CSS2DObject(button);label.position.set(0,1.5,0);emptyLot.add(label);scene.add(emptyLot);
   }
-  passCard.setData({passes,runner,tasks,sessions,conversations});
+  passCard.setData({passes,runner,tasks,sessions:visibleSessions,conversations});
   work.setData({ households:hs, plans, tasks, conversations });
   library.setData({ households:hs, projects, conversations });
-// =======
-// function applySnapshot({ households: hs, sessions, projects = [], conversations = [], plans = [], tasks = [], passes, runner }) {
-//   const { households: visibleHouseholds, sessions: visibleSessions } = visibleResidents(gameplay, hs, sessions);
-//   passCard.setData({passes,runner,tasks,sessions:visibleSessions,conversations});
-//   work.setData({ plans, tasks, conversations });
-//   library.setData({ projects, conversations });
-// >>>>>>> gameplay-improvement
   replaying = true;
   visibleHouseholds.forEach(applyHousehold);
   const live = new Set(visibleSessions.map((s) => s.session));
