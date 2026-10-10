@@ -321,6 +321,7 @@ export class WeatherFx {
 export function patchCharacterMaterial(m) {
   if (m.userData.rim) return m;
   m.userData.rim = true;
+  m.userData.fx = true; // characters never get world weather (snow, wet sheen) or wind
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uRimColor = fxUniforms.uRimColor;
     shader.uniforms.uRimStrength = fxUniforms.uRimStrength;

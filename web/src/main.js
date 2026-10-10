@@ -235,7 +235,9 @@ function applySnapshot({ selectedProjects: chosen=null, households: hs, sessions
     const button=document.createElement('button');button.className='first-project-lot';button.textContent='＋ Add your first project';button.addEventListener('click',()=>{document.querySelector('[data-roster-view="projects"]').click();ui.projectsPanel.importing=false;ui.projectsPanel.render();});
     const label=new CSS2DObject(button);label.position.set(0,1.5,0);emptyLot.add(label);scene.add(emptyLot);
   }
-  passCard.setData({passes,runner,tasks,sessions,conversations});
+  // Merge fix: gameplay-improvement's resident visibility, applied after ai-features' project filter.
+  const { households: visibleHouseholds, sessions: visibleSessions } = visibleResidents(gameplay, hs, sessions);
+  passCard.setData({passes,runner,tasks,sessions:visibleSessions,conversations});
   work.setData({ households:hs, plans, tasks, conversations });
   library.setData({ households:hs, projects, conversations });
 // =======

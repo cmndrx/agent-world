@@ -88,6 +88,7 @@ export class Seasons {
       if (!o.isMesh || !o.material?.color || seen.has(o.material)) return;
       const m = o.material;
       seen.add(m);
+      if (m.userData.rim) return; // character materials keep their colors in every season
       if (m.userData.baseColor === undefined) m.userData.baseColor = m.color.getHex();
       const base = m.userData.baseColor;
       const isFoliage = FOLIAGE.includes(base);

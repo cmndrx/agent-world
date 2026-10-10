@@ -3,6 +3,7 @@ import { icon } from './icons.js';
 
 const SEEN = 'agent-world:mayor-martin-seen';
 const timeLeft = ms => `${Math.ceil(ms / 60_000)} min`;
+const escape = text => String(text).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
 
 export class MayorOnboarding {
   constructor({ character, onConnections, onChange, onFocusTownHall }) {
@@ -65,9 +66,11 @@ export class MayorOnboarding {
     if (!button.dataset.action) return;
     button.disabled = true;
     this.error = '';
+    this.auth = null;
     try {
       const response = await fetch('/api/gameplay', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: button.dataset.action, provider: button.dataset.provider }) });
       const data = await response.json();
+      this.auth = data.auth || null;
       if (!response.ok) throw new Error(response.status === 404 ? 'This game server is out of date. Restart Agent World and try again.' : data.error || 'Town action failed.');
       this.gameplay = data.gameplay;
       this.onChange(data.gameplay);
@@ -81,24 +84,24 @@ export class MayorOnboarding {
     let line, choices, detail = '';
     if (!connected && this.beat === 0) {
       line = 'Governor! There you are. I’ve been dreaming of the town we can build together.';
-      choices = '<button class="mayor-choice primary" data-next>Tell me more <span>›</span></button>';
+      choices = `<button class="mayor-choice primary" data-next>Tell me more ${icon('chevronRight')}</button>`;
     } else if (!connected) {
       line = `Already signed in to Codex or Claude Code? Link one to this town. I'll welcome your agents and give you ${CONNECTION_GEMS} gems for our Town Hall.`;
-      choices = `<button class="mayor-choice primary" data-action="claim" data-provider="codex">Link Codex to town <span>›</span></button><button class="mayor-choice" data-action="claim" data-provider="claude">Link Claude Code to town <span>›</span></button><button class="mayor-choice subtle" data-connections>How do I sign in? <span>›</span></button>`;
+      choices = `<button class="mayor-choice primary" data-action="claim" data-provider="codex">Link Codex to town ${icon('chevronRight')}</button><button class="mayor-choice" data-action="claim" data-provider="claude">Link Claude Code to town ${icon('chevronRight')}</button><button class="mayor-choice subtle" data-connections>How do I sign in? ${icon('chevronRight')}</button>`;
     } else if (state.status === 'empty') {
       line = `Wonderful! ${this.gameplay.connection.provider === 'claude' ? 'Claude Code' : 'Codex'} is here, and we have ${CONNECTION_GEMS} gems. Shall we lay the first stone of our Town Hall?`;
       detail = `<div class="mayor-detail"><span>${icon('gem')} ${TOWN_HALL.cost} gems</span><span>${icon('clock')} ${timeLeft(TOWN_HALL.durationMs)} to build</span><span>${this.balance} gems in your pocket</span></div>`;
-      choices = `<button class="mayor-choice primary" data-action="start" ${this.balance < TOWN_HALL.cost ? 'disabled' : ''}>Build the Town Hall <span>›</span></button><button class="mayor-choice subtle" data-close>Let me look around <span>›</span></button>`;
+      choices = `<button class="mayor-choice primary" data-action="start" ${this.balance < TOWN_HALL.cost ? 'disabled' : ''}>Build the Town Hall ${icon('chevronRight')}</button><button class="mayor-choice subtle" data-close>Let me look around ${icon('chevronRight')}</button>`;
     } else if (state.status === 'building') {
       line = `Look at it rise, Governor! The crew has about <strong data-countdown>${timeLeft(state.remainingMs)}</strong> left. A few more gems could hurry them along.`;
       detail = `<div class="mayor-progress" aria-label="Town Hall construction progress"><span data-progress style="width:${Math.max(2, 100 * (1 - state.remainingMs / TOWN_HALL.durationMs))}%"></span></div><div class="mayor-detail"><span>${icon('gem')} ${this.balance} gems</span><span>${icon('clock')} Ready in ${timeLeft(state.remainingMs)}</span></div>`;
-      choices = `<button class="mayor-choice primary" data-action="expedite" ${this.balance < TOWN_HALL.expediteGems ? 'disabled' : ''}>Speed up 1 minute <span>${TOWN_HALL.expediteGems} ${icon('gem')}</span></button><button class="mayor-choice subtle" data-close>Let the crew work <span>›</span></button>`;
+      choices = `<button class="mayor-choice primary" data-action="expedite" ${this.balance < TOWN_HALL.expediteGems ? 'disabled' : ''}>Speed up 1 minute <span>${TOWN_HALL.expediteGems} ${icon('gem')}</span></button><button class="mayor-choice subtle" data-close>Let the crew work ${icon('chevronRight')}</button>`;
     } else {
       line = 'Would you look at that! Our Town Hall is open. This is only the beginning, Governor.';
-      choices = '<button class="mayor-choice primary" data-close>Explore our town <span>›</span></button>';
+      choices = `<button class="mayor-choice primary" data-close>Explore our town ${icon('chevronRight')}</button>`;
     }
-    const error = this.error ? `<p class="mayor-error" role="alert">${this.error.replaceAll('&', '&amp;').replaceAll('<', '&lt;')}</p>` : '';
-    this.dialog.innerHTML = `<div class="mayor-wash" aria-hidden="true"></div><button class="mayor-dismiss" data-close aria-label="End conversation">${icon('x')}</button><section class="mayor-talk" aria-label="Mayor Martin"><div class="mayor-bubble"><div class="mayor-name">Mayor Martin</div><small class="mayor-quest">The first build · Town Hall</small><p class="mayor-line" aria-live="polite">${line}</p>${detail}${error}<div class="mayor-options">${choices}</div></div></section>`;
+    const error = this.error ? `<p class="mayor-error" role="alert">${escape(this.error)}</p>` : '';
+    this.dialog.innerHTML = `<div class="mayor-wash" aria-hidden="true"></div><button class="mayor-dismiss" data-close aria-label="End conversation">${icon('x')}</button><section class="mayor-talk" aria-label="Mayor Martin"><div class="mayor-bubble"><div class="mayor-head"><span class="mayor-name">Mayor Martin</span><small class="mayor-quest">${icon('landmark')} The first build · Town Hall</small></div><p class="mayor-line" aria-live="polite">${line}</p>${detail}${error}<div class="mayor-options">${choices}</div></div></section>`;
     this.character.attachPortrait(this.dialog);
   }
 }

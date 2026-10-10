@@ -14,7 +14,7 @@ const OFFICE_ROUTE = [
 
 function makeMayor(scale) {
   const parts = buildPerson(LOOK, { scale });
-  const beardMat = new THREE.MeshStandardMaterial({ color: 0x8b8981, roughness: 0.9 });
+  const beardMat = new THREE.MeshStandardMaterial({ color: 0x8b8981, roughness: 0.9, flatShading: true }); // faceted, like the hair
   for (const [x, y, z, sx, sy, sz] of [
     [-0.23, 0.15, 0.12, 0.09, 0.15, 0.12],
     [0.23, 0.15, 0.12, 0.09, 0.15, 0.12],
@@ -22,7 +22,7 @@ function makeMayor(scale) {
     [-0.085, 0.18, 0.255, 0.09, 0.035, 0.045],
     [0.085, 0.18, 0.255, 0.09, 0.035, 0.045],
   ]) {
-    const tuft = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 10), beardMat);
+    const tuft = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), beardMat);
     tuft.position.set(x, y, z);
     tuft.scale.set(sx, sy, sz);
     parts.head.add(tuft);
@@ -60,11 +60,19 @@ function pose(parts, t, talking, phase = 0) {
   parts.body.position.y = Math.sin(t * 2 + phase) * (talking ? 0.035 : 0.015);
   parts.spine.rotation.z = Math.sin(t * 1.3 + phase) * 0.035;
   parts.head.rotation.y = Math.sin(t * 1.4 + phase) * 0.12;
-  parts.head.rotation.x = talking ? -0.08 + Math.sin(t * 2.5 + phase) * 0.045 : 0;
-  parts.armL.rotation.z = -0.3;
-  parts.armR.rotation.z = talking ? -0.8 - wave * 0.28 : -0.35;
-  parts.armR.rotation.x = talking ? -0.65 : -0.12;
-  parts.elbowR.rotation.x = talking ? -0.55 - wave * 0.18 : -0.3;
+  parts.head.rotation.x += ((talking ? -0.08 + Math.sin(t * 2.5 + phase) * 0.045 : 0) - parts.head.rotation.x) * 0.14;
+  // Left arm relaxed at his side (positive z swings it out from the body; the old −0.3 tucked it
+  // behind his back). The right arm gestures while he talks and relaxes the same way otherwise.
+  const breathe = Math.sin(t * 1.7 + phase);
+  // Ease toward the targets so switching between talking and listening never snaps.
+  const ease = (obj, key, target, k = 0.14) => { obj[key] += (target - obj[key]) * k; };
+  ease(parts.armL.rotation, 'x', -0.07);
+  parts.armL.rotation.y = 0;
+  ease(parts.armL.rotation, 'z', 0.17 + breathe * 0.015);
+  ease(parts.elbowL.rotation, 'x', -0.24);
+  ease(parts.armR.rotation, 'z', talking ? -0.8 - wave * 0.28 : -0.17 - breathe * 0.015);
+  ease(parts.armR.rotation, 'x', talking ? -0.65 : -0.07);
+  ease(parts.elbowR.rotation, 'x', talking ? -0.55 - wave * 0.18 : -0.24);
   parts.mouthOpen.visible = talking && Math.sin(t * 11 + phase) > -0.08;
   parts.mouth.visible = !parts.mouthOpen.visible;
 }

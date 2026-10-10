@@ -13,7 +13,7 @@ import { plumbobFor } from '../../shared/schema.mjs';
 import { activityKey, appName, resolveActivity } from './activity.js';
 import { buildLaptop } from './furniture.js';
 import { icon, STATE_ICON } from './icons.js';
-import { buildContactShadow, buildPerson, buildPlumbob, lookFromSeed, PLUMBOB_COLORS, PROVIDER_COLORS } from './models.js';
+import { SHOULDER_X, buildContactShadow, buildPerson, buildPlumbob, lookFromSeed, PLUMBOB_COLORS, PROVIDER_COLORS } from './models.js';
 import { conversationLabel } from '../../shared/conversations.mjs';
 import { Screen } from './screens.js';
 
@@ -78,7 +78,7 @@ export function armIK(T, side, target, build = 1) {
   _e.set(T.lean, T.twist, 0, 'XYZ');
   _q.setFromEuler(_e).invert();
   _v.set(target[0], target[1] - (0.9 + T.bodyY), target[2]).applyQuaternion(_q);
-  _v.x -= side * 0.3 * build;
+  _v.x -= side * SHOULDER_X * build;
   _v.y -= 0.62;
   const L = clamp(_v.length(), 0.12, L1 + L2 - 0.002);
   _v.normalize();
@@ -476,8 +476,13 @@ export class Sim {
   /** Pose → joint targets (with arm IK for desk work); joints ease toward targets so moves blend. */
   animate(pose, t, dt) {
     const T = Object.fromEntries(JOINTS.map((j) => [j, 0]));
-    T.armLz = 0.08;
-    T.armRz = -0.08;
+    // Relaxed default stance: arms hang just off the body with soft elbows and a slight forward
+    // carry, drifting with the breath. Poses override whatever they need.
+    const breathe = Math.sin(t * 1.7 + this.hash);
+    T.armLz = 0.17 + breathe * 0.015;
+    T.armRz = -0.17 - breathe * 0.015;
+    T.armLx = T.armRx = -0.07;
+    T.elbowL = T.elbowR = -0.24;
     T.headY = Math.sin(t * 0.4 + this.hash) * 0.12;
     const build = this.look.build;
 

@@ -31,8 +31,7 @@ import { MAX_PHOTO_BYTES, deletePhoto, listPhotos, photoIds, photoPath, savePhot
 import { progress } from '../shared/progression.mjs';
 import { applyGameplayAction, emptyGameplay, gameplaySpent } from '../shared/gameplay.mjs';
 import { readCodexUsage } from './usage.mjs';
-import { claudeCommand } from './providers.mjs';
-import { spawnSync } from 'node:child_process';
+import { claudeAuth } from './provider-auth.mjs';
 import { dayKey, spawnsFor } from '../shared/collectibles.mjs';
 import { appProjectID } from '../shared/conversations.mjs';
 import { Inbox } from './inbox.mjs';
@@ -133,9 +132,9 @@ function saveGameplay() {
 async function providerReady(provider) {
   if (provider === 'codex') return (await readCodexUsage()).status === 'available';
   if (provider === 'claude') {
-    const result = spawnSync(claudeCommand(), ['auth', 'status', '--json'], { encoding: 'utf8', timeout: 5000, windowsHide: true, shell: process.platform === 'win32' });
-    if (result.status !== 0) return false;
-    try { return JSON.parse(result.stdout).loggedIn === true; } catch { return false; }
+    const auth = await claudeAuth();
+    if (!auth.ready) throw Object.assign(new Error(auth.message), { auth });
+    return true;
   }
   return false;
 }
@@ -480,7 +479,7 @@ const server = http.createServer(async (req, res) => {
       broadcast({ type: 'catalog', ...world.catalog.snapshot() });
       res.writeHead(200); return res.end(JSON.stringify({ ok: true, result }));
     } catch (err) {
-      res.writeHead(400); return res.end(JSON.stringify({ error: err.message }));
+      res.writeHead(400); return res.end(JSON.stringify({ error: err.message, ...(err.auth ? { auth: err.auth } : {}) }));
     }
   }
 

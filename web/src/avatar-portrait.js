@@ -15,8 +15,8 @@ const FPS = 30;
 /** Framing per mode: where the camera looks (character-local y) and how much it sees. */
 const FRAMES = {
   // Hair and hats reach ~2.45 m; the bust shows chest to crown, the waist view hips to crown.
-  bust: { target: 1.97, height: 1.04, fov: 24, yaw: 0.42, lift: 0.12 },
-  waist: { target: 1.66, height: 1.9, fov: 24, yaw: 0.36, lift: 0.18 },
+  bust: { target: 2.04, height: 1.22, fov: 24, yaw: 0.42, lift: 0.12 },
+  waist: { target: 1.74, height: 2.0, fov: 24, yaw: 0.36, lift: 0.18 },
 };
 
 let renderer = null;
@@ -89,7 +89,7 @@ export class AvatarPortrait {
     this.camera = new THREE.PerspectiveCamera(FRAMES[mode].fov, 1, 0.1, 20);
     this.key = '';
     this.parts = null;
-    this.J = { bodyY: 0, headX: 0, headY: 0, headZ: 0, armLx: 0, armLz: 0.1, armRx: 0, armRz: -0.1, elbowL: -0.15, elbowR: -0.15, lean: 0, twist: 0 };
+    this.J = { bodyY: 0, headX: 0, headY: 0, headZ: 0, armLx: -0.07, armLz: 0.17, armRx: -0.07, armRz: -0.17, elbowL: -0.24, elbowR: -0.24, lean: 0, twist: 0 };
     this.nextBlink = 1 + Math.random() * 2;
     this.phase = Math.random() * 10;
     portraits.add(this);
@@ -117,15 +117,15 @@ export class AvatarPortrait {
 
   animate(dt, t) {
     const think = !!this.thinking();
-    const T = { bodyY: 0, headX: 0, headY: 0, headZ: 0, armLx: 0.02, armLz: 0.1, armRx: 0.02, armRz: -0.1, elbowL: -0.15, elbowR: -0.15, lean: 0, twist: 0 };
+    const T = { bodyY: 0, headX: 0, headY: 0, headZ: 0, armLx: -0.07, armLz: 0.17, armRx: -0.07, armRz: -0.17, elbowL: -0.24, elbowR: -0.24, lean: 0, twist: 0 };
     const ph = t + this.phase;
     // Idle: a slow glance around and a soft weight shift.
     T.headY = Math.sin(ph * 0.45) * 0.18 + Math.sin(ph * 1.3) * 0.03;
     T.headZ = Math.sin(ph * 0.6) * 0.04;
     T.headX = Math.sin(ph * 0.7) * 0.03;
     T.twist = Math.sin(ph * 0.35) * 0.05;
-    T.armLz = 0.1 + Math.sin(ph * 2) * 0.012;
-    T.armRz = -0.1 - Math.sin(ph * 2) * 0.012;
+    T.armLz = 0.17 + Math.sin(ph * 2) * 0.015;
+    T.armRz = -0.17 - Math.sin(ph * 2) * 0.015;
     if (think) {
       // Hand to chin, head tilted, eyes up and to the side, tapping slowly.
       armIK(T, -1, [-0.07, 1.69 + Math.sin(ph * 1.6) * 0.012, 0.31]);

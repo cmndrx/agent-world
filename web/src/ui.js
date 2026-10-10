@@ -176,6 +176,18 @@ export class UI {
 //     this.status.setAttribute('aria-label', `${view.text}. ${view.detail}`);
 // =======
   setConnection(state, live = 0) {
+    // Merge fix: ai-features passes a connectionView ({ text, detail, count }); gameplay-improvement passed a count.
+    const view = live && typeof live === 'object' ? live : null;
+    if (view) live = view.count;
+    if (view && this.gameLinked && state === 'live') {
+      this.connectionState = state;
+      this.liveCount = view;
+      this.status.dataset.state = state;
+      this.status.title = view.detail;
+      this.status.setAttribute('aria-label', `${view.text}. ${view.detail}`);
+      this.status.querySelector('.text').textContent = view.text;
+      return;
+    }
     this.status.title = state === 'live' ? (this.gameLinked ? 'Bridge connected. Agent state is the last received observation, not an adapter health check.' : 'Bridge connected. Link Codex or Claude Code with Mayor Martin to welcome agents into town.') : 'Current activity unavailable. Received observations and your planning are preserved.';
 // >>>>>>> gameplay-improvement
     this.connectionState = state;
@@ -483,20 +495,14 @@ export class UI {
 
   /** Your agents: a flat list of every agent with its status (same words as its bubble) and when it was last seen. */
   renderRoster(sims, lots, selected) {
-// <<<<<<< ai-features
-//     if(this.rosterView==='projects')return;
-//     const stale = this.connectionState !== 'live';
-//     $('#roster-count').textContent = sims.length ? `${sims.length} agent${sims.length === 1 ? "" : "s"} · ${sims.filter((s) => s.truth).length} active` : '';
-//     if (!sims.length) {
-//       const html = `<div class="empty">Add your first project to give your agents a home.<br><br><button type="button" onclick="document.querySelector('[data-roster-view=projects]').click()">Add a project</button></div>`;
-// =======
-    const live = sims.filter((s) => s.truth).length;
-    $('#roster-count').textContent = lots.length ? `${lots.length} home${lots.length === 1 ? '' : 's'} · ${live} ${this.connectionState === 'live' ? 'attached' : 'last known sessions'}` : '';
-    if (!lots.length) {
+    // Merge fix: ai-features' flat agent list and Projects tab, with gameplay-improvement's town-link empty state.
+    if (this.rosterView === 'projects') return;
+    const stale = this.connectionState !== 'live';
+    $('#roster-count').textContent = sims.length ? `${sims.length} agent${sims.length === 1 ? '' : 's'} · ${sims.filter((s) => s.truth).length} active` : '';
+    if (!sims.length) {
       const html = this.gameLinked
-        ? `<div class="empty">No agents yet.<br>Start Claude Code or Codex in any project folder and its agent moves in here.</div>`
+        ? `<div class="empty">Add your first project to give your agents a home.<br><br><button type="button" onclick="document.querySelector('[data-roster-view=projects]').click()">Add a project</button></div>`
         : `<div class="empty">Your town is waiting for its first agents.<br>Talk to Mayor Martin to link Codex or Claude Code.</div>`;
-// >>>>>>> gameplay-improvement
       if (this.html.roster !== html) this.rosterBody.innerHTML = this.html.roster = html;
       return;
     }
