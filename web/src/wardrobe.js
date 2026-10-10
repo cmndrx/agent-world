@@ -72,6 +72,7 @@ export class Wardrobe {
         <button class="icon-btn" data-cancel aria-label="Close without saving">${icon('x')}</button></header>
       <div class="ward-body">
         ${t.preview ? t.preview() : ''}
+        ${t.xp ? `<div class="ward-xp">${t.xp()}</div>` : ''}
         ${colors('skin', 'Skin tone')}
         ${chips('hairStyle', 'Hair', WARDROBE.hairStyle.map((n, i) => [i, n]))}
         ${colors('hair', 'Hair color')}

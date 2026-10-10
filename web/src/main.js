@@ -25,6 +25,7 @@ import { BRICKS, homeLevel, levelName, progress } from '../../shared/progression
 import { Celebrations } from './celebrate.js';
 import { ProgressPanel } from './progress.js';
 import { MayorOnboarding } from './onboarding.js';
+import { Levels, xpMarkup } from './levels.js';
 import { MayorCharacter } from './mayor-character.js';
 import { emptyGameplay, townHallState, visibleResidents } from '../../shared/gameplay.mjs';
 import { escapeHtml } from './sim.js';
@@ -245,6 +246,7 @@ function applySnapshot({ selectedProjects: chosen=null, households: hs, sessions
   // Primary sessions first so visitors can find their parent.
   [...visibleSessions].sort((a, b) => (a.parent_session ? 1 : 0) - (b.parent_session ? 1 : 0)).forEach(applySession);
   replaying = false;
+  levels.setData(passes?.runs || []);
   syncLibrarySessions();
   // Don't fire "still waiting" reminders for waits that began before we connected.
   for (const sim of sims.values()) if (sim.waitSeconds > REMIND_AFTER_S) sim.reminded = true;
@@ -315,7 +317,7 @@ function connect() {
     }
     else if (m.type === 'photos') { photos = m.photos || []; album?.setPhotos(photos); }
     else if (m.type === 'catalog') { if(selectedProjects!==null){m.projects=m.projects.filter(p=>selectedProjects.has(p.home));m.conversations=m.conversations.filter(p=>selectedProjects.has(p.project));} library.setData({ projects: m.projects, conversations: m.conversations }); work.setData({ conversations: m.conversations }); passCard.setData({conversations:m.conversations}); syncLibrarySessions(); }
-    else if (m.type === 'passes') passCard.setData(m);
+    else if (m.type === 'passes') { passCard.setData(m); levels.setData(m.passes?.runs || []); }
     else if (m.type === 'productivity') {
       passCard.setData({tasks:m.tasks});
       work.setData({ plans: m.plans, tasks: m.tasks });
@@ -385,9 +387,16 @@ function applyLayout() {
 
 /** Recompute gems and levels, then update houses, the chip and the catalog. */
 function refreshProgress() {
-  prog = progress(gameplay.connection ? board : { tasks: [], plans: [] }, gameplay.connection ? style : emptyStyle(), gameplay);
+  prog = progress(gameplay.connection ? {...board, households:[...households.values()], residentExperience:levels.data.residents} : { tasks: [], plans: [] }, gameplay.connection ? style : emptyStyle(), gameplay);
   ui.setGameLinked(!!gameplay.connection);
-  for (const lot of lots.values()) lot.setLevel(prog.levels[lot.project] || 1);
+  for (const lot of lots.values()) {
+    const next = prog.levels[lot.project] || 1, previous = lot.level;
+    lot.setLevel(next);
+    if (!firstSnapshot && previous >= 1 && next > previous) {
+      celebrations.confetti(lot.toWorld(0, 0));
+      cheer(`<b>${escapeHtml(households.get(lot.project)?.name || 'Your home')}</b> reached home level ${next} · ${levelName(next)}!`);
+    }
+  }
   const hallStatus = townHallState(gameplay).status;
   commons.set(prog.commons, prog.counts.outcomes, hallStatus, gameplay.townhall?.readyAt);
   if (gameplayLoaded) mayorCharacter.setTownHallStatus(hallStatus);
@@ -412,7 +421,7 @@ function celebrateChanges(before, next) {
     if ((p.milestones?.length || 0) <= (plans.get(p.project)?.milestones?.length || 0)) continue;
     const lot = lots.get(p.project);
     if (lot) celebrations.fireworks(lot.toWorld(0, 0));
-    cheer(`<b>${escapeHtml(households.get(p.project)?.name || 'Your home')}</b> grew into a ${levelName(homeLevel(p))}! · <b>+${BRICKS.outcomeReached} gems</b>`);
+    cheer(`<b>${escapeHtml(households.get(p.project)?.name || 'Your home')}</b> reached an outcome! · <b>+${BRICKS.outcomeReached} gems</b>`);
   }
 }
 
@@ -519,6 +528,10 @@ async function saveStyle(change) {
 
 // You're a picture in the top bar, not a character in the world: the camera is how you get around.
 const player = new Player({ onOpen: () => openWardrobe(null) });
+const levels = new Levels(() => [...households.values()], {
+  onPlayer: (l) => player.setLevel(l.level),
+  onChange: () => { refreshProgress(); if (wardrobe?.target?.change?.kind === 'player') wardrobe.render(); },
+});
 const camFocus = new THREE.Vector3(0, 0.12, 0); // what the free camera looks at
 const rig = new CameraRig(camera, renderer.domElement, {
   // Dragging moves whatever the current mode is looking at; grabbing the map stops following a Sim.
@@ -556,6 +569,7 @@ function focusTownHall() {
 }
 
 const ui = new UI({
+  xpFor: (sim) => (sim.character ? levels.resident(sim.lot.project, sim.character.slot) : null),
   onRename: async (sim, name) => {
     await fetch('/api/rename', {
       method: 'POST',
@@ -1076,7 +1090,7 @@ function openWardrobe(sim) {
     rig.distanceTarget = 7;
   } else {
     ui.close();
-    wardrobe.open({ name: 'You', model: player, change: { kind: 'player' }, saved: style.player || null, preview: () => player.previewHtml(), mountPreview: (slot) => player.mountPreview(slot) });
+    wardrobe.open({ name: 'You', model: player, change: { kind: 'player' }, saved: style.player || null, preview: () => player.previewHtml(), mountPreview: (slot) => player.mountPreview(slot), xp: () => xpMarkup(levels.player, { label: 'You' }) });
   }
 }
 
@@ -1090,7 +1104,7 @@ mayor = new MayorOnboarding({
 
 // Debug handle for the console.
 window.agentWorld = {
-  garden, photo, album, weatherFx, get passCard() { return passCard; }, downtown, census, streetLife, landscape, city: () => city, sims, lots, player, rig, worldBounds, lookAt, sound, env, pipeline, focusSim, library, work, build, wardrobe, style: () => style, commons, mayorCharacter, seasons, explore, mapMode };
+  garden, photo, album, weatherFx, get passCard() { return passCard; }, get levels() { return levels; }, downtown, census, streetLife, landscape, city: () => city, sims, lots, player, rig, worldBounds, lookAt, sound, env, pipeline, focusSim, library, work, build, wardrobe, style: () => style, commons, mayorCharacter, seasons, explore, mapMode };
 
 connect();
 frame();

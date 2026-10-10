@@ -1,3 +1,150 @@
+# GitHub PR #2 conflict resolution (October 10, 2026)
+
+- User requested resolution of GitHub conflicts between `ai-features` and `gameplay-improvement`. PR #2 targets `gameplay-improvement`; prepared the resolution in an isolated checkout at `C:\Users\pawns\.codex\worktrees\resolve-ai-gameplay\agent-world`, branch `codex/resolve-ai-gameplay`, merging gameplay `733b966` into AI `215abf8`. Original gameplay checkout was clean and remains untouched. Delivery target is `ai-features`; the PR stays open for human review/merge.
+- Resolved `web/src/main.js` with one resident-visibility calculation after project selection, retaining AI participation XP updates. Resolved `web/src/ui.js` with gameplay's corrected provider-health view handling, accessibility, stale roster labels and Projects guard, retaining the newer XP slot and soundtrack tooltip. Removed inherited commented conflict markers. Combined both branches' handoff entries, retaining gameplay startup reuse and regression tests. Extended the actual snapshot regression to verify XP run history and legacy snapshots without passes.
+- Focused merge/startup/gameplay/connections/experience/progression tests: **26/26 passed**. Syntax checks and `git diff --check` passed. Standard `npm test` still fails directory discovery on Windows/Node 24.18.0. Explicit full enumeration: **217 tests, 184 passed, 33 failed**. Untouched gameplay baseline: **207 tests, 174 passed, 33 failed**; failure names are identical after normalizing checkout paths. No new failures; existing POSIX fixture/path/permission and CRLF-sensitive composer failures remain unresolved. Logs: `%TEMP%\agent-world-conflicts-{npm-test,merged,baseline}.log`.
+- Actual built-renderer QA in hidden Electron windows, isolated temporary `AGENT_WORLD_HOME`/`CODEX_HOME`, runner disabled and nonexistent CLI commands: unlinked has zero residents/homes and mayor onboarding; linked has three off-duty residents and only the selected home; intro dismisses, Projects view remains selected, switching back to Agents works, bridge shutdown shows `Live · unavailable`. Both scenarios recorded zero renderer errors. Temporary servers/windows closed. Evidence: `%TEMP%\agent-world-conflicts-ui-evidence.log`; harness: `%TEMP%\agent-world-conflicts-ui-qa.cjs`. No real prompts, queue/schedule changes or provider spending.
+- Required `npm run app:build`: Vite passed; configured macOS packaging is unsupported on Windows. Local fallback `npx electron-builder --win --dir '--config.win.signAndEditExecutable=false'` passed. SHA-256 parity: dist **15**, bridge **23**, shared **28**, adapters **8** files, all **74** match. Seven MP3 assets are present. Authenticode status is **NotSigned**; signed macOS package verification still requires macOS. Builder's incidental `yarn.lock` rewrite was reverted; no dependency changes are included.
+- Existing real bridge on port 4777 was inspected read-only (zero proposals/runs) and left running. Original app/package was not replaced or restarted; adopting this isolated package requires a safe reopen after checking approved/queued/running work. No real planning changes, acceptance, rewards or authentication changes.
+- Next action: review and merge PR #2 once GitHub reports it mergeable; validate signed macOS packaging on macOS if distributing that target. The Windows full-suite and signing limitations are separate work.
+
+# Latest pass — Continuous meadow town ambience (October 10, 2026)
+
+- Added the user-supplied Meadows Ambience MP3 as a separate looping audio layer at 15% volume. Excluded Meadows files from the shuffled song playlist; the six soundtrack songs remain unchanged. Starts after interaction and pauses/resumes with the existing persisted Sound toggle. Audio load failure leaves music/chimes functional without repeated ambience reloads.
+- Targeted audio smoke verified gesture gating, separate continuous loop, music advancing without restarting ambience, shared mute/resume and failure isolation. Syntax and diff checks passed. `npm run app:build`, strict codesign and dist/bridge/shared/adapters parity passed; seven MP3s packaged. Packaged verification exposed a 404 for the filename with spaces. Fixed static URL decoding with a malformed-path 400 and root-boundary guard; added audio/mpeg MIME. New isolated static-audio API regression covers encoded names, malformed URL, missing file and traversal. Full Node 18 suite **216/216 passed** after the server fix. Final app build/signature/parity passed.
+- Fresh safe-reopen check found no approved/queued/running/interrupted game work. Reopened the corrected app: encoded asset returned HTTP 200 audio/mpeg with exact byte parity. Native Electron Media diagnostics verified the meadow player uses FFmpegAudioDecoder, BUFFERING_HAVE_ENOUGH, kPlaying and kPlay. DevTools closed; app left open. No provider prompts, queue changes, rewards, acceptance, commit or push performed.
+
+# Commit verification — participation levels, pooled home XP and soundtrack (October 10, 2026)
+
+- User authorized committing and pushing the accumulated XP UI, pooled home progression and six-track soundtrack to `ai-features`.
+- No application code changed during this shipping pass. Reused the immediately preceding **215/215** passing suite and native home/music verification. Fresh diff check, strict package signature and dist/bridge/shared/adapters parity passed.
+- Packaged app is current; launch/open it without interrupting running work. No real provider prompt, game queue mutation, acceptance or spending performed.
+
+# Latest pass — Pooled home XP and background soundtrack (October 10, 2026)
+
+- Supersedes highest-resident leveling: homes pool lifetime participation XP from every current resident in the project, counting each slot once. Building upgrades require 300, then another 450, 600 and 750 XP (total thresholds 300/750/1,350/2,100); fixed requirements do not rise when residents join. Individual agent/player leveling and gem rewards are unchanged. Server decor eligibility and client exteriors use the same pure rule. Rewards shows pooled XP and XP remaining.
+- Added all six user-supplied `audio/*.mp3` tracks via Vite asset imports. Quiet 20% volume, shuffled full cycles without immediate cycle-boundary repeats. Playback begins after interaction, obeys the existing persisted Sound toggle, resumes on unmute, and skips failed tracks with bounded retries. Updated the Sound tooltip. No external music service or audio permissions needed.
+- Checks: standard Node 18 full suite **215/215 passed**, including pooled/deduplicated resident contributions, project isolation, failed-response exclusion, all home thresholds and tier cap. Soundtrack smoke passed for gesture gating, full shuffled cycle, no immediate repeat, mute/resume and finite failed-track handling. Syntax/diff checks passed. Final `npm run app:build`, strict codesign and dist/bridge/shared/adapters byte parity passed; all six MP3s are packaged.
+- Current saved home history derives 550 XP, level 2 House, 200 XP remaining to Villa. Reopen was safe after a fresh check found no approved/queued/running/interrupted game work. Native UI verified ★★ House and Rewards: House · 550 XP · 200 to next level. Electron Media diagnostics verified the bundled Worlds_Unseen MP3 loaded with FFmpegAudioDecoder, BUFFERING_HAVE_ENOUGH, kPlaying and kPlay. Developer tools closed afterward; app left in normal game view. No paid prompt, fake event, queue mutation, acceptance, gem spending, commit or push.
+
+# Latest pass — Homes follow resident levels (October 10, 2026)
+
+- Home tier now follows its highest-level current resident, capped at five: Cottage, House, Villa, Manor, Estate. Existing completed-response XP applies immediately on load; outcomes still award gems but no longer raise buildings. Residents from other projects or absent character slots do not contribute.
+- Client building upgrades and server decor eligibility share the same rule. Live XP changes refresh the home exterior and celebrate new tiers; initial historical load does not replay upgrade celebrations. Updated the building tooltip, progress help, CONCEPT, README and GAMEPLAY.
+- Verification: Node 18 full suite **214/214 passed**, including resident isolation, tier cap and failed/completed response boundary checks. Syntax and diff checks passed. `npm run app:build`, strict codesign and packaged dist/bridge/shared/adapters parity passed.
+- Read-only calculation from current saved runs gives the Agent World home **level 3 / Villa**. Native visual verification is pending: two game-owned runs were running at the safe-reopen check, so the app was deliberately left open. Safely reopen after work finishes to load the new server and packaged UI. No new provider prompt, fake event, acceptance, reward spending, commit or push performed.
+
+# Latest pass — levels moved into the You button, You card, agent card and prompter (October 9, 2026)
+
+- Removed the separate top-bar "You · Lv · XP" chip and its "Levels & experience" modal (`web/src/levels.js` rewritten; the XP rules in `shared/experience.mjs` are unchanged).
+- **You button:** shows only the level number as a small gradient "Lv N" pill after "You" (`Player.setLevel`); tooltip and aria include the level.
+- **You card (wardrobe for the player):** a level meter under the 3D preview — gradient level badge, "You · Level N", current/required XP, bar, "X XP to level N+1 · total". It re-renders live when XP changes.
+- **Agent card (inspect drawer):** the same meter for the agent, above the role card (`ui.h.xpFor` → `levels.resident(project, slot)`).
+- **Prompter header:** a compact meter (smaller badge, bar and XP count) replaces the plain text/bar.
+- **New-XP toast:** now a glass pill with a sparkle icon, and awards are grouped per agent ("Nell +350 XP" instead of 14 repeats).
+- **Debug handle:** `window.agentWorld.levels`.
+- **QA:** isolated demo, with page-only fake completed runs fed to `levels.setData` (nothing persisted). Checked the You button (Lv 4), You card, Nell's card (day and night) and the prompter header. Contrast checker 0 failing after darkening the badge gradient.
+- **Checks:** npm test passed (including the existing experience tests); app:build, strict codesign and dist parity passed. ⌘R in the running app. No commit or push.
+
+# Latest pass — Resident and player participation XP (October 9, 2026)
+
+- User authorized XP for completed game responses. Added `shared/experience.mjs`: 25 XP per completed run with a returned summary to the responding project/slot resident and player. Deduplicated by persisted run ID, including prior saved responses, scheduled work and team responses. Failed/cancelled/interrupted/no-response runs and external observed activity earn none. No new mutable XP balance or real queue edits; durable run history is the ledger.
+- Growing per-level requirements: 100, 150, 200, 250… XP; overflow carries forward. This measures participation only, separate from human review, gems, home levels and acceptance.
+- Added top-bar player level/XP badge, Levels & experience dialog with each resident's total XP/bar/next-level requirement, resident chat header XP, and live new-response/level-up notifications. Initial history load does not replay old notifications; rereads do not double-award.
+- Verification: standard Node 18 suite **212/212 passed**. New tests cover increasing thresholds, overflow, resident/provider/project isolation, run deduplication and persisted reloads, excluded statuses. Syntax/diff checks passed. Final app build, strict codesign and dist/bridge/shared/adapters parity passed.
+- Native Electron UI verified player level 4 (525 XP; 75/250 toward level 5), Otto level 3 (350 XP), Nell level 1 (50 XP), Milo level 2 (125 XP) from 21 saved completed responses. Opened Otto's chat and verified its 100/200 bar. No real prompt, acceptance, fake event or provider spending for QA. Live notification branch is implemented but not exercised with a paid real provider turn; next human prompt can evaluate it.
+- Preserve existing Claude GUI-owned auth timeout limitation. Nothing committed or pushed in this pass.
+
+# Commit verification (October 9, 2026)
+
+- User authorized committing and pushing the accumulated visual, tutorial and auth-feedback updates on `ai-features`.
+- Fresh standard Node 18 test suite: **209/209 passed**; `git diff --check` passed. Strict codesign verification passed and packaged dist/bridge/shared/adapters files match current assets/source. No new app code was changed during commit verification.
+- Claude's GUI-owned auth status timeout remains unresolved as described below. No authentication, provider prompts, gameplay rewards or runtime-data changes were made for this commit.
+
+# Latest pass — necks connected to bodies (October 9, 2026)
+
+- **Bug:** after the low-poly rebuild the head sits at spine y 0.73 (scaled 1.16), and its 0.12-tall neck only reached down to about 0.66, while the torso top is at 0.62. That left a visible gap, which grew when heads tilted (dozing, looking at screens).
+- **Fix (`buildPerson`, `web/src/models.js`):**
+  - The head's neck is 0.28 tall (head-local −0.2…0.08), so it runs from inside the skull into the torso.
+  - A fixed neck base on the spine (y 0.55–0.71) keeps it rooted whatever the head does.
+  - The tee neckline ring is widened to sit around the thicker neck.
+- **QA:** bust and waist portraits for tee, long, hoodie and collar (including the thinking tilt) plus an in-world close-up of a dozing Sim. Connected in all of them.
+- **Checks:** npm test passed; app:build, strict codesign and dist parity passed. ⌘R in the running app. No commit or push.
+
+# Latest adjustment — Tutorial sign-in without commands (October 9, 2026)
+
+- User requested no copyable command in the tutorial. Removed sign-in commands from the auth response, command UI and Copy button. Signed-out feedback now says to open Claude Code, sign in and return to retry. Unverified status stays distinct from signed-out status. Claude desktop account login is not treated as proof of CLI authentication.
+- Focused auth/gameplay tests **6/6 passed**; syntax and diff checks passed. `npm run app:build`, strict codesign and packaged dist/bridge/shared/adapters parity passed. The previously recorded GUI-owned auth timeout remains unresolved; no sign-in, reward claim or real provider prompt is performed.
+
+# Latest pass — Claude tutorial sign-in feedback (October 9, 2026)
+
+- Diagnosed the installed Claude Code using read-only `auth status --json`: `loggedIn: false`, exit 1. The tutorial's generic error concealed the actual sign-in prerequisite. No provider prompt, login, reward claim or account change was performed.
+- Added `bridge/provider-auth.mjs`: asynchronous, bounded auth probe; distinguishes signed out, missing CLI and unverified status. Explicitly ends noninteractive stdin and records only safe failure diagnostics (exit code, timeout, output size). Returns only readiness and actionable guidance, never account details. Gameplay linking still requires successful verified sign-in before changing town state.
+- Mayor displays the detected CLI's shell-quoted subscription login command with Copy, instructions to sign in in Terminal/browser and retry the existing Claude link. Desktop Claude sign-in is distinct. No automatic login or paid API fallback.
+- Preserved existing uncommitted art, crew and mayor changes. Final standard Node 18 suite **209/209 passed**, syntax and diff checks passed. `npm run app:build` and strict codesign passed; packaged dist/bridge/shared/adapters matched source. Reopened safely after checking no queued/running/interrupted work. Native UI shows the command and retry controls; no link/reward was claimed.
+- Remaining human step: complete Claude Code sign-in and retry Link Claude Code to town. Authenticated account flow is unverified; fixture tests cover ready/signed-out/missing/malformed/error cases without provider spending. Important unresolved runtime issue: the GUI-owned native Claude status process still times out (15 seconds, no stdout) despite closing stdin; the same binary with the app's environment returns signed-out from Terminal. The tutorial now shows recovery instructions instead of a generic error, but successful GUI-side verification after sign-in must still be checked. Do not report end-to-end Claude linking as verified.
+
+# Latest pass — Town Hall construction crew animations (October 9, 2026)
+
+- **New `web/src/crew.js`:** three construction workers on the shared rig, each with a looping job (game ambience only).
+  - **Hammerer:** kneels on the deck (right knee down, left foot planted) over a beam with nail heads. Four quick strikes per loop (slow lift, fast drop via `armIK`), a dust puff on each impact, then sits back to inspect and reaches for the next nail. 3.2 s loop.
+  - **Sawyer:** stands at a sawhorse with a board. The left hand holds the board, the right hand strokes the saw (blade angled down into the cut) with body sway, and sawdust drifts down. Pauses to check the line. 4.5 s loop.
+  - **Carrier:** walks between a lumber pile and a delivery stack on the front slab. Squats to pick up a plank, carries it on the shoulder, sets it down, walks back empty. 11 s loop.
+- **Details:**
+  - Workers wear a faceted hard hat with a brim and ridge (replacing the beanie-with-pompom look).
+  - Joints ease toward targets (faster during strikes and strokes).
+  - Puffs use a small mesh pool per station.
+- **`web/src/commons.js`:** the site builds the `Crew` (station groups and walkers kept dynamic; lumber piles merged static); the old wobble loop is removed. The crane now runs a 16 s lift cycle (swing out, lower the load, raise it, swing back) instead of constant sway.
+- **QA:** an isolated demo home with construction started via the API (deleted afterwards). Front close-ups of each worker mid-action; no console errors.
+- **Checks:** npm test passed; app:build, strict codesign and dist parity passed. ⌘R in the running app. No commit or push.
+
+# Latest pass — Mayor dialogue restyled to match the game's panels (October 9, 2026)
+
+- **Card (`web/src/style.css` mayor block, plus small markup in `web/src/onboarding.js`):**
+  - The dark teal card with gold borders and square corners is now the shared glass card: `--glass-strong`, theme ink, `--r-lg`, soft shadow and blur. It works in day and night.
+  - The speech tail is kept, in the card color.
+  - The header row is a gradient "Mayor Martin" pill (Rewards gold) plus a muted quest line with a landmark icon.
+- **Buttons:** accent primary pill, soft secondary pill, ghost "subtle"; Lucide chevrons replace the text "›"; the gem cost shows as an inner badge.
+- **Details:** cost and time are chips. The progress bar is a rounded gold gradient, errors are a tinted row, and the close button is a glass circle.
+- **World label:** "Mayor Martin" is a gold pill.
+- **Fixed:** a night rule (`body.night .mayor-choice`) outranked `.primary` and turned the main button grey at night.
+- **QA:** a fresh isolated demo home (deleted afterwards) walked through every beat: greeting (day), link providers (night), Town Hall offer, building with progress and speed-up (day and night). Contrast checker 0 failing on all.
+- **Checks:** npm test passed; app:build, strict codesign and dist parity passed. ⌘R in the running app. No commit or push.
+
+# Latest pass — mayor's arm and a relaxed idle stance for everyone (October 9, 2026)
+
+- **Mayor (`web/src/mayor-character.js`):** `pose()` set `armL.rotation.z = -0.3`. The left arm sits on +x, so negative z swings the hand inward, and it showed up tucked behind his back. Changes:
+  - Both arms now use a relaxed stance (z ±0.17 with breath sway, slight forward carry, soft elbow); the right arm still gestures while he talks.
+  - Arm, elbow and head rotations ease toward their targets, so talking and listening blend instead of snapping.
+  - The beard tufts are flat-shaded icosahedra to match the faceted hair.
+- **All characters:**
+  - The shoulder offset is now `SHOULDER_X = 0.335` (was 0.3), exported from models.js and used by `armIK`, so hanging arms clear the wider faceted torso.
+  - The default joint targets in `Sim.animate` (any pose that doesn't override them) are a relaxed stance: arms 0.17 out, −0.07 forward, elbows −0.24, with a small breathing drift. Before, arms hung straight at ±0.08 with locked elbows and grazed the body.
+  - The portrait idle (`avatar-portrait.js`) uses the same values.
+- **QA** (isolated demo): the mayor's tutorial popover talking (left arm at his side, right arm gesturing, faceted beard) and Quinn standing front-on in the world. Desk typing and couch poses are unaffected (IK uses the same shoulder constant).
+- **Checks:** npm test passed; `git diff --check` clean; app:build, strict codesign and dist parity passed. ⌘R in the running app. No commit or push.
+
+# Latest pass — faceted low-poly characters, layered hair, and a broken merge repaired (October 9, 2026)
+
+- **Art style (`buildPerson` in `web/src/models.js`, rewritten):** characters match the human's reference.
+  - Flat-shaded faceted shapes: rounded boxes and low-segment cylinders with deterministic vertex jitter.
+  - A big blocky head (1.16 scale) with a tapered jaw, faceted ears and a pyramid nose.
+  - Large glossy eyes with two highlights, flat blush, and an open smile with a tongue.
+  - Chunky boots with pale soles, a boxy torso with a hem band, puffed faceted shoulders and mitten hands.
+  - The rig contract is unchanged (hips 0.9, knees −0.44, shoulders ±0.3·build at 0.62, elbows −0.31, head on the spine; same returned joints), so every pose, the arm IK, couch/desk sitting and the portraits work as before. Elbow joint gems close the gap when bent.
+- **Hair:** no longer a cap.
+  - A faceted shell with a real hairline (high forehead, temples, nape, with vertices below it tucked under the skin).
+  - Layered on top: swept flat fringe chunks, crown tufts and per-style silhouettes. Crop is textured and swept; bob has side curtains, a full back and blunt bangs; bun has a tie band; spiky has two rows of chunky spikes; curly is a cloud of faceted curls; ponytail is a tapered tail with a tie.
+  - Cap, beanie, glasses, flower and headphones are rebuilt to match.
+- **Materials:** `charMat` (flat-shaded, rim-lit, not shared with world materials). `patchCharacterMaterial` now also sets `userData.fx`, so characters skip world weather and wind patches, and seasons.js skips them for recolor.
+- **Portraits:** framing raised for the bigger heads.
+- **Merge repair (not from this pass):** commit 7edd16c ("Merge branch 'gameplay-improvement' into ai-features") left conflict regions commented out, which crashed the client.
+  - `main.js applySnapshot` referenced an undefined `visibleHouseholds`/`visibleSessions`. Restored by applying `visibleResidents(gameplay, …)` after ai-features' project filter.
+  - `ui.js renderRoster` lost `stale` and the Projects-tab early return. Restored, keeping the ai-features flat list and gameplay-improvement's town-link empty state.
+  - `ui.js setConnection` received a connectionView object but expected a count, which showed "Live · [object Object] sessions". It now accepts both.
+  - The commented-out conflict blocks are still in those files for the human to review.
+- **QA** (isolated demo; the gameplay "connection" was claimed in the scratch home only, to show residents): portrait grid of all six hairstyles plus cap, beanie, glasses and headphones; large busts; in-world front views of standing, dozing on the couch, and seated at a desk. No console errors after the repair.
+- **Checks:** npm test 206/206; `git diff --check` clean; app:build, strict codesign and dist parity passed. ⌘R or reopen in the running app. No commit or push.
 # Startup port conflict repair (October 9, 2026)
 
 - User reported `yarn start` failing with `EADDRINUSE` on 127.0.0.1:4777. Read-only verification found the same healthy `node bridge/server.mjs --serve dist` process, PID 53960, already serving HTTP 200; zero proposals/runs. Root cause: `scripts/dev.mjs` unconditionally spawned another bridge and observer.

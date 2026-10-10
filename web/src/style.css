@@ -2097,3 +2097,79 @@ body.night .insp-head .avatar-3d-wrap { background: linear-gradient(160deg, rgba
 }
 @media (max-width: 1239px) { .prompter-avatar { display: none !important; } }
 .resident-role{display:block;font-size:10px;color:var(--ink-2)}.team-handoffs{margin:16px 0;padding:16px;border:1px solid var(--line);border-radius:16px;font-size:12px}.team-handoffs>strong{display:block;margin-bottom:10px}.team-handoffs article{border-top:1px solid var(--line);padding:12px 0}.team-handoffs :is(span,b,small){display:block}.team-handoffs small{color:var(--ink-2);margin-top:5px}.team-handoffs p{white-space:pre-wrap}.team-handoffs button{border:1px solid var(--line);border-radius:16px;background:var(--line);color:var(--ink);padding:6px 10px;cursor:pointer}
+
+/* Mayor's dialogue in the game's panel style: a glass card with the speaker chip, theme ink, accent pills.
+   The speech tail and dimmed backdrop keep it feeling like a conversation. */
+.mayor-wash { background: linear-gradient(0deg, rgba(15, 20, 35, 0.55), rgba(15, 20, 35, 0.12) 55%, transparent 85%); }
+.mayor-dismiss { width: 36px; height: 36px; border: 1px solid var(--glass-border, var(--line)); background: var(--glass-strong); color: var(--ink-2); box-shadow: var(--shadow-lg); backdrop-filter: blur(14px); }
+.mayor-dismiss:hover, .mayor-dismiss:focus-visible { background: var(--glass-strong); color: var(--ink); outline: 2px solid var(--accent); outline-offset: 2px; }
+.mayor-dismiss .icon { width: 16px; height: 16px; }
+.mayor-talk { width: min(620px, calc(100vw - min(40vw, 500px) - 80px)); }
+.mayor-bubble { padding: 18px 22px 18px; border: 1px solid var(--glass-border, var(--line)); border-radius: var(--r-lg); background: var(--glass-strong); color: var(--ink); box-shadow: var(--shadow-lg), 0 24px 60px rgba(15, 20, 35, 0.28); backdrop-filter: blur(18px); }
+.mayor-bubble::after { left: -13px; bottom: 44px; border-top: 12px solid transparent; border-bottom: 12px solid transparent; border-right: 14px solid var(--glass-strong); border-left: 0; filter: drop-shadow(-2px 0 1px rgba(15, 20, 35, 0.08)); }
+.mayor-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin-bottom: 10px; }
+.mayor-name { position: static; padding: 4px 11px; border: 0; border-radius: 999px; background: linear-gradient(135deg, #f2c14e, #f08a3c); color: #3a2410; font: 900 12.5px var(--font); box-shadow: none; }
+.mayor-quest { display: inline-flex; align-items: center; gap: 5px; margin: 0; color: var(--ink-3); font-size: 11px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+.mayor-quest .icon { font-size: 13px; color: var(--amber-ink); }
+.mayor-line { color: var(--ink); font-size: clamp(16px, 1.55vw, 19px); line-height: 1.5; font-weight: 700; letter-spacing: -0.005em; }
+.mayor-line strong { color: var(--amber-ink); }
+.mayor-detail { gap: 6px; margin-top: 14px; color: var(--ink-2); font-size: 12px; font-weight: 800; }
+.mayor-detail span { padding: 4px 10px; border-radius: 999px; background: rgba(27, 33, 48, 0.06); }
+body.night .mayor-detail span { background: rgba(255, 255, 255, 0.07); }
+.mayor-detail .icon { color: var(--amber-ink); font-size: 13px; }
+.mayor-progress { height: 8px; margin-top: 14px; border: 0; border-radius: 999px; background: rgba(27, 33, 48, 0.08); }
+body.night .mayor-progress { background: rgba(255, 255, 255, 0.09); }
+.mayor-progress span { border-radius: 999px; background: linear-gradient(90deg, #f2c14e, #f08a3c); transition: width 0.6s var(--ease); }
+.mayor-error { display: flex; gap: 6px; margin-top: 12px; padding: 8px 10px; border-radius: 10px; background: rgba(214, 69, 69, 0.09); color: var(--warm-ink); font-size: 12.5px; }
+.mayor-options { gap: 8px; margin-top: 16px; }
+.mayor-choice { min-height: 38px; gap: 8px; padding: 8px 12px 8px 16px; border: 0; border-radius: 999px; background: rgba(27, 33, 48, 0.07); color: var(--ink); font: 800 13.5px var(--font); transition: background 0.15s, transform 0.15s var(--spring, ease); }
+body.night .mayor-choice { background: rgba(255, 255, 255, 0.09); }
+.mayor-choice:hover:not(:disabled) { background: rgba(27, 33, 48, 0.11); transform: translateY(-1px); }
+body.night .mayor-choice:hover:not(:disabled) { background: rgba(255, 255, 255, 0.14); }
+.mayor-choice.primary { background: var(--accent); color: #fff; box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 35%, transparent); }
+.mayor-choice.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
+.mayor-choice.subtle { background: transparent; color: var(--ink-2); }
+body.night .mayor-choice.subtle { background: transparent; }
+.mayor-choice:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mayor-choice:hover, .mayor-choice:focus:not(:focus-visible) { outline: none; }
+.mayor-choice .icon { width: 15px; height: 15px; opacity: 0.8; }
+.mayor-choice > span { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.22); font-size: 12px; }
+.mayor-choice:not(.primary) > span { background: rgba(27, 33, 48, 0.07); }
+.mayor-world-label { padding: 4px 10px; border: 0; border-radius: 999px; background: linear-gradient(135deg, #f2c14e, #f08a3c); color: #3a2410; font: 900 11.5px var(--font); box-shadow: 0 2px 8px rgba(15, 20, 35, 0.2); }
+.mayor-world-label:hover, .mayor-world-label:focus-visible { background: linear-gradient(135deg, #f5cc66, #f39a52); outline: 2px solid #fff; }
+@media (max-width: 760px) { .mayor-bubble { padding: 16px 16px 14px; } .mayor-choice { justify-content: space-between; } }
+body.night .mayor-choice.primary, .mayor-choice.primary { background: var(--accent); color: #fff; }
+.mayor-choice.primary > span { background: rgba(0, 0, 0, 0.2); color: #fff; }
+
+/* Participation XP (levels.js): one meter used in the You card, agent cards and the prompter. */
+.xp-meter { display: flex; align-items: center; gap: 12px; }
+.lvl-badge { flex: none; display: grid; place-items: center; align-content: center; width: 44px; height: 44px; border-radius: 14px; background: linear-gradient(140deg, #4f5ee8, #4250d6 45%, #6a3ad2); color: #fff; font: 900 18px/1 var(--font); box-shadow: 0 4px 12px rgba(91, 108, 249, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35); }
+.lvl-badge small { display: block; font-size: 9px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.85; margin-bottom: 1px; }
+.xp-body { flex: 1; min-width: 0; display: grid; gap: 5px; }
+.xp-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.xp-row b { color: var(--ink); font-size: 13px; font-weight: 900; }
+.xp-row small { color: var(--ink-3); font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.xp-track { position: relative; display: block; height: 8px; border-radius: 999px; background: rgba(27, 33, 48, 0.08); overflow: hidden; }
+body.night .xp-track { background: rgba(255, 255, 255, 0.1); }
+.xp-track > span { display: block; height: 100%; min-width: 6px; border-radius: inherit; background: linear-gradient(90deg, #5b6cf9, #8b5cf6 60%, #c08bff); box-shadow: 0 0 8px rgba(139, 92, 246, 0.45); transition: width 0.6s var(--ease, ease); }
+.xp-next { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-3); font-size: 11px; font-weight: 700; }
+.xp-next .icon { font-size: 12px; color: var(--accent-ink); }
+.xp-meter.compact { gap: 9px; }
+.xp-meter.compact .lvl-badge { width: 32px; height: 32px; border-radius: 10px; font-size: 14px; }
+.xp-meter.compact .lvl-badge small { display: none; }
+.xp-meter.compact .xp-row b { font-size: 11.5px; }
+.xp-meter.compact .xp-row small { font-size: 10px; }
+.xp-meter.compact .xp-track { height: 6px; }
+/* You card (wardrobe) and agent card: a soft panel around the meter. */
+.ward-xp, .agent-xp { margin: 4px 0 12px; padding: 12px; border-radius: 16px; background: color-mix(in srgb, var(--accent) 7%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 14%, transparent); }
+.agent-xp { margin: 10px 0 2px; }
+/* Prompter header: compact meter under the name. */
+.pass-card .chat-xp { display: block; width: min(260px, 100%); margin: 6px 0 4px; }
+/* "You" button: a small level pill after the name. */
+#player-badge .player-level { margin-left: -2px; padding: 2px 7px; border-radius: 999px; background: linear-gradient(140deg, #4f5fe8, #6d3fd6); color: #fff; font: 900 10.5px var(--font); letter-spacing: 0.02em; }
+#player-badge .player-level[hidden] { display: none; }
+@media (max-width: 760px) { #player-badge .player-level { margin-left: 4px; } }
+.xp-award { display: flex; align-items: center; gap: 8px; position: fixed; bottom: 86px; left: 50%; transform: translateX(-50%); z-index: 10000; max-width: calc(100vw - 32px); padding: 10px 16px; border-radius: 999px; background: var(--glass-strong); color: var(--ink); box-shadow: var(--shadow-lg); font-size: 13px; font-weight: 700; pointer-events: none; animation: xp-pop 0.35s var(--spring, ease); }
+.xp-award .icon { color: #8b5cf6; flex: none; }
+.xp-award[hidden] { display: none; }
+@keyframes xp-pop { from { opacity: 0; transform: translate(-50%, 10px) scale(0.96); } }

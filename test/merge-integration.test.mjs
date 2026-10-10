@@ -17,6 +17,7 @@ function snapshotFixture(linked) {
     passCard: { setData: data => { calls.card = data; } },
     work: { setData: data => { calls.work = data; } },
     library: { setData: data => { calls.library = data; } },
+    levels: { setData: runs => { calls.levels = runs; } },
     applyHousehold: h => calls.households.push(h),
     applySession: s => calls.sessions.push(s),
     endSession: id => calls.ended.push(id), syncLibrarySessions() {},
@@ -37,6 +38,7 @@ const snapshot = {
   conversations: [{ project: '/chosen' }, { project: '/hidden' }],
   plans: [{ project: '/chosen' }, { project: '/hidden' }],
   tasks: [{ project: '/chosen' }, { project: '/hidden' }],
+  passes: { runs: [{ id: 'completed-response', project: '/chosen', slot: 1, status: 'completed', result: { summary: 'Reported response' } }] },
 };
 
 test('merged snapshot keeps project selection and gates observed residents until mayor linking', () => {
@@ -47,18 +49,22 @@ test('merged snapshot keeps project selection and gates observed residents until
   assert.equal(unlinked.calls.card.sessions.length, 0);
   assert.deepEqual(unlinked.calls.work.households, [snapshot.households[0]], 'selected planning stays available');
   assert.deepEqual(unlinked.calls.library.projects, [snapshot.projects[0]]);
+  assert.deepEqual(unlinked.calls.levels, snapshot.passes.runs, 'participation history remains separate from resident visibility');
 
   const linked = snapshotFixture(true);
   linked.apply(snapshot);
   assert.deepEqual(linked.calls.households, [snapshot.households[0]]);
   assert.deepEqual(linked.calls.sessions.map(s => s.session), ['primary', 'visitor']);
   assert.deepEqual(linked.calls.card.tasks, [snapshot.tasks[0]]);
+  assert.deepEqual(linked.calls.levels, snapshot.passes.runs, 'newer participation XP survives the merged snapshot');
   assert.deepEqual(linked.calls.ended, ['old']);
   linked.apply({ ...snapshot, selectedProjects: [] });
   assert.equal(linked.calls.card.sessions.length, 0);
   assert.equal(linked.calls.work.households.length, 0);
   linked.apply({ ...snapshot, selectedProjects: null });
   assert.equal(linked.calls.card.sessions.length, 3, 'legacy snapshots retain their full selection');
+  linked.apply({ ...snapshot, passes: undefined });
+  assert.deepEqual(Array.from(linked.calls.levels), [], 'legacy snapshots without run history remain supported');
 });
 
 function uiFixture() {

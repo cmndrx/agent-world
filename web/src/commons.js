@@ -7,9 +7,10 @@ import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { COMMONS, commonsHint } from '../../shared/progression.mjs';
 import { buildDecor } from './decor.js';
 import { LOT_W } from './lot.js';
-import { PALETTE, box, buildPerson, cyl, ico, mergeStatic, softBox } from './models.js';
+import { PALETTE, box, cyl, ico, mergeStatic, softBox } from './models.js';
 import { waterMaterial } from './fx.js';
 import { NavGrid } from './nav.js';
+import { Crew } from './crew.js';
 
 /** Where each space sits (local x, z, half-width, half-depth). The street is at +z. */
 const SPACES = {
@@ -132,15 +133,12 @@ export class Commons {
     for (const x of [-4.8, 4.8]) g.add(box(0.16, 0.16, 7, PALETTE.wood, x, 2.1, -0.3));
     g.add(box(2.4, 0.9, 1.4, 0xc88f57, -1.5, 0.7, 0.4));
     g.add(box(1.8, 0.65, 1.2, 0xe1b573, 1.8, 0.55, -1.4));
-    // The crew is game ambience: never treated as observed agent activity.
-    for (const [i, x, z] of [[0, -3.2, 3.45], [1, 3.2, 3.45], [2, 1.3, -1.6]]) {
-      const worker = buildPerson({ skin: i ? 0x9c674d : 0xd7a47e, hair: 0x513e35, shirt: i ? 0x388b9a : 0xd17548, pants: 0x45505a, shoes: 0x524239, hairStyle: 0, top: 'long', build: 1 }, { scale: 0.95, hat: 0xf7ca4e });
-      worker.head.add(box(0.52, 0.045, 0.22, 0xf7ca4e, 0, 0.39, 0.23));
-      worker.root.position.set(x, 0.25, z);
-      worker.root.userData.dynamic = true;
-      g.add(worker.root);
-      this.anim.builders.push({ parts: worker, x, z, phase: i * Math.PI });
-    }
+    // The crew is game ambience: never treated as observed agent activity (crew.js).
+    const before = new Set(g.children);
+    this.crew = new Crew(g);
+    for (const child of g.children) if (!before.has(child) && (child.isGroup || child.userData.animated)) child.userData.dynamic = true;
+    for (const m of this.crew.members) m.parts.root.userData.dynamic = true;
+    this.anim.builders.push(this.crew);
     const crane = new THREE.Group();
     crane.position.set(-5.25, 0.1, -3.7);
     crane.userData.dynamic = true;
@@ -432,20 +430,14 @@ export class Commons {
       const r = p * 1.1;
       drop.position.set(Math.cos(drop.userData.angle) * r, y0 + p * 0.6 - p * p * 1.8, Math.sin(drop.userData.angle) * r);
     }
-    for (const { parts, x, z, phase } of this.anim.builders) {
-      const step = Math.sin(t * 2.4 + phase);
-      parts.root.position.x = x + Math.sin(t * 0.8 + phase) * 0.22;
-      parts.root.position.z = z + Math.cos(t * 0.8 + phase) * 0.18;
-      parts.body.position.y = Math.abs(step) * 0.06;
-      parts.armL.rotation.x = -0.35 + step * 0.45;
-      parts.armR.rotation.x = -0.35 - step * 0.45;
-      parts.legL.rotation.x = step * 0.35;
-      parts.legR.rotation.x = -step * 0.35;
-      parts.head.rotation.y = Math.sin(t + phase) * 0.18;
-    }
+    for (const crew of this.anim.builders) crew.update(dt, t);
     for (const { boom, hook } of this.anim.cranes) {
-      boom.rotation.y = Math.sin(t * 0.45) * 0.35;
-      hook.position.y = Math.sin(t * 1.5) * 0.18;
+      // A slow lift cycle: swing out, lower the load, raise it, swing back, with eased holds.
+      const c = (t % 16) / 16;
+      const swing = c < 0.25 ? 0.35 * Math.sin(c / 0.25 * Math.PI / 2) : c < 0.5 ? 0.35 : c < 0.75 ? 0.35 * Math.cos((c - 0.5) / 0.25 * Math.PI / 2) : 0;
+      boom.rotation.y = -0.35 + swing * 2;
+      const drop = c >= 0.25 && c < 0.5 ? Math.sin((c - 0.25) / 0.25 * Math.PI) : 0;
+      hook.position.y = -drop * 1.4 + Math.sin(t * 1.1) * 0.04;
     }
     if (this.hallRoof && camera) {
       for (const { hinge, sign } of this.hallDoors) hinge.rotation.y += ((this.doorOpen ? -sign * 1.15 : 0) - hinge.rotation.y) * (1 - Math.exp(-dt * 5));

@@ -19,6 +19,10 @@
 
 # Agent World
 
+**Home levels:** each home's building tier follows its combined resident XP, capped at level 5: Cottage → House → Villa → Manor → Estate. Existing resident XP applies immediately. Returned game responses can upgrade the building and its decor eligibility; reached outcomes continue awarding gems separately.
+
+**Agent and player XP:** completed game responses award 25 XP to the responding resident and to you. The top-bar level badge opens Levels & experience; resident chats show their own level, XP bar and points remaining. New responses show an XP notification, with level-up notices at increasing thresholds (100, then 150, then 200 XP). Existing saved responses count once; app restarts, archived chats and provider changes do not duplicate awards. Participation XP is independent from reviewed task rewards and home levels.
+
 A low-poly, Sims-style world that **visualizes** the AI agents already working on your machine.
 Its activity layer watches the events agents leave behind and turns them into
 characters walking to desks, bookshelves and terminals. A separate runner executes explicitly approved passes. See [CONCEPT.md](CONCEPT.md) for the design.
@@ -337,3 +341,9 @@ The first handoff to a recipient starts a separate resident-owned conversation; 
 Runs remain sequential to avoid competing workspace edits. The graph is bounded to three handoffs per response, six per human request and two delegation levels, with no further delegation in the final report. Invalid/self/unknown-role handoffs are rejected atomically. Failed prerequisites pause dependent work; no automatic retry. Interrupted work still requires human inspection. Stop in the original or receiving chat cancels the remaining request queue and stops its active game-owned run; existing file changes remain. Publishing/pushing/spending are not included. New schedules in the starter team capture delegation authorization; existing schedules are not retroactively expanded. Isolated-worktree and voice runs do not enable this team workflow in this pass.
 
 Fixture CLIs verify execution/routing for Codex and Claude without provider spending. Intelligent task decomposition by a real model remains to be evaluated with real user prompts.
+
+Home progression now pools lifetime XP from every current resident in that home (unique slots, same project). Building thresholds are 300 / 750 / 1,350 / 2,100 total XP for House / Villa / Manor / Estate; fixed thresholds do not change with household size. Individual resident/player XP rules are unchanged. Rewards shows pooled XP and the remaining XP to the next home tier.
+
+The six MP3s in `audio/` form the background soundtrack. Playback begins after a user interaction, shuffles every cycle, avoids immediate repeats between cycles and uses a quiet 20% volume. The existing Sound toggle controls music and chimes together and remembers mute. Assets are bundled by Vite into the Electron package; playback needs no external music service.
+
+Town ambience: the user-supplied Meadows MP3 plays as a quiet (15%) continuous loop alongside the shuffled soundtrack, after the first interaction. It is excluded from the music playlist. The existing Sound toggle pauses/resumes both layers and agent chimes.

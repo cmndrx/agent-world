@@ -31,8 +31,7 @@ import { MAX_PHOTO_BYTES, deletePhoto, listPhotos, photoIds, photoPath, savePhot
 import { progress } from '../shared/progression.mjs';
 import { applyGameplayAction, emptyGameplay, gameplaySpent } from '../shared/gameplay.mjs';
 import { readCodexUsage } from './usage.mjs';
-import { claudeCommand } from './providers.mjs';
-import { spawnSync } from 'node:child_process';
+import { claudeAuth } from './provider-auth.mjs';
 import { dayKey, spawnsFor } from '../shared/collectibles.mjs';
 import { appProjectID } from '../shared/conversations.mjs';
 import { Inbox } from './inbox.mjs';
@@ -133,9 +132,9 @@ function saveGameplay() {
 async function providerReady(provider) {
   if (provider === 'codex') return (await readCodexUsage()).status === 'available';
   if (provider === 'claude') {
-    const result = spawnSync(claudeCommand(), ['auth', 'status', '--json'], { encoding: 'utf8', timeout: 5000, windowsHide: true, shell: process.platform === 'win32' });
-    if (result.status !== 0) return false;
-    try { return JSON.parse(result.stdout).loggedIn === true; } catch { return false; }
+    const auth = await claudeAuth();
+    if (!auth.ready) throw Object.assign(new Error(auth.message), { auth });
+    return true;
   }
   return false;
 }
@@ -206,7 +205,7 @@ setInterval(() => world.sweep(), 30_000);
 // Send fresh observer health even when there is no session activity.
 setInterval(() => broadcast({ type: 'connections', connections: connectionSnapshot() }), 2000);
 
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.json': 'application/json', '.woff2': 'font/woff2', '.woff': 'font/woff' };
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.json': 'application/json', '.woff2': 'font/woff2', '.woff': 'font/woff', '.mp3': 'audio/mpeg' };
 
 /** Requests that change local data must come from this app's own pages (or a non-browser client). */
 function isLocalOrigin(req) {
@@ -409,14 +408,14 @@ const server = http.createServer(async (req, res) => {
       }
       if (url.pathname === '/api/gameplay') {
         if (input.action === 'claim' && !(await providerReady(input.provider))) throw new Error('Sign in to Codex or Claude Code, then try again.');
-        const balance = progress(productivity.snapshot(), style, gameplay).balance;
+        const balance = progress({...productivity.snapshot(), households:Object.values(world.households), runs:passes.snapshot().runs}, style, gameplay).balance;
         gameplay = applyGameplayAction(gameplay, input, balance);
         saveGameplay();
         res.writeHead(200); return res.end(JSON.stringify({ ok: true, gameplay }));
       }
       if (url.pathname === '/api/style') {
         // Bricks and levels are derived from the human's board every time (docs/GAMEPLAY.md).
-        const earnedNow = progress(productivity.snapshot(), style, gameplay);
+        const earnedNow = progress({...productivity.snapshot(), households:Object.values(world.households), runs:passes.snapshot().runs}, style, gameplay);
         const known = {
           homes: new Set(Object.keys(world.households)),
           residents: new Set(Object.values(world.households).flatMap((h) => h.characters.map((c) => `${h.project}#${c.slot}`))),
@@ -480,7 +479,7 @@ const server = http.createServer(async (req, res) => {
       broadcast({ type: 'catalog', ...world.catalog.snapshot() });
       res.writeHead(200); return res.end(JSON.stringify({ ok: true, result }));
     } catch (err) {
-      res.writeHead(400); return res.end(JSON.stringify({ error: err.message }));
+      res.writeHead(400); return res.end(JSON.stringify({ error: err.message, ...(err.auth ? { auth: err.auth } : {}) }));
     }
   }
 
@@ -500,8 +499,11 @@ const server = http.createServer(async (req, res) => {
 
   if (STATIC_DIR) {
     const root = path.resolve(STATIC_DIR);
-    const file = path.join(root, url.pathname === '/' ? 'index.html' : path.normalize(url.pathname));
-    if (file.startsWith(root) && fs.existsSync(file) && fs.statSync(file).isFile()) {
+    let pathname;
+    try { pathname = decodeURIComponent(url.pathname); }
+    catch { res.writeHead(400); return res.end('Invalid asset path'); }
+    const file = path.join(root, pathname === '/' ? 'index.html' : path.normalize(pathname));
+    if (file.startsWith(root + path.sep) && fs.existsSync(file) && fs.statSync(file).isFile()) {
       res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream' });
       return fs.createReadStream(file).pipe(res);
     }
