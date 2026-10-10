@@ -205,7 +205,7 @@ setInterval(() => world.sweep(), 30_000);
 // Send fresh observer health even when there is no session activity.
 setInterval(() => broadcast({ type: 'connections', connections: connectionSnapshot() }), 2000);
 
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.json': 'application/json', '.woff2': 'font/woff2', '.woff': 'font/woff' };
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.json': 'application/json', '.woff2': 'font/woff2', '.woff': 'font/woff', '.mp3': 'audio/mpeg' };
 
 /** Requests that change local data must come from this app's own pages (or a non-browser client). */
 function isLocalOrigin(req) {
@@ -499,8 +499,11 @@ const server = http.createServer(async (req, res) => {
 
   if (STATIC_DIR) {
     const root = path.resolve(STATIC_DIR);
-    const file = path.join(root, url.pathname === '/' ? 'index.html' : path.normalize(url.pathname));
-    if (file.startsWith(root) && fs.existsSync(file) && fs.statSync(file).isFile()) {
+    let pathname;
+    try { pathname = decodeURIComponent(url.pathname); }
+    catch { res.writeHead(400); return res.end('Invalid asset path'); }
+    const file = path.join(root, pathname === '/' ? 'index.html' : path.normalize(pathname));
+    if (file.startsWith(root + path.sep) && fs.existsSync(file) && fs.statSync(file).isFile()) {
       res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream' });
       return fs.createReadStream(file).pipe(res);
     }

@@ -1,7 +1,9 @@
 // "Needs you" sounds, synthesized with WebAudio (no assets). Each sound is triggered by truth:
 // an agent starting to wait on you, or still waiting after a while.
 
-const TRACKS = Object.values(import.meta.glob('../../audio/*.mp3', { eager: true, query: '?url', import: 'default' }));
+import meadowAmbience from '../../audio/Meadows Ambience Sound Effect - Relaxing Ambient Nature Countryside - Free Audio Zone.mp3?url';
+
+const TRACKS = Object.values(import.meta.glob(['../../audio/*.mp3', '!../../audio/Meadows*.mp3'], { eager: true, query: '?url', import: 'default' }));
 
 const STORAGE_KEY = 'agent-world:sound';
 
@@ -35,6 +37,13 @@ export class Sound {
     this.music = new Audio();
     this.music.volume = 0.2;
     this.music.preload = 'none';
+    // Nature ambience is a separate, constant layer; never a shuffled soundtrack song.
+    this.ambience = new Audio(meadowAmbience);
+    this.ambience.loop = true;
+    this.ambience.volume = 0.15;
+    this.ambience.preload = 'none';
+    this.ambienceFailed = false;
+    this.ambience.addEventListener('error', () => { this.ambienceFailed = true; });
     this.playlist = [];
     this.lastTrack = null;
     this.failedTracks = new Set();
@@ -49,7 +58,7 @@ export class Sound {
       if (!this.ctx) this.ctx = new AudioContext();
       if (this.ctx.state === 'suspended') this.ctx.resume();
       this.unlocked = true;
-      if (this.enabled && this.music.paused) this.startMusic();
+      if (this.enabled && (this.music.paused || this.ambience.paused)) this.startMusic();
     };
     addEventListener('pointerdown', unlock);
     addEventListener('keydown', unlock);
@@ -59,12 +68,13 @@ export class Sound {
     this.enabled = !this.enabled;
     write(this.enabled ? 'on' : 'off');
     if (this.enabled) { this.startMusic(); this.play('turn_complete', { force: true }); }
-    else this.music.pause();
+    else { this.music.pause(); this.ambience.pause(); }
     return this.enabled;
   }
 
   startMusic() {
     if (!this.enabled || !this.unlocked) return;
+    if (!this.ambienceFailed && this.ambience.paused) this.ambience.play().catch(() => {});
     if (!this.lastTrack) this.nextTrack();
     else this.music.play().catch(() => {}); // autoplay can require another gesture
   }

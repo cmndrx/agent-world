@@ -294,7 +294,7 @@ export class UI {
     dock.querySelector('[data-menu="time"]').innerHTML = icon(timeIcon);
     const snd = dock.querySelector('[data-action="sound"]');
     snd.innerHTML = icon(soundOn ? 'bell' : 'bellOff');
-    snd.title = soundOn ? 'Sound on: background music and agent chimes' : 'Sounds off';
+    snd.title = soundOn ? 'Sound on: music, town ambience and agent chimes' : 'Sounds off';
     // Season + weather share one menu (ambience only; never real weather or agent-related).
     const seasonIcon = { spring: 'flower', summer: 'sun', autumn: 'leaf', winter: 'snowflake' };
     const weatherIcon = { auto: 'cloudSun', clear: 'sun', rain: 'cloudRain', snow: 'cloudSnow' };

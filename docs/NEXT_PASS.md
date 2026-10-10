@@ -1,3 +1,9 @@
+# Latest pass — Continuous meadow town ambience (October 10, 2026)
+
+- Added the user-supplied Meadows Ambience MP3 as a separate looping audio layer at 15% volume. Excluded Meadows files from the shuffled song playlist; the six soundtrack songs remain unchanged. Starts after interaction and pauses/resumes with the existing persisted Sound toggle. Audio load failure leaves music/chimes functional without repeated ambience reloads.
+- Targeted audio smoke verified gesture gating, separate continuous loop, music advancing without restarting ambience, shared mute/resume and failure isolation. Syntax and diff checks passed. `npm run app:build`, strict codesign and dist/bridge/shared/adapters parity passed; seven MP3s packaged. Packaged verification exposed a 404 for the filename with spaces. Fixed static URL decoding with a malformed-path 400 and root-boundary guard; added audio/mpeg MIME. New isolated static-audio API regression covers encoded names, malformed URL, missing file and traversal. Full Node 18 suite **216/216 passed** after the server fix. Final app build/signature/parity passed.
+- Fresh safe-reopen check found no approved/queued/running/interrupted game work. Reopened the corrected app: encoded asset returned HTTP 200 audio/mpeg with exact byte parity. Native Electron Media diagnostics verified the meadow player uses FFmpegAudioDecoder, BUFFERING_HAVE_ENOUGH, kPlaying and kPlay. DevTools closed; app left open. No provider prompts, queue changes, rewards, acceptance, commit or push performed.
+
 # Commit verification — participation levels, pooled home XP and soundtrack (October 10, 2026)
 
 - User authorized committing and pushing the accumulated XP UI, pooled home progression and six-track soundtrack to `ai-features`.

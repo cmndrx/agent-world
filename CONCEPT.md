@@ -445,3 +445,5 @@ Fixture CLIs verify execution/routing for Codex and Claude without provider spen
 Home progression now pools lifetime XP from every current resident in that home (unique slots, same project). Building thresholds are 300 / 750 / 1,350 / 2,100 total XP for House / Villa / Manor / Estate; fixed thresholds do not change with household size. Individual resident/player XP rules are unchanged. Rewards shows pooled XP and the remaining XP to the next home tier.
 
 The six MP3s in `audio/` form the background soundtrack. Playback begins after a user interaction, shuffles every cycle, avoids immediate repeats between cycles and uses a quiet 20% volume. The existing Sound toggle controls music and chimes together and remembers mute. Assets are bundled by Vite into the Electron package; playback needs no external music service.
+
+Town ambience: the user-supplied Meadows MP3 plays as a quiet (15%) continuous loop alongside the shuffled soundtrack, after the first interaction. It is excluded from the music playlist. The existing Sound toggle pauses/resumes both layers and agent chimes.
