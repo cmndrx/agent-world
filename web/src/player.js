@@ -19,7 +19,7 @@ export class Player {
     document.querySelector('#topbar .brand')?.after(this.el);
     this.badge = new AvatarPortrait({ look: () => this.look, mode: 'bust', persistent: true });
     this.preview = new AvatarPortrait({ look: () => this.look, mode: 'waist', persistent: true });
-    this.el.innerHTML = '<span class="player-pic"></span><span class="player-name">You</span>';
+    this.el.innerHTML = '<span class="player-pic"></span><span class="player-name">You</span><span class="player-level" hidden></span>';
     this.el.querySelector('.player-pic').append(this.badge.canvas);
     this.setLook({});
   }
@@ -33,6 +33,15 @@ export class Player {
     for (const [k, v] of Object.entries(overrides || {})) look[k] = hexNum(v);
     this.look = look; // the portraits pick it up on their next frame
     this.onChange?.(look);
+  }
+
+  /** Your participation level, shown as a small number on the button. */
+  setLevel(level) {
+    const el = this.el.querySelector('.player-level');
+    el.hidden = !level;
+    el.textContent = `Lv ${level}`;
+    this.el.title = `You · level ${level} · change your look`;
+    this.el.setAttribute('aria-label', `You, level ${level}: change your look`);
   }
 
   /** Slot for the large live 3D preview in the wardrobe (filled by mountPreview after render). */

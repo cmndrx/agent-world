@@ -1,4 +1,4 @@
-// Progression: gems from the first provider connection and human decisions; home levels from outcomes.
+// Progression: gems from human decisions; home tiers from resident participation levels.
 //
 // - Work gems come from tasks YOU accepted with review notes and outcomes YOU marked reached.
 //   They are recomputed from productivity.json every time; there is no stored balance to edit or farm.
@@ -9,6 +9,7 @@
 
 import { DECOR } from './style.mjs';
 import { CONNECTION_GEMS, gameplaySpent, townHallState } from './gameplay.mjs';
+import { experience, residentKey } from './experience.mjs';
 
 export const GEMS = { acceptedTask: 10, outcomeReached: 25 };
 export const BRICKS = GEMS; // compatibility for older imports
@@ -45,10 +46,22 @@ export function commonsHint(c) {
 
 export const levelName = (level) => LEVELS[Math.min(MAX_LEVEL, Math.max(1, level)) - 1].name;
 
-/** A home's level: 1 + outcomes you marked reached (capped). */
-export function homeLevel(plan) {
-  return Math.min(MAX_LEVEL, 1 + (plan?.milestones?.length || 0));
+/** Pooled lifetime participation XP of current residents; fixed thresholds for any household size. */
+export function homeExperience(home, residentExperience = {}) {
+  const slots = new Set((home?.characters || []).map(c => c.slot));
+  const xp = [...slots].reduce((sum, slot) => {
+    const value = residentExperience[residentKey(home.project, slot)]?.xp;
+    return sum + (Number.isFinite(value) ? Math.max(0, value) : 0);
+  }, 0);
+  let level = 1, floor = 0, required = 300;
+  while (level < MAX_LEVEL && xp - floor >= required) {
+    floor += required; level++; required = 300 + (level - 1) * 150;
+  }
+  const capped = level === MAX_LEVEL;
+  return { xp, level, current: xp - floor, required: capped ? 0 : required,
+    remaining: capped ? 0 : required - (xp - floor), percent: capped ? 100 : (xp - floor) / required * 100 };
 }
+export const homeLevel = (home, residents = {}) => homeExperience(home, residents).level;
 
 /** True when an accepted task carries review notes (the "evidence" field). */
 export const hasReviewNotes = (task) => (typeof task.evidence === 'string' && task.evidence.trim().length > 0) || (task.references || []).some(r => ['output', 'check'].includes(r.kind) && r.value?.trim());
@@ -60,7 +73,7 @@ export const itemLevel = (item) => DECOR[item]?.level || 1;
  * Everything earned and spent, recomputed from the board and the style document.
  * @returns {{ earned:number, spent:number, balance:number, levels:Object<string,number>, ledger:Array }}
  */
-export function progress({ tasks = [], plans = [] } = {}, style = {}, gameplay = {}) {
+export function progress({ tasks = [], plans = [], households = [], runs = [], residentExperience = experience(runs).residents } = {}, style = {}, gameplay = {}) {
   const ledger = [];
   const rewardedDays = new Set();
   for (const t of [...tasks].sort((a, b) => String(a.acceptedAt || a.updatedAt || '').localeCompare(String(b.acceptedAt || b.updatedAt || '')) || a.id.localeCompare(b.id))) {
@@ -80,12 +93,16 @@ export function progress({ tasks = [], plans = [] } = {}, style = {}, gameplay =
       at: t.acceptedAt || t.updatedAt,
     });
   }
-  const levels = {};
+  const levels = {}, homes = {};
   for (const p of plans) {
-    levels[p.project] = homeLevel(p);
+    levels[p.project] = 1;
     (p.milestones || []).forEach((m, i) => {
-      ledger.push({ kind: 'outcome', id: `${p.project}#${i}`, project: p.project, title: m.outcome, bricks: BRICKS.outcomeReached, at: m.reachedAt, level: Math.min(MAX_LEVEL, i + 2) });
+      ledger.push({ kind: 'outcome', id: `${p.project}#${i}`, project: p.project, title: m.outcome, bricks: BRICKS.outcomeReached, at: m.reachedAt });
     });
+  }
+  for (const home of households) {
+    homes[home.project] = homeExperience(home, residentExperience);
+    levels[home.project] = homes[home.project].level;
   }
   ledger.sort((a, b) => Date.parse(b.at || 0) - Date.parse(a.at || 0));
   if (gameplay.connection) ledger.push({ kind: 'connection', id: 'first-connection', title: `${gameplay.connection.provider === 'claude' ? 'Claude Code' : 'Codex'} connected`, bricks: CONNECTION_GEMS, at: gameplay.connection.at });
@@ -94,7 +111,7 @@ export function progress({ tasks = [], plans = [] } = {}, style = {}, gameplay =
   const spent = (style.unlocks || []).reduce((n, item) => n + itemPrice(item), 0) + gameplaySpent(gameplay);
   const counts = { outcomes: ledger.filter((e) => e.kind === 'outcome').length, tasks: ledger.filter((e) => e.kind === 'task' && !e.capped).length };
   const commons = COMMONS.filter((c) => c.id === 'townhall' ? townHallState(gameplay).status === 'built' : (c.outcomes && counts.outcomes >= c.outcomes) || (c.tasks && counts.tasks >= c.tasks)).map((c) => c.id);
-  return { earned, spent, balance: earned - spent, levels, ledger, counts, commons };
+  return { earned, spent, balance: earned - spent, levels, homes, ledger, counts, commons };
 }
 
 /**

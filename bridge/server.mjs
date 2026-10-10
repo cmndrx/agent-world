@@ -408,14 +408,14 @@ const server = http.createServer(async (req, res) => {
       }
       if (url.pathname === '/api/gameplay') {
         if (input.action === 'claim' && !(await providerReady(input.provider))) throw new Error('Sign in to Codex or Claude Code, then try again.');
-        const balance = progress(productivity.snapshot(), style, gameplay).balance;
+        const balance = progress({...productivity.snapshot(), households:Object.values(world.households), runs:passes.snapshot().runs}, style, gameplay).balance;
         gameplay = applyGameplayAction(gameplay, input, balance);
         saveGameplay();
         res.writeHead(200); return res.end(JSON.stringify({ ok: true, gameplay }));
       }
       if (url.pathname === '/api/style') {
         // Bricks and levels are derived from the human's board every time (docs/GAMEPLAY.md).
-        const earnedNow = progress(productivity.snapshot(), style, gameplay);
+        const earnedNow = progress({...productivity.snapshot(), households:Object.values(world.households), runs:passes.snapshot().runs}, style, gameplay);
         const known = {
           homes: new Set(Object.keys(world.households)),
           residents: new Set(Object.values(world.households).flatMap((h) => h.characters.map((c) => `${h.project}#${c.slot}`))),

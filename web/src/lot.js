@@ -76,7 +76,7 @@ export class Lot {
     // Build-mode decor (simulation layer only; see docs/GAMEPLAY.md).
     this.decor = { group: new THREE.Group(), items: [], obstacles: [], glows: [], canopies: [], key: '' };
     this.group.add(this.decor.group);
-    // Home level upgrades (phase 2): earned by outcomes you mark reached.
+    // Home level upgrades: follow the home's combined resident XP.
     this.level = 0;
     this.levelGroup = new THREE.Group();
     this.levelObstacles = [];
@@ -160,7 +160,7 @@ export class Lot {
 
   /**
    * Show a home's level (1 Cottage … 5 Estate) with cumulative exterior upgrades. Cosmetic; the level
-   * comes from outcomes the human marked reached (shared/progression.mjs), never from agent activity.
+   * follows resident participation XP (shared/progression.mjs), independent of reviewed outcomes.
    */
   setLevel(level) {
     if (level === this.level) return;
@@ -253,7 +253,7 @@ export class Lot {
     this.reachCache = null;
     const badge = this.signEl.querySelector('.lot-level');
     badge.textContent = `${'★'.repeat(level)} ${levelName(level)}`;
-    badge.title = `Home level ${level} of 5: grows when you mark this project's outcome reached`;
+    badge.title = `Home level ${level} of 5: follows this home's combined resident XP`;
   }
 
   // ---- Customization (paint + decor) ---------------------------------------------------

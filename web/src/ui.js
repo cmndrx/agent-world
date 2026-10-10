@@ -11,6 +11,7 @@ import { appName, resolveActivity } from './activity.js';
 import { SEASONS, WEATHERS } from './seasons.js';
 import { icon, STATE_ICON } from './icons.js';
 import { AvatarPortrait } from './avatar-portrait.js';
+import { xpMarkup } from './levels.js';
 import { PROVIDER_COLORS } from './models.js';
 import { escapeHtml, formatDuration } from './sim.js';
 
@@ -293,7 +294,7 @@ export class UI {
     dock.querySelector('[data-menu="time"]').innerHTML = icon(timeIcon);
     const snd = dock.querySelector('[data-action="sound"]');
     snd.innerHTML = icon(soundOn ? 'bell' : 'bellOff');
-    snd.title = soundOn ? 'Sounds on: chime when an agent needs you' : 'Sounds off';
+    snd.title = soundOn ? 'Sound on: background music and agent chimes' : 'Sounds off';
     // Season + weather share one menu (ambience only; never real weather or agent-related).
     const seasonIcon = { spring: 'flower', summer: 'sun', autumn: 'leaf', winter: 'snowflake' };
     const weatherIcon = { auto: 'cloudSun', clear: 'sun', rain: 'cloudRain', snow: 'cloudSnow' };
@@ -365,7 +366,7 @@ export class UI {
       </div>
       <div class="scroll">
         <h2 class="activity-view-title">Watch activity</h2>
-        <button data-prompt-agent>Prompt this agent</button><div data-slot="role"></div>
+        <button data-prompt-agent>Prompt this agent</button><div data-slot="xp"></div><div data-slot="role"></div>
         <button type="button" data-slot="hero" data-prompt-agent></button>
         <figure class="screen-wrap">
           <button type="button" class="screen-chat" data-prompt-agent aria-label="Open chat from activity screen"><canvas class="screen-preview" width="512" height="320"></canvas></button>
@@ -404,6 +405,8 @@ export class UI {
     const state = sim.state;
     const role = sim.roleInfo;
     // Role: one line; the reason is a tooltip (it describes observed activity, not skill).
+    const xp = this.h.xpFor?.(sim);
+    this.slot('xp', xp ? `<div class="agent-xp">${xpMarkup(xp)}</div>` : '');
     this.slot('role', role?.title ? `<div class="role-card" style="--role:#${role.color.toString(16).padStart(6, '0')}" title="${escapeHtml(role.why)}"><b>${icon(role.intern ? 'hardHat' : 'store')} ${escapeHtml(role.title)}</b>${role.workplace ? `<small>${escapeHtml(role.workplace)}</small>` : ''}</div>` : '');
     const cls = plumbobFor(state);
 

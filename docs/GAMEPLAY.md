@@ -10,11 +10,11 @@ neighborhood, and watching projects' houses grow as you accept real work. It nev
    counted at most once per day. No rewards for tool calls, tokens, session counts or time running: that
    would reward waste and let an agent farm progress. Nothing decays and there are no streaks. Synthetic
    (fake demo) events never count outside demo mode. Businesses also **upgrade by use**, which the human
-   asked for and is measured in different days of that kind of work, never volume. Gems, home levels and
-   catalog unlocks still come only from human decisions (rule 2).
+   asked for and is measured in different days of that kind of work, never volume. Gems still follow
+   human decisions. Resident participation XP now determines home tiers and decor level eligibility.
 2. **Rewards follow human decisions and play.** Only tasks you accept with review notes, outcomes you mark
-   reached, and in-game play (exploring, decorating) count. Agents cannot accept tasks
-   (`skills/agent-world` refuses it), so they cannot earn rewards for themselves.
+   reached, and in-game play (exploring, decorating) count toward reviewed-work and play rewards. The
+   user separately authorized participation XP for returned game responses. Agents still cannot accept tasks.
 3. **Cosmetic only.** Customization lives in the simulation layer. It never hides, recolors or softens truth:
    plumbobs, bubbles, screens, "needs you", toasts and the roster stay legible in every style.
 4. **No pressure mechanics.** No streaks to lose, timers, loot boxes or reward notifications. Approving a
@@ -104,14 +104,15 @@ Ideas for later:
 ### 2. Progression (gems, house levels, catalog): shipped
 
 - **Gems** come from your first verified Codex or Claude Code connection, tasks you accepted with review notes, and reached outcomes. Work rewards are derived from your task history.
-- **House levels** (Cottage, House, Villa, Manor, Estate) rise when you mark a project's
-  outcome reached. Higher levels unlock exterior upgrades and decor tiers for that home.
+- **House levels** (Cottage, House, Villa, Manor, Estate) follow the combined resident XP
+  in that home, capped at level 5. Residents earn participation XP from completed game responses.
+  Higher levels unlock exterior upgrades and decor tiers for that home; outcomes still award gems.
 - **Catalog:** basics stay free, nicer items cost gems, and milestone items are exclusive.
 - A small in-world celebration plays when you accept a task. It is derived from your action, not from agent activity.
 
 As built (`shared/progression.mjs`):
 - **Gems:** +50 once for the first verified provider connection; +10 at most once per project per server-local calendar day for newly accepted tasks with review notes (accepted without notes earns 0; existing accepted credits are preserved); +25 per outcome you mark reached. Work rewards are recomputed from `productivity.json`; the connection grant and construction spending live in `gameplay.json`. Un-accepting removes that task's gems. Unlocked items remain owned, but a negative balance blocks new spending.
-- **Levels:** 1 + outcomes reached (capped at 5): Cottage, House (porch, awning, porch lights), Villa (garden arch, hedge), Manor (fountain, flag), Estate (lantern path, golden plumbob statue). Shown on the house sign.
+- **Levels:** pooled resident XP (home thresholds: 300, 750, 1,350, 2,100 total XP): Cottage, House (porch, awning, porch lights), Villa (garden arch, hedge), Manor (fountain, flag), Estate (lantern path, golden plumbob statue). Shown on the house sign. An empty home starts at level 1.
 - **Marking an outcome reached:** Work → Now → *Reached*, which needs a confirmation checkbox (`POST /api/milestone`, `confirmed: true`). *Undo the last one* corrects mistakes.
 - **Catalog:** 10 free basics. Others cost 10 to 60 gems; aquarium, record player, snack fridge, bird bath and picnic table need a House, and the arcade needs a Villa. Unlocks are global (`style.unlocks`) and validated server-side against the derived balance. New placements must be unlocked and fit the home's level. Decor already in place is never removed.
 - **UI:** the gems chip opens a Progress panel (balance, rules, homes and levels, a ledger with provenance). Confetti and a toast play when you accept a task; fireworks when a home levels up. These only trigger on live changes, never on page load.
@@ -170,3 +171,7 @@ As built:
   - Rain splashes on the ground.
 
 Deferred: a "sticker book" of first-seen activity kinds (could tempt users to make agents do things to collect).
+
+Home progression now pools lifetime XP from every current resident in that home (unique slots, same project). Building thresholds are 300 / 750 / 1,350 / 2,100 total XP for House / Villa / Manor / Estate; fixed thresholds do not change with household size. Individual resident/player XP rules are unchanged. Rewards shows pooled XP and the remaining XP to the next home tier.
+
+The six MP3s in `audio/` form the background soundtrack. Playback begins after a user interaction, shuffles every cycle, avoids immediate repeats between cycles and uses a quiet 20% volume. The existing Sound toggle controls music and chimes together and remembers mute. Assets are bundled by Vite into the Electron package; playback needs no external music service.

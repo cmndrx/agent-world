@@ -2140,3 +2140,36 @@ body.night .mayor-choice.subtle { background: transparent; }
 @media (max-width: 760px) { .mayor-bubble { padding: 16px 16px 14px; } .mayor-choice { justify-content: space-between; } }
 body.night .mayor-choice.primary, .mayor-choice.primary { background: var(--accent); color: #fff; }
 .mayor-choice.primary > span { background: rgba(0, 0, 0, 0.2); color: #fff; }
+
+/* Participation XP (levels.js): one meter used in the You card, agent cards and the prompter. */
+.xp-meter { display: flex; align-items: center; gap: 12px; }
+.lvl-badge { flex: none; display: grid; place-items: center; align-content: center; width: 44px; height: 44px; border-radius: 14px; background: linear-gradient(140deg, #4f5ee8, #4250d6 45%, #6a3ad2); color: #fff; font: 900 18px/1 var(--font); box-shadow: 0 4px 12px rgba(91, 108, 249, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35); }
+.lvl-badge small { display: block; font-size: 9px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.85; margin-bottom: 1px; }
+.xp-body { flex: 1; min-width: 0; display: grid; gap: 5px; }
+.xp-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.xp-row b { color: var(--ink); font-size: 13px; font-weight: 900; }
+.xp-row small { color: var(--ink-3); font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.xp-track { position: relative; display: block; height: 8px; border-radius: 999px; background: rgba(27, 33, 48, 0.08); overflow: hidden; }
+body.night .xp-track { background: rgba(255, 255, 255, 0.1); }
+.xp-track > span { display: block; height: 100%; min-width: 6px; border-radius: inherit; background: linear-gradient(90deg, #5b6cf9, #8b5cf6 60%, #c08bff); box-shadow: 0 0 8px rgba(139, 92, 246, 0.45); transition: width 0.6s var(--ease, ease); }
+.xp-next { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-3); font-size: 11px; font-weight: 700; }
+.xp-next .icon { font-size: 12px; color: var(--accent-ink); }
+.xp-meter.compact { gap: 9px; }
+.xp-meter.compact .lvl-badge { width: 32px; height: 32px; border-radius: 10px; font-size: 14px; }
+.xp-meter.compact .lvl-badge small { display: none; }
+.xp-meter.compact .xp-row b { font-size: 11.5px; }
+.xp-meter.compact .xp-row small { font-size: 10px; }
+.xp-meter.compact .xp-track { height: 6px; }
+/* You card (wardrobe) and agent card: a soft panel around the meter. */
+.ward-xp, .agent-xp { margin: 4px 0 12px; padding: 12px; border-radius: 16px; background: color-mix(in srgb, var(--accent) 7%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 14%, transparent); }
+.agent-xp { margin: 10px 0 2px; }
+/* Prompter header: compact meter under the name. */
+.pass-card .chat-xp { display: block; width: min(260px, 100%); margin: 6px 0 4px; }
+/* "You" button: a small level pill after the name. */
+#player-badge .player-level { margin-left: -2px; padding: 2px 7px; border-radius: 999px; background: linear-gradient(140deg, #4f5fe8, #6d3fd6); color: #fff; font: 900 10.5px var(--font); letter-spacing: 0.02em; }
+#player-badge .player-level[hidden] { display: none; }
+@media (max-width: 760px) { #player-badge .player-level { margin-left: 4px; } }
+.xp-award { display: flex; align-items: center; gap: 8px; position: fixed; bottom: 86px; left: 50%; transform: translateX(-50%); z-index: 10000; max-width: calc(100vw - 32px); padding: 10px 16px; border-radius: 999px; background: var(--glass-strong); color: var(--ink); box-shadow: var(--shadow-lg); font-size: 13px; font-weight: 700; pointer-events: none; animation: xp-pop 0.35s var(--spring, ease); }
+.xp-award .icon { color: #8b5cf6; flex: none; }
+.xp-award[hidden] { display: none; }
+@keyframes xp-pop { from { opacity: 0; transform: translate(-50%, 10px) scale(0.96); } }

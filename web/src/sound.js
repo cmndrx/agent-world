@@ -1,6 +1,8 @@
 // "Needs you" sounds, synthesized with WebAudio (no assets). Each sound is triggered by truth:
 // an agent starting to wait on you, or still waiting after a while.
 
+const TRACKS = Object.values(import.meta.glob('../../audio/*.mp3', { eager: true, query: '?url', import: 'default' }));
+
 const STORAGE_KEY = 'agent-world:sound';
 
 const CUES = {
@@ -30,10 +32,24 @@ export class Sound {
     this.enabled = read() !== 'off';
     this.ctx = null;
     this.lastAt = 0;
+    this.music = new Audio();
+    this.music.volume = 0.2;
+    this.music.preload = 'none';
+    this.playlist = [];
+    this.lastTrack = null;
+    this.failedTracks = new Set();
+    this.unlocked = false;
+    this.music.addEventListener('ended', () => this.nextTrack());
+    this.music.addEventListener('error', () => {
+      this.failedTracks.add(this.lastTrack);
+      this.nextTrack();
+    });
     // Browsers only allow audio after a user gesture.
     const unlock = () => {
       if (!this.ctx) this.ctx = new AudioContext();
       if (this.ctx.state === 'suspended') this.ctx.resume();
+      this.unlocked = true;
+      if (this.enabled && this.music.paused) this.startMusic();
     };
     addEventListener('pointerdown', unlock);
     addEventListener('keydown', unlock);
@@ -42,8 +58,34 @@ export class Sound {
   toggle() {
     this.enabled = !this.enabled;
     write(this.enabled ? 'on' : 'off');
-    if (this.enabled) this.play('turn_complete', { force: true });
+    if (this.enabled) { this.startMusic(); this.play('turn_complete', { force: true }); }
+    else this.music.pause();
     return this.enabled;
+  }
+
+  startMusic() {
+    if (!this.enabled || !this.unlocked) return;
+    if (!this.lastTrack) this.nextTrack();
+    else this.music.play().catch(() => {}); // autoplay can require another gesture
+  }
+
+  nextTrack() {
+    if (!this.enabled || !this.unlocked) return;
+    this.playlist = this.playlist.filter(track => !this.failedTracks.has(track));
+    if (!this.playlist.length) {
+      this.playlist = TRACKS.filter(track => !this.failedTracks.has(track));
+      for (let i = this.playlist.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [this.playlist[i], this.playlist[j]] = [this.playlist[j], this.playlist[i]];
+      }
+      if (this.playlist.length > 1 && this.playlist[0] === this.lastTrack)
+        [this.playlist[0], this.playlist[1]] = [this.playlist[1], this.playlist[0]];
+    }
+    const track = this.playlist.shift();
+    if (!track) return;
+    this.lastTrack = track;
+    this.music.src = track;
+    this.music.play().catch(() => {});
   }
 
   /** @param {'permission'|'turn_complete'|'reminder'|'shutter'} cue */

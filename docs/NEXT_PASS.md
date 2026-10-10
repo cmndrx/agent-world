@@ -1,3 +1,44 @@
+# Commit verification — participation levels, pooled home XP and soundtrack (October 10, 2026)
+
+- User authorized committing and pushing the accumulated XP UI, pooled home progression and six-track soundtrack to `ai-features`.
+- No application code changed during this shipping pass. Reused the immediately preceding **215/215** passing suite and native home/music verification. Fresh diff check, strict package signature and dist/bridge/shared/adapters parity passed.
+- Packaged app is current; launch/open it without interrupting running work. No real provider prompt, game queue mutation, acceptance or spending performed.
+
+# Latest pass — Pooled home XP and background soundtrack (October 10, 2026)
+
+- Supersedes highest-resident leveling: homes pool lifetime participation XP from every current resident in the project, counting each slot once. Building upgrades require 300, then another 450, 600 and 750 XP (total thresholds 300/750/1,350/2,100); fixed requirements do not rise when residents join. Individual agent/player leveling and gem rewards are unchanged. Server decor eligibility and client exteriors use the same pure rule. Rewards shows pooled XP and XP remaining.
+- Added all six user-supplied `audio/*.mp3` tracks via Vite asset imports. Quiet 20% volume, shuffled full cycles without immediate cycle-boundary repeats. Playback begins after interaction, obeys the existing persisted Sound toggle, resumes on unmute, and skips failed tracks with bounded retries. Updated the Sound tooltip. No external music service or audio permissions needed.
+- Checks: standard Node 18 full suite **215/215 passed**, including pooled/deduplicated resident contributions, project isolation, failed-response exclusion, all home thresholds and tier cap. Soundtrack smoke passed for gesture gating, full shuffled cycle, no immediate repeat, mute/resume and finite failed-track handling. Syntax/diff checks passed. Final `npm run app:build`, strict codesign and dist/bridge/shared/adapters byte parity passed; all six MP3s are packaged.
+- Current saved home history derives 550 XP, level 2 House, 200 XP remaining to Villa. Reopen was safe after a fresh check found no approved/queued/running/interrupted game work. Native UI verified ★★ House and Rewards: House · 550 XP · 200 to next level. Electron Media diagnostics verified the bundled Worlds_Unseen MP3 loaded with FFmpegAudioDecoder, BUFFERING_HAVE_ENOUGH, kPlaying and kPlay. Developer tools closed afterward; app left in normal game view. No paid prompt, fake event, queue mutation, acceptance, gem spending, commit or push.
+
+# Latest pass — Homes follow resident levels (October 10, 2026)
+
+- Home tier now follows its highest-level current resident, capped at five: Cottage, House, Villa, Manor, Estate. Existing completed-response XP applies immediately on load; outcomes still award gems but no longer raise buildings. Residents from other projects or absent character slots do not contribute.
+- Client building upgrades and server decor eligibility share the same rule. Live XP changes refresh the home exterior and celebrate new tiers; initial historical load does not replay upgrade celebrations. Updated the building tooltip, progress help, CONCEPT, README and GAMEPLAY.
+- Verification: Node 18 full suite **214/214 passed**, including resident isolation, tier cap and failed/completed response boundary checks. Syntax and diff checks passed. `npm run app:build`, strict codesign and packaged dist/bridge/shared/adapters parity passed.
+- Read-only calculation from current saved runs gives the Agent World home **level 3 / Villa**. Native visual verification is pending: two game-owned runs were running at the safe-reopen check, so the app was deliberately left open. Safely reopen after work finishes to load the new server and packaged UI. No new provider prompt, fake event, acceptance, reward spending, commit or push performed.
+
+# Latest pass — levels moved into the You button, You card, agent card and prompter (October 9, 2026)
+
+- Removed the separate top-bar "You · Lv · XP" chip and its "Levels & experience" modal (`web/src/levels.js` rewritten; the XP rules in `shared/experience.mjs` are unchanged).
+- **You button:** shows only the level number as a small gradient "Lv N" pill after "You" (`Player.setLevel`); tooltip and aria include the level.
+- **You card (wardrobe for the player):** a level meter under the 3D preview — gradient level badge, "You · Level N", current/required XP, bar, "X XP to level N+1 · total". It re-renders live when XP changes.
+- **Agent card (inspect drawer):** the same meter for the agent, above the role card (`ui.h.xpFor` → `levels.resident(project, slot)`).
+- **Prompter header:** a compact meter (smaller badge, bar and XP count) replaces the plain text/bar.
+- **New-XP toast:** now a glass pill with a sparkle icon, and awards are grouped per agent ("Nell +350 XP" instead of 14 repeats).
+- **Debug handle:** `window.agentWorld.levels`.
+- **QA:** isolated demo, with page-only fake completed runs fed to `levels.setData` (nothing persisted). Checked the You button (Lv 4), You card, Nell's card (day and night) and the prompter header. Contrast checker 0 failing after darkening the badge gradient.
+- **Checks:** npm test passed (including the existing experience tests); app:build, strict codesign and dist parity passed. ⌘R in the running app. No commit or push.
+
+# Latest pass — Resident and player participation XP (October 9, 2026)
+
+- User authorized XP for completed game responses. Added `shared/experience.mjs`: 25 XP per completed run with a returned summary to the responding project/slot resident and player. Deduplicated by persisted run ID, including prior saved responses, scheduled work and team responses. Failed/cancelled/interrupted/no-response runs and external observed activity earn none. No new mutable XP balance or real queue edits; durable run history is the ledger.
+- Growing per-level requirements: 100, 150, 200, 250… XP; overflow carries forward. This measures participation only, separate from human review, gems, home levels and acceptance.
+- Added top-bar player level/XP badge, Levels & experience dialog with each resident's total XP/bar/next-level requirement, resident chat header XP, and live new-response/level-up notifications. Initial history load does not replay old notifications; rereads do not double-award.
+- Verification: standard Node 18 suite **212/212 passed**. New tests cover increasing thresholds, overflow, resident/provider/project isolation, run deduplication and persisted reloads, excluded statuses. Syntax/diff checks passed. Final app build, strict codesign and dist/bridge/shared/adapters parity passed.
+- Native Electron UI verified player level 4 (525 XP; 75/250 toward level 5), Otto level 3 (350 XP), Nell level 1 (50 XP), Milo level 2 (125 XP) from 21 saved completed responses. Opened Otto's chat and verified its 100/200 bar. No real prompt, acceptance, fake event or provider spending for QA. Live notification branch is implemented but not exercised with a paid real provider turn; next human prompt can evaluate it.
+- Preserve existing Claude GUI-owned auth timeout limitation. Nothing committed or pushed in this pass.
+
 # Commit verification (October 9, 2026)
 
 - User authorized committing and pushing the accumulated visual, tutorial and auth-feedback updates on `ai-features`.
