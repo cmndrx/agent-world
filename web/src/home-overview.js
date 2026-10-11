@@ -6,6 +6,7 @@ import {PROFESSION_BY_ID} from '../../shared/catalogs/index.js';
 import {AvatarPortrait} from './avatar-portrait.js';
 import {lookFromSeed} from './models.js';
 import {xpMarkup} from './levels.js';
+import {homeResponse} from './home-response.js';
 
 const CATEGORY_ICON={technology:'code',design:'penTool',data:'chartLine',science:'flaskConical',business:'briefcase',finance:'banknote',marketing:'megaphone',writing:'pencil',legal:'scale',health:'heartPulse',education:'graduationCap',entertainment:'music',organization:'clipboardList',relationships:'heartHandshake',civic:'landmark'};
 const roleIcon=id=>icon(CATEGORY_ICON[PROFESSION_BY_ID[id]?.category]||'sparkles');
@@ -23,7 +24,7 @@ export class HomeOverview {
         this.busy=true;this.error='';this.render();
         try {
           const response=await fetch('/api/home-level',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({project:this.project,level:value==='earned'?null:Number(value)})});
-          const data=await response.json();if(!response.ok)throw Error(data.error||'Could not change home level.');
+          await homeResponse(response);
           this.testLevel=null;
         }catch(error){this.error=error.message;}
         finally{this.busy=false;await this.load();this.render();}
@@ -36,14 +37,14 @@ export class HomeOverview {
       this.busy=true;this.error='';this.render();
       try {
         const response=await fetch('/api/roommates',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({project:this.project,action:b.hasAttribute('data-suggest')?'suggest':'recruit',provider,candidateId:b.dataset.recruit})});
-        const data=await response.json();if(!response.ok)throw Error(data.error||'Request failed.');
+        await homeResponse(response);
         if(recruiting)this.celebrate(recruiting);
       } catch(error){this.error=error.message;}
       finally{this.busy=false;await this.load();this.render();}
     });
   }
   open(project){this.project=project;this.testLevel=null;this.data=null;this.error='';this.dialog.innerHTML='<p>Loading home…</p>';if(!this.dialog.open)this.dialog.showModal();clearInterval(this.timer);this.load();this.timer=setInterval(()=>{if(!this.busy)this.load();},2500);}
-  async load(){const project=this.project;try {const response=await fetch('/api/roommates?'+new URLSearchParams({project}));const data=await response.json();if(project!==this.project)return;if(!response.ok)throw Error(data.error||'Home unavailable.');const changed=JSON.stringify(data)!==JSON.stringify(this.data);this.data=data;if(changed)this.render();}catch(e){this.error=e.message;this.render();}}
+  async load(){const project=this.project;try {const response=await fetch('/api/roommates?'+new URLSearchParams({project}));const data=await homeResponse(response);if(project!==this.project)return;const recovered=!!this.error;this.error='';const changed=JSON.stringify(data)!==JSON.stringify(this.data);this.data=data;if(changed||recovered)this.render();}catch(e){if(project!==this.project)return;this.error=e.message;this.render();}}
   /** Welcome card over the panel when a roommate is recruited: their bust pops in with a burst and confetti. */
   celebrate(c){
     this.welcome={...c,until:Date.now()+4200};clearTimeout(this.welcomeTimer);
