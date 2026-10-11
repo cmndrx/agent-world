@@ -16,6 +16,7 @@ import { buildDecor } from './decor.js';
 import { NavGrid } from './nav.js';
 import { Pet } from './pets.js';
 import { Screen } from './screens.js';
+import { Crew } from './crew.js';
 
 const photoLoader = new THREE.TextureLoader();
 const photoTextures = new Map();
@@ -123,6 +124,39 @@ export class Lot {
   add(obj) {
     this.static.add(obj);
     return obj;
+  }
+
+  setConstruction(build) {
+    this.construction = build;
+    const active = !!build && Date.parse(build.readyAt) > Date.now();
+    if (active && !this.constructionSite) {
+      this.constructionSite = new THREE.Group();
+      this.constructionSite.add(box(14, .2, 10, 0xbab09b, 0, .1, 0));
+      for (const x of [-6, 6]) for (const z of [-4, 4]) this.constructionSite.add(box(.2, 3, .2, PALETTE.wood, x, 1.6, z));
+      for (const z of [-4, 4]) this.constructionSite.add(box(12, .2, .2, PALETTE.wood, 0, 3.1, z));
+      for (const x of [-6, 6]) this.constructionSite.add(box(.2, .2, 8, PALETTE.wood, x, 3.1, 0));
+      this.constructionCrew = new Crew(this.constructionSite);
+      const button = document.createElement('button');
+      button.className = 'home-construction-sign';
+      button.dataset.homeDetail = this.project;
+      const label = new CSS2DObject(button);
+      label.position.set(0, 4.2, 5);
+      this.constructionSite.add(label);
+      this.constructionSign = button;
+      this.group.add(this.constructionSite);
+    }
+    if (active) {
+      this.constructionHidden ||= new Map();
+      for (const child of this.group.children) if (child !== this.constructionSite) {
+        if (!this.constructionHidden.has(child)) this.constructionHidden.set(child, child.visible);
+        child.visible = false;
+      }
+    } else if (this.constructionHidden) {
+      for (const [child, visible] of this.constructionHidden) child.visible = visible;
+      this.constructionHidden = null;
+    }
+    if (this.constructionSite) this.constructionSite.visible = active;
+    this.constructing = active;
   }
 
   /** Move the whole house to another plot (map mode). Residents and pets are lot-local, so they come along. */
@@ -894,6 +928,15 @@ export class Lot {
    * @param {boolean} o.busy someone is running commands here
    */
   update(dt, t, { camera, night, busy, avatar = null }) {
+    if (this.constructing) {
+      this.setConstruction(this.construction);
+      if (this.constructing) {
+        this.constructionCrew.update(dt, t);
+        const minutes = Math.ceil((Date.parse(this.construction.readyAt) - Date.now()) / 60000);
+        this.constructionSign.textContent = `${this.name} · Building · ${minutes} min`;
+        return;
+      }
+    }
     this.pet?.update(dt, t, avatar);
     if (this.globeSpin > 0) this.globe.rotation.y += dt * 2.5;
     this.globeSpin = 0;

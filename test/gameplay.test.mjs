@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyGameplayAction, emptyGameplay, townHallState, TOWN_HALL, visibleResidents } from '../shared/gameplay.mjs';
+import { applyGameplayAction, emptyGameplay, townHallState, TOWN_HALL, visibleResidents, completionCost, gameplaySpent } from '../shared/gameplay.mjs';
 import { progress } from '../shared/progression.mjs';
 
 test('observed residents remain hidden until the player links a provider', () => {
@@ -22,13 +22,18 @@ test('first verified connection grants gems once; Town Hall spends them and open
   assert.equal(progress({}, {}, started).commons.includes('townhall'), false);
 });
 
-test('expedites reduce real remaining time and spend gems without making another grant', () => {
+test('speed up finishes construction at one gem per remaining minute', () => {
   const now = Date.parse('2026-10-06T12:00:00Z');
   let game = applyGameplayAction(emptyGameplay(), { action: 'claim', provider: 'claude' }, 0, now);
   game = applyGameplayAction(game, { action: 'start' }, 50, now);
-  game = applyGameplayAction(game, { action: 'expedite' }, 20, now);
-  assert.equal(townHallState(game, now).remainingMs, TOWN_HALL.durationMs - TOWN_HALL.expediteMs);
+  assert.equal(completionCost(game, now), 5);
+  assert.equal(completionCost(game, now + 60001), 4);
+  assert.equal(completionCost(game, now + TOWN_HALL.durationMs - 1), 1);
+  assert.throws(() => applyGameplayAction(game, { action: 'expedite' }, 4, now), /Not enough gems/);
+  game = applyGameplayAction(game, { action: 'expedite', cost: 0 }, 20, now);
+  assert.equal(townHallState(game, now).remainingMs, 0);
   assert.equal(progress({}, {}, game).balance, 15);
   assert.throws(() => applyGameplayAction(game, { action: 'start' }, 15, now), /already started/);
-  assert.throws(() => applyGameplayAction(game, { action: 'expedite' }, 4, now), /Not enough gems/);
+  assert.throws(() => applyGameplayAction(game, { action: 'expedite' }, 20, now), /not under construction/);
+  assert.equal(gameplaySpent({ townhall: { expedites: 3 } }), 45, 'legacy spending is not refunded');
 });

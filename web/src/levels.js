@@ -37,10 +37,13 @@ export class Levels {
   }
 
   get player() { return this.data.player; }
-  resident(project, slot) { return this.data.residents[residentKey(project, slot)] || xpLevel(0); }
+  resident(project, slot) {
+    const id = this.homes().find(h => h.project === project)?.characters.find(c => c.slot === slot)?.id;
+    return this.data.agents[id] || this.data.residents[residentKey(project, slot)] || xpLevel(0);
+  }
 
   setData(runs) {
-    const next = experience(runs), fresh = this.seen ? next.awards.filter((a) => !this.seen.has(a.id)) : [];
+    const next = experience(runs, this.homes()), fresh = this.seen ? next.awards.filter((a) => !this.seen.has(a.id)) : [];
     const prior = this.data; this.data = next; this.seen = new Set(next.awards.map((a) => a.id));
     this.onPlayer?.(next.player);
     if (fresh.length) {

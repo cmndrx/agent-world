@@ -2,6 +2,26 @@
 
 # Agent World — Concept
 
+## Town Hall and home ownership foundation (October 10, 2026)
+
+Town Hall remains the first construction milestone. Mayor Martin then guides building
+a home for a local project and meeting its Personal Assistant owner. Every newly
+registered or imported local home starts with one owner. Saved teams retain their
+identities, names, slots, conversations, schedules and earned participation XP,
+but only explicitly active members spawn or participate in household delegation.
+
+New imported/created homes take five minutes to build, like Town Hall. Their owner
+moves in only after construction finishes. Home registration has no additional gem
+cost; completion costs one gem per remaining minute, rounded up. Timers and spending
+persist in gameplay metadata; observation never starts or finishes construction.
+
+Persistent home and agent IDs now supplement legacy project/slot bindings. The four
+building categories are residential, recreational, infrastructure and work. Interest,
+personality, happiness and workplace fields are unconfigured until later systems
+provide their rules. The shared contracts and engineer ownership boundaries are in
+`docs/FOUNDATION.md`. This supersedes the automatic three-resident starter-team rule;
+recruitment, movement and city services are subsequent implementation passes.
+
 ## Resident and player experience
 
 Homes now follow their combined resident XP (project + slot), capped at the five building tiers. Home tiers use pooled lifetime resident XP: Cottage at 0, House at 300, Villa at 750, Manor at 1,350 and Estate at 2,100 XP. This supersedes outcome-based home leveling. Outcomes still earn gems and open shared town milestones; home tier changes from participation XP do not imply reviewed quality. Server-side decor eligibility and the visible building use the same rule.

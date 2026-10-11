@@ -1,5 +1,18 @@
 # Gameplay: customization and progression
 
+Town Hall remains the first construction milestone. After it finishes, Mayor Martin
+guides building a local project home and meeting its Personal Assistant owner. Each
+new or imported home starts with one resident; saved identities and history remain
+stored separately from active membership (`residentAgentIds`). Observation does not recruit.
+
+New homes take five minutes to build. Their Personal Assistant becomes available
+only when construction finishes. Projects and Mayor Martin show progress and a
+Speed up build button with total remaining cost: one gem per minute, rounded up.
+Home registration remains free, and previously completed homes are not rebuilt.
+The foundation adds persistent home/agent IDs without changing XP prices or inventing
+happiness. Recruitment, zoning and city services are subsequent passes. See
+[FOUNDATION.md](FOUNDATION.md) for contracts and parallel engineer ownership.
+
 Agent World's fun comes from making the world yours: decorating homes, dressing residents, shaping the
 neighborhood, and watching projects' houses grow as you accept real work. It never comes from agents looking busy.
 
@@ -133,7 +146,7 @@ As built:
   | Park | 1 reached outcome or 3 tasks |
   | Café | 5 tasks |
   | Plaza fountain | 3 outcomes |
-  | Town Hall | 30 gems and five minutes of construction; 5 gems expedites one minute |
+  | Town Hall | 30 gems and five minutes of construction; finish now for 1 gem per remaining minute, rounded up |
 
   "Tasks" means credited reviews: new credits are limited to one per project per day, and legacy accepted credits are preserved. The town hall holds one trophy per reached outcome, up to 10. Locked spaces show a signpost with the requirement; signs fade when the camera is over another street.
 - **Pets** (Build mode, Paint tab): none, cat, dog or bunny, per home (`home.pet`). Pets wander the lot on the nav grid, nap, and come say hi when you zoom in close. They never stand in for an agent.

@@ -1,5 +1,7 @@
 import { readConnections } from './connections.mjs';
+import { resetTown } from './game-reset.mjs';
 import {projectTeam} from '../shared/team.mjs';
+import { agentForRecord, foundationSnapshot, residentCharacters, residentHousehold } from '../shared/foundation.mjs';
 import {Schedules} from './schedules.mjs';
 import {LocalProjects} from './local-projects.mjs';
 import {integrationCatalog} from './integrations.mjs';
@@ -29,7 +31,7 @@ import { emptyCity, helperKey, helperType, mergeCity, recordEvent, residentKey }
 import { applyStyleChange, emptyStyle, removePhoto } from '../shared/style.mjs';
 import { MAX_PHOTO_BYTES, deletePhoto, listPhotos, photoIds, photoPath, savePhoto } from './photos.mjs';
 import { progress } from '../shared/progression.mjs';
-import { applyGameplayAction, emptyGameplay, gameplaySpent } from '../shared/gameplay.mjs';
+import { applyGameplayAction, emptyGameplay, gameplaySpent, townHallState, homeBuildState, startHomeConstruction } from '../shared/gameplay.mjs';
 import { readCodexUsage } from './usage.mjs';
 import { claudeAuth } from './provider-auth.mjs';
 import { dayKey, spawnsFor } from '../shared/collectibles.mjs';
@@ -48,7 +50,7 @@ const STATIC_DIR = arg('serve', null);
 
 ensureHome();
 const config = readConfig();
-const passes=new PassStore(path.join(homeDir(),'passes.json'));
+const passes=new PassStore(path.join(homeDir(),'passes.json'), { agentIdFor: record => agentForRecord(world.households, record)?.id || null });
 const localProjects=new LocalProjects();
 const selectedFile=path.join(homeDir(),'selected-projects.json');
 let selectedProjects=[];
@@ -56,19 +58,21 @@ try{const saved=JSON.parse(fs.readFileSync(selectedFile,'utf8'));if(Array.isArra
 function selectProject(project){if(!selectedProjects.includes(project)){selectedProjects.push(project);fs.writeFileSync(selectedFile+'.tmp',JSON.stringify(selectedProjects));fs.renameSync(selectedFile+'.tmp',selectedFile);}broadcast({type:'selected-projects',projects:selectedProjects});}
 const attachments=new Attachments(path.join(homeDir(),'attachments'));
 const computerUse=new ComputerUse({onDiagnostic:d=>console.error('[computer-use]',JSON.stringify(d))});
-const runner=new PassRunner(passes,{canRun:p=>!threadBusy(world.snapshot().sessions,p.resumeSession)&&!residentBusy(world.snapshot().sessions,p.project,p.slot),enabled:process.env.AGENT_WORLD_RUNNER==='1',onChange:()=>{world.syncResidentOwnership();broadcast({type:'passes',passes:passes.snapshot(),runner:runner.status()});}});
+const runner=new PassRunner(passes,{canRun:p=>homeBuildState(gameplay,p.project).status==='built'&&residentCharacters(world.households[p.project]).some(c=>c.slot===p.slot)&&!threadBusy(world.snapshot().sessions,p.resumeSession)&&!residentBusy(world.snapshot().sessions,p.project,p.slot),enabled:process.env.AGENT_WORLD_RUNNER==='1',onChange:()=>{world.syncResidentOwnership();broadcast({type:'passes',passes:passes.snapshot(),runner:runner.status()});}});
 
 const schedules=new Schedules(passes,{teamFor:project=>projectTeam(world.households[project]),allowed:(s,data)=>{
  if(!runner.enabled)return 'Runner unavailable.';
  if(!selectedProjects.includes(s.project))return 'Project is not in your world.';
+ if(homeBuildState(gameplay,s.project).status!=='built')return 'Home is under construction.';
  if(!runner.status().providers[s.provider]?.installed)return 'Provider CLI unavailable.';
- if(!world.households[s.project]?.characters.some(c=>c.slot===s.slot))return 'Resident unavailable.';
+ if(!residentCharacters(world.households[s.project]).some(c=>c.slot===s.slot))return 'Resident unavailable.';
  if(s.thread&&!ownsThread(data.runs,s.provider==='codex'?world.catalog.snapshot().conversations:[],s.project,s.slot,s.thread,s.provider))return 'Conversation no longer belongs to this resident.';
  if(data.chatSettings?.some(c=>c.project===s.project&&c.thread===s.thread&&c.archived))return 'Conversation is archived.';
  return null;
 },onChange:()=>broadcast({type:'passes',passes:passes.snapshot(),runner:runner.status()})});
 function authorizeSchedule(s){
- if(!selectedProjects.includes(s.project)||!world.households[s.project]?.characters.some(c=>c.slot===Number(s.slot)))throw Error('Choose a resident in an added project.');
+ if(homeBuildState(gameplay,s.project).status!=='built')throw Error('Finish building this home first.');
+ if(!selectedProjects.includes(s.project)||!residentCharacters(world.households[s.project]).some(c=>c.slot===Number(s.slot)))throw Error('Choose a resident in an added project.');
  if(!runner.enabled||!runner.status().providers[s.provider]?.installed)throw Error('This provider runner is unavailable.');
  if(s.thread&&!ownsThread(passes.snapshot().runs,s.provider==='codex'?world.catalog.snapshot().conversations:[],s.project,Number(s.slot),s.thread,s.provider))throw Error('Conversation does not belong to this resident.');
  if(passes.snapshot().chatSettings?.some(c=>c.project===s.project&&c.thread===s.thread&&c.archived))throw Error('Restore the conversation before scheduling.');
@@ -113,7 +117,8 @@ const world = new World({
   staleAfterMs: config.staleAfterMinutes * 60 * 1000,
 });
 
-if(selectedProjects[0]){world.ensureStarterTeam(selectedProjects[0]);persistHouseholds();}
+for (const project of selectedProjects) world.ensureHomeOwner(project);
+persistHouseholds();
 
 const productivity = new Productivity(loadProductivity());
 function loadProductivity() {
@@ -129,6 +134,21 @@ function saveGameplay() {
   fs.renameSync(gameplayFile + '.tmp', gameplayFile);
   broadcast({ type: 'gameplay', gameplay });
 }
+function presentedHome(home) {
+  const result = residentHousehold(home);
+  return { ...result, construction: gameplay.homes?.[home.project] || null,
+    characters: homeBuildState(gameplay, home.project).status === 'building' ? [] : result.characters };
+}
+const constructionStates = new Map();
+for (const project of selectedProjects) constructionStates.set(project, homeBuildState(gameplay, project).status);
+setInterval(() => {
+  for (const project of selectedProjects) {
+    const status = homeBuildState(gameplay, project).status;
+    const previous = constructionStates.get(project);
+    constructionStates.set(project, status);
+    if (previous === 'building' && status === 'built' && world.households[project]) broadcast({ type: 'household', household: world.households[project] });
+  }
+}, 1000).unref();
 async function providerReady(provider) {
   if (provider === 'codex') return (await readCodexUsage()).status === 'available';
   if (provider === 'claude') {
@@ -177,7 +197,7 @@ function noteCity(e) {
   return true;
 }
 const connectionSnapshot = () => readConnections(path.join(homeDir(), 'connections'));
-const snapshot = () => ({ connections: connectionSnapshot(), selectedProjects:allowSynthetic?null:selectedProjects, ...world.snapshot(), ...productivity.snapshot(), style, gameplay, photos: listPhotos(), city, passes:passes.snapshot(), runner:runner.status(), computerUse:computerUse.snapshot() });
+const snapshot = () => ({ foundation: foundationSnapshot(Object.values(world.households).map(presentedHome), gameplay), connections: connectionSnapshot(), selectedProjects:allowSynthetic?null:selectedProjects, ...world.snapshot(), households: Object.values(world.households).map(presentedHome), ...productivity.snapshot(), style, gameplay, photos: listPhotos(), city, passes:passes.snapshot(), runner:runner.status(), computerUse:computerUse.snapshot() });
 const inbox = new Inbox(eventsDir(), { onError: (err) => console.warn('[inbox]', err.message) });
 for (const e of inbox.readAll()) {
   world.apply(e);
@@ -188,6 +208,7 @@ saveHouseholds();
 
 const clients = new Set();
 function broadcast(msg) {
+  if (msg.type === 'household') msg = { ...msg, household: presentedHome(msg.household) };
   const data = `data: ${JSON.stringify(msg)}\n\n`;
   for (const res of clients) res.write(data);
 }
@@ -325,12 +346,24 @@ const server = http.createServer(async (req, res) => {
         if (body.length > (url.pathname==='/api/pass-attachment'?8*1024*1024:url.pathname==='/api/voice'?256*1024:16384)) throw new Error('Request is too large.');
       }
       const input = JSON.parse(body);
+      if (['/api/pass-proposal','/api/pass-chat','/api/pass-attachment','/api/voice','/api/computer-use','/api/schedules'].includes(url.pathname)
+        && input.project && homeBuildState(gameplay, input.project).status !== 'built') throw Error('Finish building this home before its resident can work.');
+      if (['/api/pass-proposal','/api/pass-attachment','/api/voice','/api/computer-use'].includes(url.pathname)
+        && !residentCharacters(world.households[input.project]).some(c => c.slot === Number(input.slot))) {
+        throw Error('Choose an active resident in this home.');
+      }
+      if (url.pathname === '/api/pass-decision' && input.action === 'approve') {
+        const proposal = passes.snapshot().proposals.find(p => p.id === input.id);
+        if (proposal && homeBuildState(gameplay, proposal.project).status !== 'built') throw Error('Finish building this home before its resident can work.');
+        if (!residentCharacters(world.households[proposal?.project]).some(c => c.slot === proposal?.slot)) throw Error('Resident is not active in this home.');
+      }
       let result;
       if(url.pathname==='/api/schedules'){if(allowSynthetic)throw Error('Scheduling is unavailable in the demo.');result=schedules.mutate(input,authorizeSchedule);res.writeHead(200,{'content-type':'application/json'});return res.end(JSON.stringify({ok:true,result}));}
       if(url.pathname==='/api/codex-projects'){
         if(allowSynthetic)throw new Error('Local Codex projects are unavailable in the demo.');
-        const register=p=>{selectProject(p.path);const h=world.household(p.path);if(!h.codexProjectId||h.codexProjectId===p.id){h.name=p.name;h.codexProjectId=p.id;}h.codexProjectIds=[...new Set([...(h.codexProjectIds||[]),p.id])];h.codexRootCount=p.rootCount;if(!Object.values(world.households).some(h=>h.starterTeam))world.ensureStarterTeam(p.path);else world.assignSlot(p.path,Date.now(),1);broadcast({type:'household',household:h});return h;};
-        if(input.action==='list'){result=await localProjects.list();result.homes=selectedProjects.map(p=>world.households[p]).filter(Boolean);}
+        if (['import', 'create'].includes(input.action) && townHallState(gameplay).status !== 'built') throw new Error('Build the Town Hall with Mayor Martin before building a home.');
+        const register=p=>{if(!selectedProjects.includes(p.path)){gameplay=startHomeConstruction(gameplay,p.path);saveGameplay();constructionStates.set(p.path,homeBuildState(gameplay,p.path).status);}selectProject(p.path);const h=world.ensureHomeOwner(p.path);if(!h.codexProjectId||h.codexProjectId===p.id){h.name=p.name;h.codexProjectId=p.id;}h.codexProjectIds=[...new Set([...(h.codexProjectIds||[]),p.id])];h.codexRootCount=p.rootCount;broadcast({type:'household',household:h});return presentedHome(h);};
+        if(input.action==='list'){result=await localProjects.list();result.homes=selectedProjects.map(p=>world.households[p]).filter(Boolean).map(presentedHome);}
         else if(input.action==='remove'){
           if(typeof input.project!=='string'||!selectedProjects.includes(input.project))throw new Error('Choose a project in your world.');
           const state=passes.snapshot();
@@ -407,10 +440,28 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(200); return res.end(JSON.stringify({ ok: true, result }));
       }
       if (url.pathname === '/api/gameplay') {
+        if (input.action === 'expedite-home' && !selectedProjects.includes(input.project)) throw Error('Choose a home in this town.');
+        if (input.action === 'reset') {
+          if (allowSynthetic) throw Error('Reset is unavailable in the demo.');
+          const reset = resetTown(homeDir(), { confirmed: input.confirmed, passes: passes.snapshot(), voice: voice.snapshot(), computerUse: computerUse.snapshot() });
+          passes.change(data => { for (const schedule of data.schedules || []) if (schedule.status === 'active') {
+            schedule.status = 'paused'; schedule.message = 'Town reset by developer.'; schedule.version++;
+          } });
+          gameplay = reset.gameplay;
+          style = reset.style;
+          selectedProjects = [];
+          res.writeHead(200); res.end(JSON.stringify({ ok: true, backup: reset.backup }));
+          broadcast({ type: 'game-reset' });
+          return;
+        }
         if (input.action === 'claim' && !(await providerReady(input.provider))) throw new Error('Sign in to Codex or Claude Code, then try again.');
         const balance = progress({...productivity.snapshot(), households:Object.values(world.households), runs:passes.snapshot().runs}, style, gameplay).balance;
         gameplay = applyGameplayAction(gameplay, input, balance);
         saveGameplay();
+        if (input.action === 'expedite-home') {
+          constructionStates.set(input.project, 'built');
+          broadcast({ type: 'household', household: world.households[input.project] });
+        }
         res.writeHead(200); return res.end(JSON.stringify({ ok: true, gameplay }));
       }
       if (url.pathname === '/api/style') {

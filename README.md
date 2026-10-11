@@ -19,6 +19,28 @@
 
 # Agent World
 
+Local project imports start with one Personal Assistant owner, including projects
+with saved teams or multiple observed sessions. Saved identities and history are
+retained; `residentAgentIds` controls spawning, delegation and execution eligibility.
+
+Temporary development Reset opens a confirmation modal, backs up town metadata,
+clears Town Hall/home selection/customization and pauses future schedules. It keeps
+project files, saved identities and chat/work history; queued/running work or live
+voice/app connections prevent reset. Town Hall speed-up finishes the entire build
+for 1 gem per remaining minute (rounded up), with the total shown on the button.
+
+**Town Hall first, then your home (October 10):** Finish Town Hall construction with
+Mayor Martin before building a local project home. Martin then helps you choose an
+existing project or create a new one, and meet its Personal Assistant owner. New
+homes start with one resident; existing households keep their residents and history.
+New imported/created homes use the project registration flow, then five minutes of
+construction. Home registration remains free; Speed up build finishes the remaining
+time for 1 gem per minute, rounded up. One Personal Assistant moves in at completion.
+Existing completed homes remain ready; re-import does not restart saved timers.
+Recruitment and city services follow later.
+Stable agent/home IDs and the parallel engineering contracts are documented in
+[docs/FOUNDATION.md](docs/FOUNDATION.md). This supersedes automatic starter-team creation.
+
 **Home levels:** each home's building tier follows its combined resident XP, capped at level 5: Cottage → House → Villa → Manor → Estate. Existing resident XP applies immediately. Returned game responses can upgrade the building and its decor eligibility; reached outcomes continue awarding gems separately.
 
 **Agent and player XP:** completed game responses award 25 XP to the responding resident and to you. The top-bar level badge opens Levels & experience; resident chats show their own level, XP bar and points remaining. New responses show an XP notification, with level-up notices at increasing thresholds (100, then 150, then 200 XP). Existing saved responses count once; app restarts, archived chats and provider changes do not duplicate awards. Participation XP is independent from reviewed task rewards and home levels.

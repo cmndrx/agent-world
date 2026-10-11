@@ -1,3 +1,92 @@
+# Reusable content catalogs (October 10, 2026)
+
+- Added `shared/catalogs/professions.js`, `intrests.js` (requested spelling),
+  `buildings.js`, plus a correctly spelled `interests.js` alias, activities,
+  items, pets, short names and a common `index.js` with ID lookups. Explicit
+  editable arrays contain **105 professions, 92 building templates, 68 interests,
+  68 activities, 56 items, 4 pets and 124 distinct 4–6 letter names**.
+- Grounded in the **Plan agent world roadmap** chat and its local **AGENT WORLD.pdf**.
+  Includes all 99 document professions, 12 workplaces, 75 recreational venues and
+  60 activity options, with existing Junior Developer/Researcher IDs, civic roles,
+  home/infrastructure templates and pet/creative/social interests added. No PDF
+  dependency at runtime. Building categories match `shared/foundation.mjs`.
+- `buildingAffinity` is an array of building template IDs; building
+  `relatedProfessions` is its inverse. All item/pet/activity references resolve.
+  Existing decor/pet IDs are linked explicitly; future assets have null links.
+  `happinessValue: 5` is a uniform **draft** content value, not an installed rule.
+  Catalog templates are distinct from placed building/agent instances. No
+  recruitment, role dispatch, unlock thresholds, happiness effects or resident
+  metadata changes. Usage and contracts: `shared/catalogs/README.md`.
+- Verification: `node --test test/content-catalogs.test.mjs test/foundation.test.mjs`
+  **10/10 passed**. Catalog checks verify ID uniqueness, inverse profession/building
+  links, every reference target, supported decor/pet links and name lengths. Initial
+  check caught a Dessert Café ID normalization mismatch, corrected before final
+  checks. `git diff --check` passed. No UI changes or browser QA in this data-only pass.
+- Required `npm run app:build`: Vite passed (existing large-chunk warning); configured
+  macOS target failed because this host is Windows. `npx electron-builder --win --dir
+  --config.win.signAndEditExecutable=false` passed. **87/87** Electron main and
+  dist/bridge/shared/adapters file hashes match packaged assets. Generated package.json
+  retains matching name/version/main/type; builder removes development configuration.
+  Packaged catalog import returned counts 105/92/68/124. Executable signature verified
+  as **NotSigned**; no signed distribution is claimed. Another build replaced the
+  client assets during verification; repeated Windows packaging against the current
+  dist and confirmed the final 87/87 file match with zero mismatches.
+- Existing bridge PID 73652 on 4777 responds, has zero runs/proposals and its runner
+  disabled. It and the running window were left untouched. Catalogs have no current
+  UI consumers, so reopening adds no visible feature; safely reopen the rebuilt
+  package when a subsequent integrated feature needs it. Real player files, queues,
+  progression and other chats were not mutated. Preserved all prior uncommitted work
+  on `dev` at `9f01db7`; no commit, push or publication.
+- Next bounded pass: add a deterministic, pure candidate generator using these IDs,
+  separate permanent candidate identity from the reusable name pool, and define
+  personality/interest assignment contracts. Acceptance criteria: stable candidates
+  for a saved seed, unique candidate IDs, valid profession/interest references, and
+  no automatic recruitment or changes to existing residents. Capacity, levels and
+  happiness gates need agreed rules before live recruitment integration.
+
+# Timed home construction (October 10, 2026)
+
+- New local import/create starts five-minute construction after Town Hall completion. Home registration remains free (the existing 50-gem connection grant must support the first home after Town Hall); paid completion is one gem per remaining minute, rounded up. `gameplay.homes[project]` owns persisted start/ready/spending values. Duplicate import/re-import preserves the timer. Missing records keep previously completed homes ready; reset clears new records with town setup. Removed homes retain their timer and spending for safe re-import.
+- Snapshot, foundation and streamed household projections withhold residents while building, without deleting identities or observed sessions. New prompts, chat mutations, approvals, schedules and runner dispatch require a ready home. A clock-driven household event exposes the one PA owner on natural completion; paid finish emits the same update immediately. No construction crew is an AI agent or evidence of real work.
+- Added animated home construction sites using the existing Crew rig; finished house/furniture/pets remain hidden until completion. Projects and Mayor show countdown/progress/total speed-up cost. Mayor guides first construction and meeting the owner after completion. Fixed whole-dialog countdown rerender discovered during QA, which detached buttons and restarted animations every second; timers now update existing DOM nodes.
+- Focused construction/gameplay/reset/foundation/world/progression/merge/conversation/catalog/experience suite **50/50 passed**. Includes actual import through an isolated mocked project-list provider, duplicate timer preservation, stored completion/spending, foreign project refusal, work blocking and untouched project files. Updated the POSIX local-project fixture expectations for construction; its Windows executable limitations remain. Syntax and diff checks passed.
+- Playwright-controlled hidden Electron QA in isolated state: desktop 1360x900/mobile 390x844; countdown/cost controls fit, zero residents during construction, animated crew joint changes, reload preserves readyAt, paid Projects finish reveals one PA and hides construction. Zero renderer errors. Harness `%TEMP%\agent-world-home-construction-qa.cjs`; final complete evidence `%TEMP%\aw-home-ui-e6UQeb`. Final framing check passed using the app's public camera API with a zero-duration move because hidden Electron animation frames are throttled during camera flight. Visually inspected the centered construction site with all three crew members and intact progress/cost controls. Fixture processes closed.
+- Required `npm run app:build`: Vite passed; configured macOS packaging unsupported on Windows. Windows fallback passed; **76/76** dist/bridge/shared/adapters hashes match; executable **NotSigned**. No signed distribution, commit or push.
+- Live bridge was idle with zero proposals/runs, runner disabled and idle app connection. Safely replaced PID 36468 with updated backend PID 73652 on 4777. API/HTML respond, error log empty. Real selection stayed empty and no real build was started/expedited/reset or provider work submitted. Refresh the existing game window to load the final static UI; backend is already current.
+
+# Base development controls and build completion (October 10, 2026)
+
+- Live activation follow-up: user reported Reset returning `Unknown town action`. Confirmed stale backend PID 65672 while static UI was current. With zero proposals/runs and idle app connection, stopped that verified bridge and started updated source serving dist on 4777 as PID 36468, preserving runner-disabled configuration. Non-mutating reset request (`confirmed:false`) now returns `Confirm the game reset first.` instead of Unknown town action. Gameplay and selection snapshots match before/after. No actual player reset was performed; the open modal can be confirmed again. No application code/package changes in this activation pass.
+
+- Added temporary Reset control and native confirmation modal. Confirmed local-origin `/api/gameplay` reset backs up gameplay, selection, style, households, catalog and passes under `AGENT_WORLD_HOME/backups`; clears town setup/style, pauses active future schedules and broadcasts reload to connected clients. Projects, identities, photos and real work/chat history remain stored. This resets town setup, not historical participation XP or observed-work evidence. Approved/queued/running work, active voice and pending app connections block reset. Cancel/Escape leaves state unchanged. No actual reset was submitted to real player state during QA.
+- Town Hall Speed up build now completes immediately at 1 gem per remaining minute, rounding partial minutes up. Button displays total cost and updates with elapsed time. Backend calculates cost independently, rejects insufficient gems and repeated completion, and records exact `expediteSpent`. Legacy five-gem incremental spending is retained, not refunded or repriced.
+- Focused gameplay/reset/foundation/world/progression/merge tests: **36/36 passed**. Includes local-origin/confirmation guards, backup/history preservation, live in-memory reset, active-work refusal, minute boundaries, server-priced finish and legacy spending. Syntax and diff checks passed.
+- Built-renderer Playwright/Electron QA on isolated home/Codex state passed at 1360x900 and 390x844: total cost display, Cancel preserves town, modal bounds, immediate finish with correct elapsed-time price, confirmed reset/reload restores Mayor greeting with zero Sims/homes selected. Zero renderer errors. Screenshots `%TEMP%\aw-base-controls-Y1kRu3`; harness `%TEMP%\agent-world-base-controls-qa.cjs`. Initial harness assertion assumed the initial price remained constant during screenshots; corrected to account for elapsed time. All fixture processes closed.
+- Required `npm run app:build`: Vite passed; configured macOS packaging unavailable on Windows. Windows fallback passed. **76/76** dist/bridge/shared/adapters hashes match packaged assets; executable **NotSigned**. No commit/push or signed distribution. Live bridge inspected idle with runner disabled; automatic safe restart was rejected by tool policy before execution. Backend PID 65672 remains stale; a safe backend restart and game refresh are still required. Real player progress was not reset.
+
+# Imported homes: one active owner (October 10, 2026)
+
+- Corrected the prior foundation's legacy-team exception. Local import/create and selected-home startup initialize `residentAgentIds` to the Personal Assistant owner. Re-import preserves explicit membership for future recruitment. Raw characters, stable IDs, chats, run history and schedules are not deleted. Observation can retain identities/sessions without recruiting them.
+- Snapshot, foundation projection, streaming household updates and import/list responses expose active members. Team delegation, runner readiness, scheduled eligibility and new prompt/voice/attachment/computer-use authorization exclude inactive identities. Renderer removes obsolete Sims on roster updates/reconnect.
+- Focused foundation/world/gameplay/experience/progression/merge/conversation/catalog suite: **46/46 passed**; targeted handoff membership test **1/1 passed**. Extended handoff suite had the two previously known Windows executable-fixture failures; corrected the third, obsolete legacy-team assertion. Updated the local-project API fixture's Town Hall prerequisite and one-owner expectation; its POSIX CLI fixture remains unsupported on Windows. Syntax and diff checks passed.
+- Playwright-controlled hidden Electron QA on isolated state: saved three-character home renders one owner at 1360x900 and 390x844; three simultaneous observed sessions do not recruit; reload stays at one; raw saved identities remain three. Zero renderer errors. Evidence: `%TEMP%\aw-single-owner-sMqU4Y`, harness `%TEMP%\agent-world-single-owner-qa.cjs`. Fixture processes closed; no real provider work.
+- `npm run app:build`: Vite passed, configured macOS package unsupported on Windows. Windows fallback package passed; **75/75** dist/bridge/shared/adapters hashes match. Executable is **NotSigned**. No signed distribution claimed.
+- Live bridge 4777 was inspected idle, runner disabled. Attempted safe restart was rejected by tool policy before execution, so the running backend is still stale and no live membership migration is claimed. Reopen/restart safely after checking active work, then reload the game to adopt the new renderer/backend. No real queues, chats, rewards or project files were changed in this fix. No commit or push.
+
+# Stable foundation: Town Hall, homes and agent identity (October 10, 2026)
+
+- Checkout `C:\Users\pawns\Documents\projects\agent-world`, branch `dev`, HEAD `9f01db7`. Clean at entry; this pass is uncommitted. User authorized implementing the shared foundation and retained Town Hall as the first tutorial build. No commit, push, publishing, real provider prompt, queue/schedule edit, reward claim or human acceptance.
+- Added `shared/foundation.mjs`: persistent household/agent IDs, explicit home owner, profession/workplace/interest references, nullable unconfigured personality/happiness, compatibility lookup and a read-only foundation projection. `households.json` remains authoritative for this version; no competing mutable registry. Existing IDs, names, slots, seeds, roles and custom metadata survive idempotent migration. New approved/claimed/voice runs pin server-resolved `agentId`; legacy run history is not rewritten. XP exposes stable-agent totals alongside legacy project/slot totals without duplicating awards. Transfers and historical slot reassignment remain unimplemented; see `docs/FOUNDATION.md` before adding them.
+- Replaced automatic starter-team creation with one Personal Assistant for each new local home. Existing selected households retain all residents; only an unassigned owner gains the assistant role. Legacy teams keep existing delegation. Singleton team prompts explicitly allow only listed teammates and cannot invent a developer/researcher. Real external observations still retain their existing slot allocation; the recruitment pass must distinguish observed identities from hired members without hiding truth.
+- Town Hall costs/timing/rewards are unchanged and precede home building. Local home import/create rejects before calling project registry/folder creation if Town Hall is unfinished. Listing projects and saved web-chat metadata retain their existing behavior. Mayor then guides building a home and opening its owner's chat; returned response means response available, never accepted work. Home UI copy reflects building homes. Home registration has no new price/timer in this pass. Windows project folders are included in the home list. Fixed the late Mayor CSS width override that squeezed mobile dialogue into a narrow column.
+- Shared building types/zones and future field ownership are documented in `docs/FOUNDATION.md`. Updated CONCEPT, README, GAMEPLAY and the repository Agent World skill to supersede the old automatic three-person starter rule. Engineer A owns agent/recruitment/execution; Engineer B owns city/building/happiness/Mayor. App entry points and shared contracts require one integration owner per milestone.
+- Focused tests: `node --test test/foundation.test.mjs test/world.test.mjs test/gameplay.test.mjs test/experience.test.mjs test/progression.test.mjs test/merge-integration.test.mjs test/pass-conversations.test.mjs test/catalog-api.test.mjs`: **45/45 passed**. New tests cover idempotent migration, preserved legacy teams, stable-ID XP, pinned recipient identity, Town Hall tutorial order and server-side creation gating before provider/filesystem effects. Changed JS syntax and diff checks passed.
+- Full Windows/Node 24 suite: `npm test` still fails directory discovery. Explicit enumeration: **222 tests, 189 passed, 33 failed**. Untouched HEAD archive: **217 tests, 184 passed, 33 failed**. Failure names match after checkout-path normalization and the intentional renamed local-home test; no additional failures. POSIX executable fixtures, symlink/path/permissions and CRLF-sensitive composer tests remain. Logs: `%TEMP%\agent-world-foundation-full.log` and `%TEMP%\agent-world-foundation-baseline.log`.
+- Actual built renderer QA used Playwright-controlled hidden Electron windows, separate temporary `AGENT_WORLD_HOME` and `CODEX_HOME`, runner disabled and nonexistent CLI commands. Verified unlinked greeting, automatic construction-finished transition to home guidance, build-home form, single owner and opening its exact chat, and legacy three-person household/25 XP preservation. Desktop 1360x900 and mobile 390x844 checked; zero renderer errors. After CSS repair, reran desktop home/mobile home/mobile owner with bounds assertions and visually inspected screenshots; image-pixel variance confirms nonblank scene areas. Initial evidence `%TEMP%\aw-foundation-ui-x8ioeX`; final screenshots `%TEMP%\aw-foundation-ui-kPodwe`. Harness `%TEMP%\agent-world-foundation-ui.cjs` and bootstrap `%TEMP%\agent-world-foundation-electron.cjs`. All fixture windows/bridges closed. No live CLI work, real recruitment, fake canonical activity or account/auth changes.
+- Required `npm run app:build`: final Vite build passed; configured macOS packaging is unsupported on Windows. Local `npx electron-builder --win --dir '--config.win.signAndEditExecutable=false'` passed. All **75** packaged dist/bridge/shared/adapters files match source/build by SHA-256. Windows executable is **NotSigned**; macOS signature verification requires macOS. Package `release/win-unpacked/Agent World.exe` is refreshed; no signed release is claimed.
+- Real bridge on 4777 stayed running and player metadata was not migrated by this pass. Source/package changes require a safe backend restart/reopen; recheck approved/queued/running work before doing so. Reload alone adopts new static UI but does not upgrade the loaded backend. Do not report the running real window as fully updated.
+- Next paired milestone: agree household capacity and workplace eligibility contract; A builds the candidate catalogs/recruitment eligibility, B implements those capacity/workplace inputs. Then add human-authorized Suggest Roommates inspection. Full happiness rules, zoning effects, infrastructure services, expanded professions, agent transfers and additional Mayor progression are still future work.
+
 # GitHub PR #2 conflict resolution (October 10, 2026)
 
 - User requested resolution of GitHub conflicts between `ai-features` and `gameplay-improvement`. PR #2 targets `gameplay-improvement`; prepared the resolution in an isolated checkout at `C:\Users\pawns\.codex\worktrees\resolve-ai-gameplay\agent-world`, branch `codex/resolve-ai-gameplay`, merging gameplay `733b966` into AI `215abf8`. Original gameplay checkout was clean and remains untouched. Delivery target is `ai-features`; the PR stays open for human review/merge.

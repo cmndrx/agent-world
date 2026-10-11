@@ -1,4 +1,4 @@
-import {STARTER_ROLES} from '../shared/team.mjs';
+import { initializeHousehold, residentHousehold } from '../shared/foundation.mjs';
 import { Catalog } from './catalog.mjs';
 import { normalizeConversation } from '../shared/conversations.mjs';
 // The truth model. Folds canonical events into households (persistent characters per project)
@@ -34,6 +34,7 @@ export class World extends EventEmitter {
     super();
     this.catalog = new Catalog(catalog);
     this.households = households;
+    Object.values(this.households).forEach(initializeHousehold);
     this.sessions = new Map();
     this.staleAfterMs = staleAfterMs;
     this.residentOwner = residentOwner;
@@ -47,18 +48,28 @@ export class World extends EventEmitter {
   household(project) {
     let h = this.households[project];
     if (!h) {
-      h = this.households[project] = { project, name: path.basename(project) || project, characters: [] };
+      h = this.households[project] = initializeHousehold({ project, name: path.basename(project) || project, characters: [] });
       this.emit('change', { type: 'household', household: h });
     }
     return h;
   }
 
-  ensureStarterTeam(project) {
-    const first=Object.values(this.households).find(h=>h.starterTeam);
-    if(first&&first.project!==project)return this.household(project);
-    const h=this.household(project);h.starterTeam=true;
-    STARTER_ROLES.forEach((role,i)=>{this.assignSlot(project,Date.now(),i+1);h.characters.find(c=>c.slot===i+1).assignedRole=role.id;});
-    this.emit('change',{type:'household',household:h});return h;
+  ensureHomeOwner(project) {
+    const h = this.household(project);
+    if (!h.characters.length) {
+      this.assignSlot(project, Date.now(), 1);
+      h.characters[0].assignedRole = 'personal_assistant';
+      h.characters[0].professionId = 'personal_assistant';
+    }
+    initializeHousehold(h);
+    const owner = h.characters.find(c => c.id === h.ownerAgentId);
+    if (!Array.isArray(h.residentAgentIds)) h.residentAgentIds = [owner.id];
+    if (!owner.assignedRole || owner.assignedRole === 'assistant') {
+      owner.assignedRole = 'personal_assistant';
+      owner.professionId = 'personal_assistant';
+    }
+    this.emit('change', { type: 'household', household: h });
+    return h;
   }
 
   /** Find the lowest slot not occupied by a live primary session, creating the character if new. */
@@ -74,6 +85,7 @@ export class World extends EventEmitter {
       const seed = hash(`${project}#${slot}`);
       h.characters.push({ slot, name: this.uniqueName(seed), seed });
       h.characters.sort((a, b) => a.slot - b.slot);
+      initializeHousehold(h);
       this.emit('change', { type: 'household', household: h });
     }
     return slot;
@@ -216,7 +228,7 @@ export class World extends EventEmitter {
   snapshot(now = Date.now()) {
     return {
       ...this.catalog.snapshot(),
-      households: Object.values(this.households),
+      households: Object.values(this.households).map(residentHousehold),
       sessions: [...this.sessions.values()].filter((s) => this.isLive(s, now)).map((s) => this.publicSession(s)),
     };
   }

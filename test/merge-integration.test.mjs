@@ -114,7 +114,7 @@ test('merged roster preserves project view, onboarding and stale observed state'
   assert.match(ui.rosterBody.innerHTML, /Mayor Martin/);
   ui.setGameLinked(true);
   ui.renderRoster([], [], null);
-  assert.match(ui.rosterBody.innerHTML, /Add a project/);
+  assert.match(ui.rosterBody.innerHTML, /Build a home/);
   const sim = { key: 'chosen#1', name: 'Otto', state: 'idle', truth: {} };
   const staleValues = [];
   ui.rosterRow = (s, stale) => { staleValues.push(stale); return s.name; };

@@ -25,6 +25,7 @@ import { BRICKS, homeLevel, levelName, progress } from '../../shared/progression
 import { Celebrations } from './celebrate.js';
 import { ProgressPanel } from './progress.js';
 import { MayorOnboarding } from './onboarding.js';
+import { mountDevReset } from './dev-reset.js';
 import { Levels, xpMarkup } from './levels.js';
 import { MayorCharacter } from './mayor-character.js';
 import { emptyGameplay, townHallState, visibleResidents } from '../../shared/gameplay.mjs';
@@ -152,6 +153,14 @@ function ensureLot(household) {
 
 function applyHousehold(h) {
   if(selectedProjects!==null&&!selectedProjects.has(h.project))return;
+  const residents = new Set(h.characters.map(c => charKey(h.project, c.slot)));
+  for (const [key, sim] of sims) {
+    if (sim.lot.project !== h.project || (sim.isVisitor ? residents.has(sim.parent?.key) : residents.has(key))) continue;
+    if (selected === sim) { select(null); ui.close(); }
+    sim.dispose();
+    sims.delete(key);
+    for (const [id, mapped] of sessionToSim) if (mapped === key) sessionToSim.delete(id);
+  }
   if(emptyLot){scene.remove(emptyLot);emptyLot.traverse(o=>{if(o.isCSS2DObject)o.element.remove();o.geometry?.dispose();o.material?.dispose();});emptyLot=null;}
   households.set(h.project, h);
   ui.projectsPanel.setHomes([...households.values()]);
@@ -167,6 +176,7 @@ function applyHousehold(h) {
   work.setData({ households: [...households.values()] });
   lot.setConversationCount(library.data.conversations.filter(c => c.project === h.project).length);
   lot.ensureDesks(h.characters.length);
+  lot.setConstruction(h.construction);
   for (const c of h.characters) {
     const key = charKey(h.project, c.slot);
     let sim = sims.get(key);
@@ -233,7 +243,7 @@ function applySnapshot({ selectedProjects: chosen=null, households: hs, sessions
   if(!hs.length&&!emptyLot){
     emptyLot=new THREE.Group();
     const plot=new THREE.Mesh(new THREE.BoxGeometry(22,.15,20),new THREE.MeshStandardMaterial({color:0x96b782,roughness:1}));plot.receiveShadow=true;emptyLot.add(plot);
-    const button=document.createElement('button');button.className='first-project-lot';button.textContent='＋ Add your first project';button.addEventListener('click',()=>{document.querySelector('[data-roster-view="projects"]').click();ui.projectsPanel.importing=false;ui.projectsPanel.render();});
+    const button=document.createElement('button');button.className='first-project-lot';button.textContent='Build your first home';button.addEventListener('click',()=>{if(townHallState(gameplay).status!=='built'){mayor.open();return;}document.querySelector('[data-roster-view="projects"]').click();ui.projectsPanel.importing=false;ui.projectsPanel.render();});
     const label=new CSS2DObject(button);label.position.set(0,1.5,0);emptyLot.add(label);scene.add(emptyLot);
   }
   passCard.setData({passes,runner,tasks,sessions:visibleSessions,conversations});
@@ -286,6 +296,11 @@ function connect() {
   es.onerror = () => setBridgeConnection(false, 'offline');
   es.onmessage = (msg) => {
     const m = JSON.parse(msg.data);
+    if (m.type === 'game-reset') {
+      localStorage.removeItem('agent-world:mayor-martin-seen');
+      location.reload();
+      return;
+    }
     if (m.type === 'snapshot') {
       providerConnections = m.connections || null;
       ui.setDemo(!!m.demo);
@@ -336,7 +351,7 @@ function connect() {
       }
       if(removed.length){if(!households.size)camFocus.set(0,.12,0);ui.projectsPanel.setHomes([...households.values()]);applyLayout();explore?.sync();fetch('/api/state').then(r=>r.json()).then(applySnapshot).catch(()=>setBridgeConnection(false,'offline'));}
     }
-    else if (m.type === 'household' && gameplay.connection) applyHousehold(m.household);
+    else if (m.type === 'household' && gameplay.connection) { applyHousehold(m.household); levels.setData(passCard.data.runs || []); }
     else if (m.type === 'session' && gameplay.connection) applySession(m.session);
     else if (m.type === 'session_end' && gameplay.connection) endSession(m.session);
   };
@@ -398,11 +413,13 @@ function refreshProgress() {
     }
   }
   const hallStatus = townHallState(gameplay).status;
+  ui.projectsPanel.setTownHallReady(hallStatus === 'built');
+  ui.projectsPanel.setGameState(gameplay, prog.balance);
   commons.set(prog.commons, prog.counts.outcomes, hallStatus, gameplay.townhall?.readyAt);
   if (gameplayLoaded) mayorCharacter.setTownHallStatus(hallStatus);
   mayorCharacter.setConnection(gameplay.connection?.provider);
   progressPanel?.setData({ progress: prog, gameplay, households: gameplay.connection ? [...households.values()] : [], found: style.found || {}, harvest: style.harvest || {}, gardens: style.gardens || {}, photos: photos.length, remaining: explore?.remaining ?? 0 });
-  mayor?.setData(gameplay, prog.balance);
+  mayor?.setData(gameplay, prog.balance, [...households.values()], passCard.data?.runs || []);
   if (build?.active) build.render();
 }
 
@@ -757,6 +774,7 @@ renderer.domElement.addEventListener('dblclick', (e) => {
   }
 });
 labels.domElement.addEventListener('click', (e) => {
+  if (e.target.closest('[data-home-detail]')) { document.querySelector('[data-roster-view="projects"]').click(); return; }
   if (e.target.closest('[data-mayor-world], [data-townhall-detail]')) { mayor.open(); return; }
   const b = e.target.closest('.bubble');
   if(b){const sim=sims.get(b.dataset.simKey);select(sim);if(e.target.closest('[data-prompt-sim]'))openAgentChat(sim);}
@@ -1095,10 +1113,17 @@ function openWardrobe(sim) {
 }
 
 const experience = new Experience({ work, onConversations: () => library.open(), onMayor: () => mayor.open(), leavePlay: () => { if (build.active) build.exit(); if (mapMode.active) mapMode.exit(); if (photo.active) photo.exit(); }, action: name => ui.h.onAction(name), pets: () => { if (!build.active) build.enter(selected?.lot); build.tab = 'pets'; build.render(); } });
+mountDevReset();
 mayor = new MayorOnboarding({
   character: mayorCharacter,
   onConnections: () => experience.open('sources'),
   onFocusTownHall: () => focusTownHall(),
+  onBuildHome: () => { document.querySelector('[data-roster-view="projects"]').click(); },
+  onMeetOwner: home => {
+    const owner = home?.characters.find(c => c.id === home.ownerAgentId) || home?.characters[0];
+    const sim = owner && sims.get(charKey(home.project, owner.slot));
+    if (sim) { focusSim(sim.key); passCard.open(sim); }
+  },
   onChange: next => { if (next) applyGameplay(next); else refreshProgress(); },
 });
 

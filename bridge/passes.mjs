@@ -7,7 +7,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 const text=(v,n)=>typeof v==='string'?v.trim().slice(0,n):'';
 export class PassStore {
-  constructor(file) {this.file=file;fs.mkdirSync(path.dirname(file),{recursive:true});}
+  constructor(file, { agentIdFor = () => null } = {}) {this.file=file;this.agentIdFor=agentIdFor;fs.mkdirSync(path.dirname(file),{recursive:true});}
   snapshot() {try{return JSON.parse(fs.readFileSync(this.file,'utf8'));}catch(e){if(e.code==='ENOENT')return {proposals:[],runs:[]};throw e;}}
   change(fn) {
     const lock=this.file+'.lock';let fd;
@@ -37,6 +37,7 @@ export class PassStore {
     const dependency=input.enqueue===true&&input.afterProposal?data.proposals.find(p=>p.id===input.afterProposal&&p.project===input.project&&p.slot===slot&&(p.provider||'codex')===provider):null;
     if(input.afterProposal&&!dependency)throw new Error('Choose an existing pending conversation.');
     const proposal={team:Array.isArray(input.team)?input.team:null,enqueue:input.enqueue===true,afterProposal:dependency?.id||null,execution,attachments,isolate:!!input.isolate,model:input.model||null,effort:input.effort||null,resumeSession:input.resumeSession||null,id:randomUUID(),project:input.project,slot,title:text(input.title,200),instruction:text(input.instruction,4000),provider,recordedBy:text(input.recordedBy,100)||'Unspecified',status:'proposed',version:(current?.version||0)+1,createdAt:new Date().toISOString()};
+    proposal.agentId = this.agentIdFor(proposal);
     data.proposals=data.proposals.filter(p=>p!==current||p.teamRoot||['approved','running'].includes(p.status));data.proposals.push(proposal);return proposal;
   });}
   decide(input,homes) {return this.change(data=>{
@@ -63,13 +64,14 @@ export class PassStore {
     const p=data.proposals.find(p=>p.status==='approved'&&!p.afterProposal&&!p.teamDependencies?.length&&canRun(p));if(!p)return null;
     const previous=p.resumeSession?data.runs.find(r=>r.project===p.project&&r.slot===p.slot&&(r.provider||'codex')===(p.provider||'codex')&&r.conversationSession===p.resumeSession&&r.workspace):null;
     const run={teamFromName:p.teamFromName||null,recordedBy:p.recordedBy||null,team:p.team||null,teamRoot:p.teamRoot||null,teamParent:p.teamParent||null,teamDepth:p.teamDepth||0,teamFinal:!!p.teamFinal,teamContext:p.teamContext||[],teamOriginal:p.teamRoot?data.runs.find(r=>r.id===p.teamRoot)?.instruction:null,scheduleId:p.scheduleId||null,scheduledAt:p.scheduledAt||null,execution:defaultExecution(p.provider||'codex'),attachments:p.attachments||[],isolate:!!p.isolate,workspace:previous?.workspace||null,model:p.model||null,effort:p.effort||null,resumeSession:p.resumeSession||null,id:randomUUID(),proposalId:p.id,project:p.project,executionProject:p.executionProject,slot:p.slot,title:p.title,instruction:p.instruction,provider:p.provider,status:'running',startedAt:new Date().toISOString(),approvalVersion:p.version};
+    run.agentId = p.agentId || this.agentIdFor(run);
     p.status='running';p.version++;data.runs.push(run);return run;
   });}
   voiceStart({project,slot,thread}){return this.change(data=>{
     if(!validThread(thread))throw new Error('Codex did not return a valid conversation.');
     const owner=threadOwner(data.runs,[],project,thread,'codex');if(owner!=null&&owner!==slot)throw new Error('Conversation does not belong to this agent.');
     if(data.runs.some(r=>['running','interrupted'].includes(r.status)))throw new Error('Finish or inspect active work before starting voice.');
-    const run={id:randomUUID(),project,slot,provider:'codex',conversationSession:thread,status:'running',voice:true,voiceMessages:[],title:'Voice conversation',startedAt:new Date().toISOString()};data.runs.push(run);return run;
+    const run={id:randomUUID(),project,slot,provider:'codex',conversationSession:thread,status:'running',voice:true,voiceMessages:[],title:'Voice conversation',startedAt:new Date().toISOString()};run.agentId=this.agentIdFor(run);data.runs.push(run);return run;
   });}
   voiceTranscript(id,item){if(!['user','assistant'].includes(item?.role)||typeof item.text!=='string'||!item.text.trim())return;item={...item,text:item.text.slice(0,16000)};return this.change(data=>{const run=data.runs.find(r=>r.id===id&&r.voice&&r.status==='running');if(!run)return;const key=item.id||randomUUID();if(run.voiceMessages.some(m=>m.id===key))return;run.voiceMessages.push({id:key,role:item.role,text:item.text});});}
   voiceFinish(id,state){return this.change(data=>{const run=data.runs.find(r=>r.id===id&&r.voice&&r.status==='running');if(run){run.status=state.status==='error'?'failed':'cancelled';run.finishedAt=new Date().toISOString();run.error=state.message;}});}

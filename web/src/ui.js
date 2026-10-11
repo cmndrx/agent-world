@@ -347,7 +347,10 @@ export class UI {
       </div>
       <div class="scroll">
         <h2 class="activity-view-title">Watch activity</h2>
-        <button data-prompt-agent>Prompt this agent</button><div data-slot="xp"></div><div data-slot="role"></div>
+        <button data-prompt-agent>Talk to ${sim.character
+            ?  `${escapeHtml(sim.name)}`
+            : 'Agent'
+          }</button><div data-slot="xp"></div><div data-slot="role"></div>
         <button type="button" data-slot="hero" data-prompt-agent></button>
         <figure class="screen-wrap">
           <button type="button" class="screen-chat" data-prompt-agent aria-label="Open chat from activity screen"><canvas class="screen-preview" width="512" height="320"></canvas></button>
@@ -485,7 +488,7 @@ export class UI {
     $('#roster-count').textContent = sims.length ? `${sims.length} agent${sims.length === 1 ? '' : 's'} · ${live} ${stale ? 'last known sessions' : 'attached'}` : '';
     if (!sims.length) {
       const html = this.gameLinked
-        ? `<div class="empty">Add your first project to give your agents a home.<br><br><button type="button" onclick="document.querySelector('[data-roster-view=projects]').click()">Add a project</button></div>`
+        ? `<div class="empty">Mayor Martin will help you build the Town Hall, then your first home.<br><br><button type="button" onclick="document.querySelector('[data-roster-view=projects]').click()">Build a home</button></div>`
         : `<div class="empty">Your town is waiting for its first agents.<br>Talk to Mayor Martin to link Codex or Claude Code.</div>`;
       if (this.html.roster !== html) this.rosterBody.innerHTML = this.html.roster = html;
       return;

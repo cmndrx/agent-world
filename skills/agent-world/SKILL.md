@@ -96,7 +96,15 @@ Agents must not create, resume or edit real schedules without scoped human autho
 
 ## Starter team and scoped handoffs
 
-The first added project receives three persistent residents: Assistant (slot 1), Junior developer (slot 2), Researcher (slot 3). Existing first-home names and chat ownership are preserved. Assigned responsibilities are planning metadata, distinct from observed activity and activity-derived downtown specialties; no sessions/events are invented. Further imported homes keep their existing onboarding.
+New home import/create now starts five minutes of construction. Progress and total
+finish-now price are in Projects and Mayor guidance. One Personal Assistant spawns
+only on completion; scheduling, prompts and runner dispatch wait for a ready home.
+Home registration stays free; finishing costs one gem per remaining minute, rounded
+up. `gameplay.homes` persists timers/spending independently of observation. Missing
+records mean existing completed homes. Re-import must not reset a saved timer.
+QA must isolate gameplay and must not spend gems or finish real player builds.
+
+Town Hall is built first. Mayor Martin then guides building a local project home and meeting its Personal Assistant owner. Every new or imported local home starts with one Personal Assistant owner, not an automatic team. residentAgentIds separates active household members from saved observed identities. Names, slots, chats, schedules and XP remain stored; inactive identities do not spawn, receive new household work or participate in delegation. Observed sessions never recruit members. Assigned responsibilities are planning metadata, distinct from observed activity and activity-derived downtown specialties; no sessions/events are invented. Stable agent/home IDs supplement legacy bindings; see `docs/FOUNDATION.md` before extending recruitment, happiness or workplace assignment. Delegate only to roles present in the supplied roster; a solo owner has no teammates to invent. Recruitment and city-health simulation are not implemented by this foundation pass.
 
 Sending a prompt to this team authorizes scoped delegation of that request within the project. The selected provider/model/effort are retained throughout the request. The runner gives each resident its responsibility and the roster. Agents choose relevant handoffs in a structured response: role, task title, scoped instruction and earlier prerequisite IDs. For example the Assistant can delegate website implementation to the Junior developer, optionally following a Researcher report. There is no keyword router or direct provider-to-provider messaging.
 
