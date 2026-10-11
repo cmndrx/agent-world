@@ -17,8 +17,12 @@ persist in gameplay metadata; observation never starts or finishes construction.
 
 Persistent home and agent IDs now supplement legacy project/slot bindings. The four
 building categories are residential, recreational, infrastructure and work. Interest,
-personality, happiness and workplace fields are unconfigured until later systems
-provide their rules. The shared contracts and engineer ownership boundaries are in
+personality and workplace fields remain unconfigured. The first player-led care
+test adds persistent interests and happiness: Encouragement, Snacks and Reading,
+with human Praise, Give snack and Read a book controls. Existing ambient leisure
+does not earn happiness; decay and expanded activities follow later. See
+`docs/INTERESTS_HAPPINESS_PROPOSAL.md` for the design and implemented test scope.
+The shared contracts and engineer ownership boundaries are in
 `docs/FOUNDATION.md`. This supersedes the automatic three-resident starter-team rule;
 recruitment, movement and city services are subsequent implementation passes.
 
@@ -476,3 +480,5 @@ Town ambience: the user-supplied Meadows MP3 plays as a quiet (15%) continuous l
 Home overview includes **Home level · Testing**: choose levels 1–15 and Apply, or Use earned XP to remove the home-only adjustment. This changes building tier and recruitment capacity without modifying agent/player XP, recorded work, or existing residents. Future earned XP remains additive. Finish home construction and active work first.
 
 **Current home progression (October 11, 2026):** 15 levels and resident slots, eight buildings at levels 1, 4, 6, 8, 10, 12, 14 and 15. Max remains 16,000 pooled XP; early slots unlock at 100 and 350 XP. No residents are added automatically. The testing selector supports all 15 levels. When the authored interior lacks enough seats, an open coworking floor provides 15 distinct work screens; shell designs remain unchanged. This supersedes older eight-level/capacity descriptions.
+
+**Named handoffs:** In a resident chat, type @ to suggest active teammates in the same home. Click a suggestion, or use Up/Down and Enter/Tab; Escape dismisses it. For example: "Draft the plan, then have @Tyler design the mockup, then @Olive implement it." The coordinator returns structured handoffs with dependencies. Mentions identify recipients; they do not launch work on their own. Explicit instructions to handle everything yourself take precedence. Unknown/ambiguous recipients are rejected, and role-only routing requires one matching resident. No unrelated chats are resumed.

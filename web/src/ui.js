@@ -1,3 +1,5 @@
+import { assignedRole } from '../../shared/team.mjs';
+import { careDialogFor, careSummary } from './care.js';
 import { connectionView } from '../../shared/connections.mjs';
 import {ProjectsPanel} from './projects.js';
 import {canPromptFromStatus} from '../../shared/agent-view.mjs';
@@ -150,6 +152,7 @@ export class UI {
       if(e.target.closest('[data-prompt-agent]')&&this.sim)this.h.onPrompt?.(this.sim);
       if (e.target.closest('[data-close]')) this.close();
       if (e.target.closest('[data-outfit]') && this.sim) this.h.onOutfit?.(this.sim);
+      if (e.target.closest('[data-open-care]') && this.sim) this.careDialog?.open(this.connectionState === 'live', () => this.panel.querySelector('[data-open-care]'));
     });
     this.panel.addEventListener('change', (e) => {
       if (e.target.name === 'name' && this.sim?.character) this.h.onRename(this.sim, e.target.value);
@@ -338,19 +341,18 @@ export class UI {
           ${sim.character
             ? `<input name="name" value="${escapeHtml(sim.name)}" maxlength="40" aria-label="Name (click to rename)" title="Click to rename" />`
             : `<h2>${escapeHtml(sim.name)}</h2>`}
-          <div class="where" data-slot="where"></div>
-          <div class="where"><span style="width:9px;height:9px;border-radius:3px;flex:none;background:${lotColor}"></span>
-            ${icon('house')} ${escapeHtml(sim.lot.name)}${sim.character ? ` · desk ${sim.character.slot}` : ''}</div>
         </div>
         ${sim.character ? `<button class="icon-btn" data-outfit aria-label="Change outfit" title="Change outfit (just for fun)">${icon('shirt')}</button>` : ''}
         <button class="icon-btn close" data-close aria-label="Close">${icon('x')}</button>
+        <div class="assigned-profession" data-slot="profession"></div>
+      </div>
+      <div class="resident-header-strip">
+        <button type="button" data-prompt-agent>Talk to ${sim.character ? escapeHtml(sim.name) : 'Agent'}</button>
+        <div class="resident-metadata"><div><span style="color:${lotColor}">${icon('house')}</span> ${escapeHtml(sim.lot.name)}${sim.character ? ` · desk ${sim.character.slot}` : ''}</div><div data-slot="where"></div></div>
       </div>
       <div class="scroll">
+        <section class="resident-stats"><div data-slot="xp"></div><div data-slot="care-summary"></div>${sim.character ? '<button type="button" data-open-care>Care</button>' : ''}</section>
         <h2 class="activity-view-title">Watch activity</h2>
-        <button data-prompt-agent>Talk to ${sim.character
-            ?  `${escapeHtml(sim.name)}`
-            : 'Agent'
-          }</button><div data-slot="xp"></div><div data-slot="role"></div>
         <button type="button" data-slot="hero" data-prompt-agent></button>
         <figure class="screen-wrap">
           <button type="button" class="screen-chat" data-prompt-agent aria-label="Open chat from activity screen"><canvas class="screen-preview" width="512" height="320"></canvas></button>
@@ -365,6 +367,7 @@ export class UI {
     // A live 3D bust of this agent (same model as in the world), idling while the panel is open.
     this.panel.querySelector('.avatar-3d-wrap').prepend(new AvatarPortrait({ look: () => sim.look, role: () => sim.roleInfo, mode: 'bust' }).canvas);
     this.html.panel = {};
+    this.careDialog = sim.character ? careDialogFor(sim) : null;
     this.renderPanel();
   }
 
@@ -385,13 +388,15 @@ export class UI {
   renderPanel() {
     const sim = this.sim;
     if (!sim) return;
+    this.careDialog?.update(this.connectionState === 'live');
     const s = sim.truth;
     const state = sim.state;
     const role = sim.roleInfo;
     // Role: one line; the reason is a tooltip (it describes observed activity, not skill).
     const xp = this.h.xpFor?.(sim);
     this.slot('xp', xp ? `<div class="agent-xp">${xpMarkup(xp)}</div>` : '');
-    this.slot('role', role?.title ? `<div class="role-card" style="--role:#${role.color.toString(16).padStart(6, '0')}" title="${escapeHtml(role.why)}"><b>${icon(role.intern ? 'hardHat' : 'store')} ${escapeHtml(role.title)}</b>${role.workplace ? `<small>${escapeHtml(role.workplace)}</small>` : ''}</div>` : '');
+    this.slot('profession', escapeHtml(assignedRole(sim.character?.assignedRole)?.title || ''));
+    this.slot('care-summary', sim.character ? careSummary(sim.character) : '');
     const cls = plumbobFor(state);
 
     const input = this.panel.querySelector('input[name=name]');
@@ -401,7 +406,7 @@ export class UI {
 
     const dot = s ? `<span style="width:9px;height:9px;border-radius:50%;flex:none;background:${hex(PROVIDER_COLORS[s.provider] ?? 0x98a1b2)}"></span>` : '';
     this.slot('where', `${dot}<span>${escapeHtml(whoLine(sim))}</span>`);
-    this.slot('truth-src', s ? `straight from ${escapeHtml(appName(s))}` : '');
+    this.slot('truth-src', s?.activityEvidence === 'game-runner' ? 'Confirmed by the game runner' : s ? `straight from ${escapeHtml(appName(s))}` : '');
 
     let sub;
     if (!s) {
@@ -448,7 +453,7 @@ export class UI {
       .join(''));
 
     const flavor = sim.activity?.flavor ? sim.activity.label : null;
-    this.slot('sim', s && this.connectionState !== 'live' ? 'Last received observation · screen paused. Current activity unavailable.' : flavor ? `${icon('sparkles')} <b>${escapeHtml(flavor)}</b> is made up — the agent is idle.` : `${icon('check')} Everything shown is the real agent.`);
+    this.slot('sim', s && this.connectionState !== 'live' ? 'Last received observation · screen paused. Current activity unavailable.' : sim.activity?.careId ? 'Reading is a player-directed simulated activity, separate from real agent work.' : flavor ? `${icon('sparkles')} <b>${escapeHtml(flavor)}</b> is made up — the agent is idle.` : `${icon('check')} Activity details reflect the real agent. Character happiness is simulated.`);
   }
 
   /** Mirror the inspected Sim's screen into the drawer every frame. */

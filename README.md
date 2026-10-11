@@ -19,6 +19,23 @@
 
 # Agent World
 
+**Player-led care test (October 11):** Click a resident and scroll to Character.
+Residents receive two persistent interests drawn from Encouragement, Snacks and
+Reading; Choose interests allows one to three. Happiness starts at 50/100. Praise
+and Give snack add 3 happiness, plus 5 when the interest matches. Read a book adds
+5 after a ten-second simulated activity, requires Reading, and is interrupted by
+real agent work. Each fulfilled action has a thirty-second cooldown. Free snacks
+are an immediate simulated interaction without a consumption animation or inventory.
+The history explains changes. No decay, autonomous gains, provider prompts, XP
+changes or spending are included. The updated bridge and refreshed client must
+both be loaded; rebuilding alone does not update running processes.
+
+For a disposable town with provider execution disabled, after building run
+`node scripts/care-fixture.mjs` and open http://127.0.0.1:4793. Its gameplay and
+provider home are isolated under the system temporary directory; no real events
+are invented. Stop the fixture server when finished. See
+[the proposal](docs/INTERESTS_HAPPINESS_PROPOSAL.md) for later scope.
+
 Local project imports start with one Personal Assistant owner, including projects
 with saved teams or multiple observed sessions. Saved identities and history are
 retained; `residentAgentIds` controls spawning, delegation and execution eligibility.
@@ -396,3 +413,5 @@ Residents, their seats and monitors, conversations, paint, floor, decor and pets
 Home overview includes **Home level · Testing**: choose levels 1–15 and Apply, or Use earned XP to remove the home-only adjustment. This changes building tier and recruitment capacity without modifying agent/player XP, recorded work, or existing residents. Future earned XP remains additive. Finish home construction and active work first.
 
 **Current home progression (October 11, 2026):** 15 levels and resident slots, eight buildings at levels 1, 4, 6, 8, 10, 12, 14 and 15. Max remains 16,000 pooled XP; early slots unlock at 100 and 350 XP. No residents are added automatically. The testing selector supports all 15 levels. When the authored interior lacks enough seats, an open coworking floor provides 15 distinct work screens; shell designs remain unchanged. This supersedes older eight-level/capacity descriptions.
+
+**Named handoffs:** In a resident chat, type @ to suggest active teammates in the same home. Click a suggestion, or use Up/Down and Enter/Tab; Escape dismisses it. For example: "Draft the plan, then have @Tyler design the mockup, then @Olive implement it." The coordinator returns structured handoffs with dependencies. Mentions identify recipients; they do not launch work on their own. Explicit instructions to handle everything yourself take precedence. Unknown/ambiguous recipients are rejected, and role-only routing requires one matching resident. No unrelated chats are resumed.

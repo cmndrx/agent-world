@@ -35,9 +35,15 @@ remains in `households.json`; no second mutable agent registry is introduced.
 - `character.professionId`: catalog reference; the owner profession is `personal_assistant`.
   Legacy `assignedRole: assistant` remains valid for delegation. Roles are assigned
   planning metadata, never observed skill or professional qualification.
-- `workplaceId`: nullable building reference. `interestIds`: catalog references, initially
-  empty. `personality` and `happiness`: null until their respective systems are implemented.
-  Null means unconfigured, not unhappy, contented or unable to work.
+- `workplaceId`: nullable building reference. `interestIds`: catalog references.
+  Foundation initialization still uses empty interests and null happiness. The
+  selected town's active residents are configured by `shared/care.mjs` during bridge
+  persistence/household publication: two supported interests and happiness 50/100,
+  preserving saved preferences and valid numeric happiness. Inactive saved identities
+  are not configured until recruited. `character.care` owns versioned simulation
+  history, revision, repeat receipts, cooldowns and pending reading in households.json.
+  `personality` remains null. Null happiness means unconfigured, not unhappy or unable
+  to work. POST `/api/care` is a validated player game action, independent of runs/XP.
 
 Migration fills missing fields and is idempotent. Names, seeds, slots, professions,
 custom fields, old starter teams, chats and schedules are retained. New homes do not

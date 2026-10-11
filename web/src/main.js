@@ -5,6 +5,7 @@ import { PassCard } from './pass-card.js';
 import { Experience } from './experience.js';
 import '@fontsource-variable/nunito';
 import * as THREE from 'three';
+import { runnerActivity } from '../../shared/runner-activity.mjs';
 import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { CameraRig } from './camera.js';
 import { Player } from './player.js';
@@ -191,11 +192,13 @@ function applyHousehold(h) {
       sim.setLook(style.residents?.[key]);
       if (movingIn) welcomeResident(sim, h);
     } else {
+      sim.receiveCare(c, replaying || firstSnapshot);
       sim.character = c;
     }
   }
   knownResidents.add(h.project);
   applyRoles();
+  if (!replaying) passCard.setData({households:[...households.values()]});
 }
 
 /** Housewarming: confetti at the gate, a welcome toast, and confetti again when they reach their spot. */
@@ -208,7 +211,26 @@ function welcomeResident(sim, h) {
   sim.onArrive = (s) => celebrations.confetti(s.worldPosition().setY(2.2), 45);
 }
 
+const observedSessions = new Map();
+let activityRuns = [];
+function syncRunnerActivity() {
+  if (!gameplay.connection) return;
+  const fallbacks = runnerActivity(activityRuns, [...observedSessions.values()]);
+  const live = new Set(fallbacks.map(s => s.session));
+  for (const id of [...sessionToSim.keys()]) {
+    if (id.startsWith('runner:') && !live.has(id)) {
+      renderSessionEnd(id);
+      for (const s of observedSessions.values()) renderSession(s);
+    }
+  }
+  for (const s of fallbacks) renderSession(s);
+}
 function applySession(s) {
+  observedSessions.set(s.session, s);
+  renderSession(s);
+  syncRunnerActivity();
+}
+function renderSession(s) {
   if(selectedProjects!==null&&!selectedProjects.has(s.project))return;
   const lot = lots.get(s.project) || ensureLot(households.get(s.project) || { project: s.project, name: s.project.split('/').pop(), characters: [] });
   let key;
@@ -231,7 +253,7 @@ function applySession(s) {
   }
   sessionToSim.set(s.session, key);
   const sim = sims.get(key);
-  if (sim.truth?.session !== s.session && sim.truth?.lastEventAt > s.lastEventAt) return;
+  if (sim.truth?.session !== s.session && sim.truth?.lastEventAt > s.lastEventAt && sim.truth?.activityEvidence !== 'game-runner' && s.activityEvidence !== 'game-runner') return;
   const before = sim.state;
   sim.setTruth(s);
   sim.observationConnected = bridgeReady;
@@ -243,6 +265,11 @@ function applySession(s) {
 }
 
 function endSession(sessionId) {
+  observedSessions.delete(sessionId);
+  renderSessionEnd(sessionId);
+  syncRunnerActivity();
+}
+function renderSessionEnd(sessionId) {
   const key = sessionToSim.get(sessionId);
   sessionToSim.delete(sessionId);
   const sim = key && sims.get(key);
@@ -253,6 +280,8 @@ function endSession(sessionId) {
 }
 
 function applySnapshot({ selectedProjects: chosen=null, households: hs, sessions, projects = [], conversations = [], plans = [], tasks = [], passes, runner }) {
+  observedSessions.clear();
+  activityRuns = passes?.runs || [];
   selectedProjects=chosen===null?null:new Set(chosen);
   const visible=p=>selectedProjects===null||selectedProjects.has(p.project);
   hs=hs.filter(visible);sessions=sessions.filter(visible);projects=projects.filter(p=>selectedProjects===null||selectedProjects.has(p.home));conversations=conversations.filter(visible);plans=plans.filter(visible);tasks=tasks.filter(visible);
@@ -263,7 +292,7 @@ function applySnapshot({ selectedProjects: chosen=null, households: hs, sessions
     const button=document.createElement('button');button.className='first-project-lot';button.textContent='Build your first home';button.addEventListener('click',()=>{if(townHallState(gameplay).status!=='built'){mayor.open();return;}document.querySelector('[data-roster-view="projects"]').click();ui.projectsPanel.importing=false;ui.projectsPanel.render();});
     const label=new CSS2DObject(button);label.position.set(0,1.5,0);emptyLot.add(label);scene.add(emptyLot);
   }
-  passCard.setData({passes,runner,tasks,sessions:visibleSessions,conversations});
+  passCard.setData({passes,runner,tasks,households:visibleHouseholds,sessions:visibleSessions,conversations});
   work.setData({ households:hs, plans, tasks, conversations });
   library.setData({ households:hs, projects, conversations });
   replaying = true;
@@ -273,6 +302,7 @@ function applySnapshot({ selectedProjects: chosen=null, households: hs, sessions
   // Primary sessions first so visitors can find their parent.
   [...visibleSessions].sort((a, b) => (a.parent_session ? 1 : 0) - (b.parent_session ? 1 : 0)).forEach(applySession);
   replaying = false;
+  syncRunnerActivity();
   levels.setData(passes?.runs || []);
   syncLibrarySessions();
   // Don't fire "still waiting" reminders for waits that began before we connected.
@@ -349,7 +379,7 @@ function connect() {
     }
     else if (m.type === 'photos') { photos = m.photos || []; album?.setPhotos(photos); }
     else if (m.type === 'catalog') { if(selectedProjects!==null){m.projects=m.projects.filter(p=>selectedProjects.has(p.home));m.conversations=m.conversations.filter(p=>selectedProjects.has(p.project));} library.setData({ projects: m.projects, conversations: m.conversations }); work.setData({ conversations: m.conversations }); passCard.setData({conversations:m.conversations}); syncLibrarySessions(); }
-    else if (m.type === 'passes') { passCard.setData(m); levels.setData(m.passes?.runs || []); }
+    else if (m.type === 'passes') { passCard.setData(m); activityRuns = m.passes?.runs || []; syncRunnerActivity(); levels.setData(m.passes?.runs || []); }
     else if (m.type === 'productivity') {
       passCard.setData({tasks:m.tasks});
       work.setData({ plans: m.plans, tasks: m.tasks });
@@ -603,7 +633,7 @@ function focusTownHall() {
 }
 
 const ui = new UI({
-  xpFor: (sim) => (sim.character ? levels.resident(sim.lot.project, sim.character.slot) : null),
+  xpFor: (sim) => { const xp = sim.character ? levels.resident(sim.lot.project, sim.character.slot) : null; sim.residentLevel = xp?.level; return xp; },
   onRename: async (sim, name) => {
     await fetch('/api/rename', {
       method: 'POST',
@@ -914,6 +944,8 @@ function frame() {
     // Full bubbles for what matters now; a name chip (state icon + name) for everyone else; icons when far.
     const important = sim.selected || sim.hovered || sim.expanded || sim.state === 'waiting_for_user' || sim.state === 'error';
     sim.labelMode = important ? 'full' : camDist > 42 ? 'compact' : 'chip';
+    sim.detailSuppressed = camDist > 42 || [...sims.values()].some(other => other.lot === sim.lot && ['waiting_for_user','error'].includes(other.state));
+    if (sim.character) sim.residentLevel = levels.resident(sim.lot.project, sim.character.slot).level;
     sim.update(dt, t);
     if (bridgeReady && sim.state === 'running') busyLots.add(sim.lot);
     if (sim.state === 'waiting_for_user') {
@@ -977,7 +1009,7 @@ const work = new WorkCenter({
   onFocus: project => { settings.focusProject = project; saveSettings(); },
 });
 function openAgentChat(sim){if(sim){select(sim);passCard.open(sim,{observedThread:true});}}
-const passCard=new PassCard({onActivity:(run,sim)=>{const target=run? sims.get(sessionToSim.get(run.conversationSession)):sim;if(!target)return false;if(selected)selected.selected=false;selected=target;target.selected=true;followSelected=true;document.body.classList.add('inspecting');ui.open(target);return true;},residentName:(project,slot)=>households.get(project)?.characters.find(c=>c.slot===slot)?.name,resident:(project,slot)=>sims.get(charKey(project,slot)),onClose:()=>{if(selected)ui.open(selected);}});
+const passCard=new PassCard({onOutfit:sim=>{passCard.activityTransition=true;passCard.dialog.close();openWardrobe(sim);},onActivity:(run,sim)=>{const target=run? sims.get(sessionToSim.get(run.conversationSession)):sim;if(!target)return false;if(selected)selected.selected=false;selected=target;target.selected=true;followSelected=true;document.body.classList.add('inspecting');ui.open(target);return true;},residentName:(project,slot)=>households.get(project)?.characters.find(c=>c.slot===slot)?.name,resident:(project,slot)=>sims.get(charKey(project,slot)),onClose:()=>{if(selected)ui.open(selected);}});
 document.body.classList.add('pass-workflow');
 function allowRoutine(session) {
   return shouldNotify(session, households.has(settings.focusProject) ? settings.focusProject : '');

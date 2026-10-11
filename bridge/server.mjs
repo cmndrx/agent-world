@@ -1,3 +1,4 @@
+import { initializeCare, applyCare, advanceCare } from '../shared/care.mjs';
 import {roommateView,recruitCandidate,inspectionInstruction} from '../shared/roommates.mjs';
 import { readConnections } from './connections.mjs';
 import { resetTown } from './game-reset.mjs';
@@ -101,6 +102,7 @@ function loadHouseholds() {
 let saveTimer = null;
 function persistHouseholds() {
   clearTimeout(saveTimer);
+  for (const project of selectedProjects) for (const c of residentCharacters(world.households[project])) initializeCare(c);
   for (const [file, data] of [[householdsFile(), world.households], [catalogFile(), world.catalog.snapshot()]]) {
     fs.writeFileSync(file + '.tmp', JSON.stringify(data, null, 2));
     fs.renameSync(file + '.tmp', file);
@@ -120,6 +122,7 @@ const world = new World({
 });
 
 for (const project of selectedProjects) world.ensureHomeOwner(project);
+for (const home of Object.values(world.households)) for (const c of home.characters) advanceCare(c, { restart: true });
 persistHouseholds();
 
 const productivity = new Productivity(loadProductivity());
@@ -210,15 +213,36 @@ saveHouseholds();
 
 const clients = new Set();
 function broadcast(msg) {
+  if (msg.type === 'household' && selectedProjects.includes(msg.household.project)) {
+    for (const c of residentCharacters(msg.household)) initializeCare(c);
+  }
   if (msg.type === 'household') msg = { ...msg, household: presentedHome(msg.household) };
   const data = `data: ${JSON.stringify(msg)}\n\n`;
   for (const res of clients) res.write(data);
 }
 
 world.on('change', (change) => {
+  if (change.type === 'session') tickCare();
   if (change.type === 'household' || change.type === 'catalog') saveHouseholds();
   broadcast(change);
 });
+
+function careBusy(project, character) {
+  const call = voice.snapshot();
+  return call.project === project && Number(call.slot) === character.slot && !['idle','ended','error'].includes(call.status)
+    || passes.snapshot().runs.some(r => r.project === project && r.slot === character.slot && r.status === 'running')
+    || passes.snapshot().proposals.some(r => r.project === project && r.slot === character.slot && r.status === 'approved')
+    || [...world.sessions.values()].some(s => s.project === project && s.slot === character.slot && world.isLive(s) && !['idle','done'].includes(s.state));
+}
+function tickCare() {
+  for (const project of selectedProjects) {
+    const home = world.households[project];
+    let changed = false;
+    for (const c of residentCharacters(home)) changed = advanceCare(c, { busy: careBusy(project, c) }) || changed;
+    if (changed) { persistHouseholds(); broadcast({ type: 'household', household: home }); }
+  }
+}
+setInterval(tickCare, 500).unref();
 
 inbox.watch((e) => {
   world.apply(e);
@@ -340,7 +364,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (['/api/home-level','/api/roommates','/api/schedules','/api/codex-projects','/api/voice','/api/computer-use','/api/pass-attachment','/api/gameplay','/api/pass-cancel','/api/pass-chat','/api/pass-proposal', '/api/pass-decision', '/api/pass-resolve', '/api/projects', '/api/conversations', '/api/conversation-title', '/api/plan', '/api/task', '/api/briefing-seen', '/api/style', '/api/milestone', '/api/photo-delete', '/api/review', '/api/artifact-preview'].includes(url.pathname) && req.method === 'POST') {
+  if (['/api/care','/api/home-level','/api/roommates','/api/schedules','/api/codex-projects','/api/voice','/api/computer-use','/api/pass-attachment','/api/gameplay','/api/pass-cancel','/api/pass-chat','/api/pass-proposal', '/api/pass-decision', '/api/pass-resolve', '/api/projects', '/api/conversations', '/api/conversation-title', '/api/plan', '/api/task', '/api/briefing-seen', '/api/style', '/api/milestone', '/api/photo-delete', '/api/review', '/api/artifact-preview'].includes(url.pathname) && req.method === 'POST') {
     res.setHeader('content-type', 'application/json');
     // Browser forms from other websites must not alter the local catalog.
     if (!req.headers['content-type']?.startsWith('application/json')) {
@@ -368,6 +392,20 @@ const server = http.createServer(async (req, res) => {
         if (!residentCharacters(world.households[proposal?.project]).some(c => c.slot === proposal?.slot)) throw Error('Resident is not active in this home.');
       }
       let result;
+      if (url.pathname === '/api/care') {
+        const home = world.households[input.project];
+        if (!home || !selectedProjects.includes(input.project)) throw Error('Choose a home in this town.');
+        if (homeBuildState(gameplay, input.project).status !== 'built') throw Error('Finish building this home first.');
+        const character = residentCharacters(home).find(c => c.id === input.agentId);
+        if (!character) throw Error('Choose an active resident in this home.');
+        const changed = applyCare(character, input, { busy: careBusy(input.project, character) });
+        if (!changed.duplicate) {
+          home.characters[home.characters.indexOf(character)] = changed.character;
+          persistHouseholds();
+          broadcast({ type: 'household', household: home });
+        }
+        res.writeHead(200); return res.end(JSON.stringify({ ok: true, ...changed }));
+      }
       if(url.pathname==='/api/schedules'){if(allowSynthetic)throw Error('Scheduling is unavailable in the demo.');result=schedules.mutate(input,authorizeSchedule);res.writeHead(200,{'content-type':'application/json'});return res.end(JSON.stringify({ok:true,result}));}
       if(url.pathname==='/api/codex-projects'){
         if(allowSynthetic)throw new Error('Local Codex projects are unavailable in the demo.');
@@ -379,6 +417,8 @@ const server = http.createServer(async (req, res) => {
           const state=passes.snapshot();
           if(state.runs.some(r=>r.project===input.project&&r.status==='running')||state.proposals.some(p=>p.project===input.project&&p.status==='approved')||voice.snapshot().project===input.project&& !['ended','idle','error'].includes(voice.snapshot().status))throw new Error('Finish or stop this project’s active work before removing its home.');
           passes.change(data=>{for(const s of data.schedules||[])if(s.project===input.project&&s.status==='active'){s.status='paused';s.message='Project removed from world.';s.version++;}});
+          for (const c of residentCharacters(world.households[input.project])) advanceCare(c, { unavailable: true });
+          persistHouseholds();
           const next=selectedProjects.filter(p=>p!==input.project);fs.writeFileSync(selectedFile+'.tmp',JSON.stringify(next));fs.renameSync(selectedFile+'.tmp',selectedFile);selectedProjects=next;
           broadcast({type:'selected-projects',projects:selectedProjects});result={project:input.project,removed:true};
         }

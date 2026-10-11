@@ -11,7 +11,7 @@ let lastPlaced = []; // agent bubble rectangles from the latest pass; signs give
 const MAX_LIFT = 120;
 const v = new THREE.Vector3();
 
-const priority = (sim) => (sim.selected ? 6 : sim.state === 'waiting_for_user' ? 5 : sim.state === 'error' ? 4 : sim.hovered ? 3 : sim.expanded ? 2 : 1);
+const priority = (sim) => (sim.state === 'waiting_for_user' ? 6 : sim.state === 'error' ? 5 : sim.selected ? 4 : sim.hovered ? 3 : sim.expanded ? 2 : 1);
 
 /**
  * @param {Iterable<import('./sim.js').Sim>} sims

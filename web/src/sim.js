@@ -1,3 +1,5 @@
+import { assignedRole } from '../../shared/team.mjs';
+import { CareFeedback } from './care-feedback.js';
 import {canPromptFromStatus} from '../../shared/agent-view.mjs';
 import { observedLabel } from '../../shared/freshness.mjs';
 // A Sim: one persistent character (or a visiting sub-agent) in a lot.
@@ -111,6 +113,7 @@ export class Sim {
     this.key = key;
     this.lot = lot;
     this.character = character;
+    this.careFeedback = new CareFeedback(character);
     this.parent = parent;
     this.isVisitor = !!parent;
     this.hash = hashStr(key);
@@ -223,6 +226,10 @@ export class Sim {
     const prevState = this.state;
     const prevAt = this.act.at;
     this.truth = session;
+    if (session && !['idle','done'].includes(session.state) && this.careCheerUntil > performance.now() / 1000) {
+      this.careCheerUntil = 0;
+      this.popT = undefined; // observed work interrupts the care animation
+    }
     if (this.isVisitor && !this.roleName && session?.detail?.target) this.roleName = session.detail.target;
 
     const color = PLUMBOB_COLORS[plumbobFor(this.state)];
@@ -326,7 +333,10 @@ export class Sim {
 
   decide() {
     if (this.leaving) return;
-    const target = this.truthTarget();
+    const care = this.character?.care?.pending;
+    const canCare = care && (!this.truth || ['idle','done'].includes(this.state));
+    const careSpot = canCare && (this.freeSpot(this.lot.stations.bookshelf) || this.standingSpot(this.desk().chair));
+    const target = careSpot ? { spot: careSpot, pose: 'browse', careId: care.id } : this.truthTarget();
     if (target) {
       // Real work and off-duty spots take priority: an idle Sim relaxing there moves on.
       const holder = this.holder(target.spot);
@@ -399,6 +409,8 @@ export class Sim {
       this.placed = false;
     }
     if (!this.activity) this.decide();
+    const careId = this.character?.care?.pending?.id;
+    if ((this.activity?.careId || null) !== (careId && (!this.truth || ['idle','done'].includes(this.state)) ? careId : null)) this.decide();
     const now = performance.now() / 1000;
     this.needs.energy = Math.max(0, this.needs.energy - dt * 0.012);
     this.needs.fun = Math.max(0, this.needs.fun - dt * 0.009);
@@ -479,9 +491,20 @@ export class Sim {
     this.updateLabel();
   }
 
+  receiveCare(character, replay = false) {
+    if (!this.careFeedback.receive(character, replay)) return;
+    const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.careReceivedUntil = performance.now() / 1000 + 1.8;
+    if (!reducedMotion && (!this.truth || ['idle', 'done'].includes(this.state))) {
+      this.careCheerUntil = this.careReceivedUntil;
+      this.popT = 0;
+    }
+  }
+
   /** Which pose to play right now: walking, a truth-driven desk pose (with lead-in), or flavor. */
   currentPose(walking, now) {
     if (walking) return this.isVisitor ? 'laptop_walk' : 'walk';
+    if (now < this.careCheerUntil && (!this.truth || ['idle','done'].includes(this.state))) return 'cheer';
     if (now < this.cheerUntil) return 'cheer';
     const a = this.activity;
     if (!a) return 'stand';
@@ -783,10 +806,12 @@ export class Sim {
     // Every bubble is just the name and a short status (icons only when zoomed far out).
     const chip = this.observationConnected !== false && this.labelMode === 'chip' && !compact;
     const stateIcon = icon(this.walking && !stale ? 'navigation' : STATE_ICON[state]);
+    const careReceived = performance.now() / 1000 < this.careReceivedUntil && !stale && !['waiting_for_user','error'].includes(state);
+    const detail = this.selected && !this.detailSuppressed && !stale && this.labelMode === 'full' && !['waiting_for_user','error'].includes(state) ? `<span class="b-resident-detail">${escapeHtml(assignedRole(this.character?.assignedRole)?.title || '')}${this.character?.care ? `<small>Lv ${this.residentLevel || 1} &middot; Happiness ${this.character.happiness}/100 (simulated)</small>` : ''}</span>` : '';
     const html = compact
       ? `<span class="b-icon">${stateIcon}</span>`
       : `<span class="b-icon">${stateIcon}</span>` +
-        `<span class="b-text"><b>${escapeHtml(this.name)}</b>${canPromptFromStatus(this.truth)?`<button type="button" class="b-state" data-prompt-sim aria-label="${escapeHtml(text)} · Open chat">${escapeHtml(text)}</button>`:`<span class="b-state">${escapeHtml(text)}</span>`}</span>`;
+        `<span class="b-text"><b>${escapeHtml(this.name)}</b>${detail}${canPromptFromStatus(this.truth)?`<button type="button" class="b-state" data-prompt-sim aria-label="${escapeHtml(text)} · Open chat">${escapeHtml(text)}</button>`:`<span class="b-state">${escapeHtml(text)}</span>`}${careReceived ? '<small class="b-care-feedback">Care received &middot; simulated</small>' : ''}</span>`;
     if (html !== this.labelHtml) {
       this.bubbleEl.innerHTML = html;
       this.labelHtml = html;

@@ -2307,3 +2307,92 @@ body.night .ho-note { background: rgba(255, 255, 255, 0.06); }
 .ho-testing h3 { margin: 0; font-size: 14px; }
 .ho-testing p { color: var(--ink-2); font-size: 12px; line-height: 1.5; }
 .ho-testing > small { display: block; margin-top: 10px; color: var(--ink-3); font-size: 11px; }
+.care-panel { margin: 18px 0; padding: 16px; border: 1px solid #b7a1d2; border-radius: 16px; background: #f5f0fa; color: #312940; }
+.care-panel h3 { margin: 0 0 8px; }
+.care-note, .care-pending, .care-message { font-size: 12px; line-height: 1.5; }
+.care-value meter { display: block; width: 100%; margin-top: 8px; accent-color: #8c62b1; }
+.care-value meter::-webkit-meter-optimum-value { background: #8c62b1; }
+.care-value meter::-moz-meter-bar { background: #8c62b1; }
+.care-chip { display: inline-block; padding: 4px 8px; border-radius: 12px; background: #e7dcef; font-size: 12px; }
+.care-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.care-panel button { padding: 8px 10px; border: 1px solid #ab90c7; border-radius: 8px; background: white; color: #312940; cursor: pointer; }
+.care-panel button:disabled { opacity: .55; cursor: default; }
+.care-panel details { margin-top: 12px; }
+.care-panel summary { cursor: pointer; }
+.care-panel label, .care-panel li small { display: block; margin: 8px 0; }
+.care-panel li { font-size: 12px; margin-bottom: 8px; }
+/* Agent card layout: stats and care remain in the scrolling body. */
+.assigned-profession { font-size:14px; font-weight:700; line-height:1.35; overflow-wrap:anywhere; color:var(--ink-2); }
+.assigned-profession:empty { display:none; }
+.insp-head { flex-shrink:0; align-items:flex-start; }
+.insp-head .names { overflow-wrap:anywhere; }
+.insp-head .where { white-space:normal; overflow-wrap:anywhere; }
+.resident-stats { margin:0 0 16px; padding:12px; border:1px solid var(--line); border-radius:15px; background:var(--glass); }
+.resident-stats .agent-xp { margin-bottom:12px; }
+.care-summary { margin-top:12px; color:var(--ink); }
+.care-value { display:flex; flex-wrap:wrap; justify-content:space-between; gap:6px; font-size:13px; }
+.care-value meter { flex-basis:100%; width:100%; accent-color:#8c62b1; }
+.care-value meter::-webkit-meter-optimum-value { background:#8c62b1; }
+.care-interests { font-size:12.5px; line-height:1.5; margin:8px 0 0; }
+.care-panel { padding:0; border:0; background:transparent; color:var(--ink); }
+.care-actions { display:grid; gap:8px; margin-top:12px; }
+.care-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:5px 10px; padding:12px; border:1px solid var(--line); border-radius:14px; background:var(--glass); }
+.care-row strong { font-size:14px; }
+.care-row small { font-size:12px; text-align:right; }
+.care-row p { margin:0; font-size:12.5px; line-height:1.5; align-self:center; }
+.care-panel button { min-height:44px; }
+.care-panel button:disabled { opacity:1; background:#eee9f2; color:#65576f; }
+.care-panel :is(button,summary,input):focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
+.b-resident-detail { display:block; max-width:220px; white-space:normal; font-size:12px; line-height:1.3; }
+.b-resident-detail small { display:block; margin-top:4px; font-size:11px; }
+.bubble:has(.b-resident-detail) { max-width:250px; }
+.chat-header h2 { overflow-wrap:anywhere; }
+@media(max-width:420px) { .care-row { grid-template-columns:minmax(0,1fr); } .care-row small { text-align:left; } .care-row button { justify-self:start; } .insp-head { gap:8px; padding:12px; } .insp-head .portrait-wrap { width:44px; height:44px; } }
+@media(max-height:550px) { .insp-head { padding-top:8px; padding-bottom:8px; } .insp-head .portrait-wrap { width:40px; height:40px; } .chat-header { max-height:40vh; overflow:auto; flex-shrink:0; } }
+@media(prefers-reduced-motion:reduce) { .bubble { transition:none; } }
+
+.mention-suggestions {display:flex;flex-wrap:wrap;gap:4px;}
+.mention-suggestions:empty {display:none;}
+.mention-suggestions button {min-height:44px;text-align:left;}
+.mention-suggestions button.selected {outline:2px solid #8b7ee8;}
+
+/* Human revision: compact identity, lower metadata strip, one stats surface. */
+:is(.insp-head, .chat-header.resident-identity) { display:grid; grid-template-columns:64px minmax(0,1fr) auto auto; gap:4px 8px; align-items:start; }
+:is(.insp-head, .resident-identity) > :is(.portrait-wrap,.resident-portrait) { grid-column:1; grid-row:1 / 3; width:64px; height:64px; }
+:is(.insp-head,.resident-identity) > .names { grid-column:2; grid-row:1; min-width:0; }
+:is(.insp-head,.resident-identity) > .assigned-profession { grid-column:2 / -1; grid-row:2; }
+:is(.insp-head,.resident-identity) > .icon-btn { width:44px; height:44px; min-width:44px; padding:0; margin:0; display:grid; place-items:center; }
+:is(.insp-head,.resident-identity) > [data-close] { grid-column:4; }
+.resident-portrait { display:block; overflow:hidden; border-radius:18px; background:color-mix(in srgb,var(--accent) 12%,var(--glass)); }
+.resident-portrait canvas { width:100%; height:100%; }
+.resident-header-strip { display:flex; flex-wrap:wrap; align-items:center; gap:10px 16px; padding:0 18px 14px; flex-shrink:0; }
+.resident-metadata { flex:1; min-width:120px; color:var(--ink-3); font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
+.resident-header-strip button { min-height:44px; margin:0 !important; padding:8px 14px; border:0; border-radius:999px; background:var(--accent); color:white; font:800 13px var(--font); }
+.resident-stats { background:color-mix(in srgb,#b69bde 19%,var(--glass-strong)); padding:14px; border:0; display:flow-root; }
+.resident-stats :is(.agent-xp,.chat-xp) { margin:0; padding:0; background:none; border:0; box-shadow:none; }
+.pass-card .resident-stats .chat-xp { width:100%; }
+.resident-stats .care-summary { padding-top:12px; border-top:1px solid var(--line); }
+[data-open-care] { float:right; min-height:44px; padding:8px 16px; margin-top:8px; border:1px solid var(--line); border-radius:12px; color:var(--ink); background:var(--glass-strong); font:800 13px var(--font); cursor:pointer; }
+.care-dialog { box-sizing:border-box; width:min(520px,calc(100vw - 24px)); max-height:calc(100dvh - 24px); padding:0; border:1px solid var(--line); border-radius:20px; color:var(--ink); background:var(--glass-strong); overflow:hidden; }
+.care-dialog:popover-open { display:flex; flex-direction:column; }
+.care-dialog::backdrop { background:transparent; pointer-events:none; }
+.care-dialog .panel-head { display:flex; gap:12px; align-items:start; padding:16px; flex:none; }
+.care-dialog h2 { flex:1; min-width:0; margin:0; font-size:20px; overflow-wrap:anywhere; }
+.care-dialog .panel-head > .icon-btn { flex:none; width:44px; height:44px; }
+.care-dialog-scroll { overflow:auto; padding:0 16px 16px; min-height:0; }
+.care-dialog .care-summary { margin:0; }
+.care-dialog .care-panel { margin:16px 0 0; }
+:is([data-open-care],.care-dialog button,.resident-header-strip button):focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
+@media(max-width:420px) { .resident-header-strip { display:grid; grid-template-columns:minmax(0,1fr); padding:0 12px 12px; } .resident-header-strip button { justify-self:start; } :is(.insp-head,.chat-header.resident-identity) { grid-template-columns:64px minmax(0,1fr) auto auto; } }
+/* Care is an anchored menu, with no page-wide scrim or background inertness. */
+.care-dialog { position:fixed; inset:auto; margin:0; width:min(360px,calc(100vw - 24px)); max-height:min(620px,calc(100dvh - 24px)); border-radius:16px; box-shadow:0 12px 36px #16102c40; }
+.care-dialog .panel-head { padding:12px; }
+.care-dialog h2 { font-size:17px; }
+.care-dialog-scroll { padding:0 12px 12px; }
+.b-care-feedback { display:block; color:var(--ink-2); font-size:11px; font-weight:800; animation:care-thanks .3s ease-out; }
+@keyframes care-thanks { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+@media(prefers-reduced-motion:reduce) { .b-care-feedback { animation:none; } }
+/* Identity, metadata, then the bounded chat workspace: no implicit grid row. */
+.pass-card.chat-card[open]:has(> .resident-header-strip) { grid-template-rows:auto auto minmax(0,1fr); overflow:hidden; }
+.pass-card.chat-card > .resident-header-strip { grid-row:2; padding-top:8px; border-bottom:1px solid var(--line); }
+.pass-card.chat-card > .chat-layout { grid-row:3; overflow:hidden; }

@@ -149,6 +149,11 @@ const HELPERS = {
  * @returns {{app:string, title:string, label:string, detail?:string, pose:string, lead?:{pose:string,dur:number}, at:'desk'|'wait'|'away', [k:string]:any}}
  */
 export function resolveActivity(truth) {
+  if (truth?.activityEvidence === 'game-runner') return {
+    app: 'chat', title: 'Game runner', label: 'Working on approved pass',
+    detail: 'Game runner active · detailed activity unavailable',
+    pose: 'watch', at: 'desk',
+  };
   if (!truth) return { app: 'off', title: '', label: 'Off duty', detail: 'No session open', prose: true, pose: 'doze', at: 'away' };
 
   const { state } = truth;
