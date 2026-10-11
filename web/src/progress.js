@@ -1,6 +1,6 @@
 // Progress panel: gems, home levels and their provenance. Work rewards derive from human decisions.
 
-import { BRICKS, COMMONS, LEVELS, MAX_LEVEL, commonsHint, levelName } from '../../shared/progression.mjs';
+import { BRICKS, COMMONS, BUILDING_TIERS, BUILDING_UNLOCK_LEVELS, LEVELS, MAX_LEVEL, HOME_XP_THRESHOLDS, commonsHint, levelName } from '../../shared/progression.mjs';
 import { COLLECTIBLES } from '../../shared/collectibles.mjs';
 import { CROPS, growth } from '../../shared/garden.mjs';
 import { DECOR } from '../../shared/style.mjs';
@@ -72,8 +72,8 @@ export class ProgressPanel {
     const p = this.data.progress || { earned: 0, spent: 0, balance: 0, levels: {}, ledger: [] };
     const homes = this.data.households.map((h) => {
       const level = p.levels[h.project] || 1;
-      return `<li><span class="lvl-stars">${'★'.repeat(level)}<span>${'☆'.repeat(MAX_LEVEL - level)}</span></span>
-        <span class="lvl-home"><b>${esc(h.name)}</b><small>${esc(levelName(level))} · ${p.homes?.[h.project]?.xp || 0} XP${level < MAX_LEVEL ? ` · ${p.homes?.[h.project]?.remaining || 300} to next level` : ' · Max level'}</small></span>
+      return `<li><span class="lvl-stars">Lv ${level}</span>
+        <span class="lvl-home"><b>${esc(h.name)}</b><small>${esc(levelName(level))} · ${p.homes?.[h.project]?.xp || 0} XP${level < MAX_LEVEL ? ` · ${p.homes?.[h.project]?.remaining ?? HOME_XP_THRESHOLDS[1]} to next level` : ' · Max level'}</small></span>
         <button class="chip-btn" data-plan="${esc(h.project)}">Plan</button></li>`;
     }).join('');
     const ledger = p.ledger.slice(0, 10).map((e) => {
@@ -105,7 +105,7 @@ export class ProgressPanel {
       <footer class="panel-foot"><span></span><details class="info-note"><summary>${icon('info')} How rewards work</summary><ul>
         <li>Your first Codex or Claude Code connection gives 50 gems. Your decisions also count: reaching outcomes and accepting reviewed tasks.</li>
         <li>Task rewards are capped at one per home per day, so small tasks don't pay more.</li>
-        <li>A home pools XP from all its residents, up to level ${MAX_LEVEL} (${LEVELS.map((l) => esc(l.name)).join(' → ')}). Upgrades require 300, then another 450, 600 and 750 XP. Completed game responses earn resident XP; outcomes still earn gems.</li>
+        <li>A home pools XP from all its residents, up to level ${MAX_LEVEL} (${BUILDING_TIERS.map((l,i) => `${esc(l.name)} (level ${BUILDING_UNLOCK_LEVELS[i]})`).join(' → ')}). Upgrades require ${HOME_XP_THRESHOLDS[1]} XP first; total thresholds are ${HOME_XP_THRESHOLDS.slice(1).join(" / ")} XP. Completed game responses earn resident XP; outcomes still earn gems.</li>
         <li>Agents can't earn gems. Finds, gardens and photos never earn gems.</li></ul></details></footer>`;
   }
 }

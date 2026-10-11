@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Productivity } from '../bridge/productivity.mjs';
-import { BRICKS, homeExperience, homeLevel, levelName, lockReason, progress } from '../shared/progression.mjs';
+import { BRICKS, homeExperience, homeLevel, levelName, lockReason, progress, setHomeTestingLevel, HOME_XP_THRESHOLDS, buildingTier } from '../shared/progression.mjs';
 import { applyStyleChange, emptyStyle } from '../shared/style.mjs';
 
 const task = (over) => ({ id: 't1', project: '/p', title: 'Fix login', status: 'accepted', evidence: 'tests pass: npm test', acceptedAt: '2026-10-05T10:00:00Z', ...over });
@@ -22,8 +22,8 @@ test('un-accepting a task removes its bricks', () => {
 });
 
 test('levels are capped and named', () => {
-  assert.equal(homeLevel({project:'/p',characters:[{slot:1}]}, {'["/p",1]':{xp:9999}}), 5);
-  assert.equal(levelName(3), 'Villa');
+  assert.equal(homeLevel({project:'/p',characters:[{slot:1}]}, {'["/p",1]':{xp:999999}}), 15);
+  assert.equal(levelName(6), 'Duplex');
 });
 
 test('homes follow their combined resident XP without requiring a plan or reviewed outcome', () => {
@@ -39,10 +39,10 @@ test('homes follow their combined resident XP without requiring a plan or review
 
 test('a failed response cannot upgrade a house; outcome changes only affect gems', () => {
   const home = {project:'/p',characters:[{slot:1}]};
-  const runs=Array.from({length:12},(_,i)=>({id:`r${i}`,project:'/p',slot:1,status:'completed',result:{summary:'Returned response'}}));
-  const before = progress({households:[home],runs:runs.slice(0,11)});
+  const runs=Array.from({length:4},(_,i)=>({id:`r${i}`,project:'/p',slot:1,status:'completed',result:{summary:'Returned response'}}));
+  const before = progress({households:[home],runs:runs.slice(0,3)});
   assert.equal(before.levels['/p'],1);
-  assert.equal(progress({households:[home],runs:[...runs.slice(0,11),{...runs[11],status:'failed'}]}).levels['/p'],1);
+  assert.equal(progress({households:[home],runs:[...runs.slice(0,3),{...runs[3],status:'failed'}]}).levels['/p'],1);
   assert.equal(progress({households:[home],runs}).levels['/p'],2);
   const reviewed=progress({households:[home],runs,plans:[{project:'/p',milestones:[{outcome:'Reached',reachedAt:'2026-10-10'}]}]});
   assert.equal(reviewed.levels['/p'],2);
@@ -61,7 +61,7 @@ test('unlocks spend the derived balance; locked and level-gated items are refuse
   s = applyStyleChange(s, { kind: 'home', key: '/p', value: { decor: [{ id: 'a', item: 'monstera', x: 0, z: 0 }] } }, known);
   const rich = { ...known, earned: 200 };
   s = applyStyleChange(s, { kind: 'unlock', key: 'arcade' }, rich);
-  assert.throws(() => applyStyleChange(s, { kind: 'home', key: '/p', value: { decor: [{ id: 'b', item: 'arcade', x: 1, z: 1 }] } }, rich), /Villa/);
+  assert.throws(() => applyStyleChange(s, { kind: 'home', key: '/p', value: { decor: [{ id: 'b', item: 'arcade', x: 1, z: 1 }] } }, rich), /Cottage/);
   const villa = { ...rich, levels: { '/p': 3 } };
   s = applyStyleChange(s, { kind: 'home', key: '/p', value: { decor: [{ id: 'b', item: 'arcade', x: 1, z: 1 }] } }, villa);
   // Dropping back to level 1 never tears down what is already placed; edits still save.
@@ -111,9 +111,34 @@ test('structured recorded references qualify for review credit without a duplica
 
  test('pooled home XP sums current residents once and scales independently of individual levels', () => {
  const home={project:'/p',characters:[{slot:1},{slot:2},{slot:2},{slot:3}]};
- const residents={'["/p",1]':{xp:100},'["/p",2]':{xp:125},'["/p",3]':{xp:75},'["/other",1]':{xp:9999}};
- assert.deepEqual(homeExperience(home,residents),{xp:300,level:2,current:0,required:450,remaining:450,percent:0});
- for(const [xp,level] of [[299,1],[300,2],[749,2],[750,3],[1349,3],[1350,4],[2099,4],[2100,5]])
+ const residents={'["/p",1]':{xp:100},'["/p",2]':{xp:125},'["/p",3]':{xp:75},'["/other",1]':{xp:999999}};
+ assert.deepEqual(homeExperience(home,residents),{xp:300,level:2,current:200,required:250,remaining:50,percent:80});
+ for(let level=1;level<=15;level++) {
+ const xp=HOME_XP_THRESHOLDS[level-1];
  assert.equal(homeLevel({project:'/p',characters:[{slot:1}]},{'["/p",1]':{xp}}),level);
+ if(level>1)assert.equal(homeLevel({project:'/p',characters:[{slot:1}]},{'["/p",1]':{xp:xp-1}}),level-1);
+ }
  assert.equal(homeExperience(home,{'["/p",1]':{xp:NaN}}).xp,0);
+ });
+
+test('manual home XP adjustment changes only home progression and keeps earning additive', () => {
+ const home={project:'/p',characters:[{slot:1}],homeXpAdjustment:{xp:625,reason:'Player requested level three'}};
+ assert.equal(homeExperience(home,{'["/p",1]':{xp:125}}).level,4);
+ assert.equal(homeExperience(home,{'["/p",1]':{xp:150}}).xp,775);
+ assert.equal(homeExperience({...home,homeXpAdjustment:{xp:NaN}},{}).xp,0);
+});
+
+ test('testing level can lower homes, restore earned XP and rejects invalid input', () => {
+ const home={project:'/p',characters:[{slot:1},{slot:2}]};
+ const residents={'["/p",1]':{xp:750}};
+ for(let level=1;level<=15;level++){setHomeTestingLevel(home,residents,level);assert.equal(homeLevel(home,residents),level);assert.equal(home.characters.length,2);}
+ setHomeTestingLevel(home,residents,1);assert.equal(home.homeXpAdjustment.xp,-750);
+ assert.equal(homeExperience(home,{'["/p",1]':{xp:775}}).xp,25);
+ for(const level of [0,16,1.5,'3',undefined])assert.throws(()=>setHomeTestingLevel(home,residents,level),/Choose a home level/);
+ setHomeTestingLevel(home,residents,null);assert.equal(homeLevel(home,residents),4);assert.equal(home.homeXpAdjustment,undefined);
+ });
+
+ test('building upgrades are independent of the fifteen resident slot levels',()=>{
+ assert.deepEqual(Array.from({length:15},(_,i)=>buildingTier(i+1)),[1,1,1,2,2,3,3,4,4,5,5,6,6,7,8]);
+ assert.equal(HOME_XP_THRESHOLDS.at(-1),16000);
  });

@@ -92,7 +92,7 @@ export class MapMode {
       const lot = project && lots.get(project);
       html += lot
         ? `<button class="plot-card${this.picked === project ? ' picked' : ''}" data-plot="${i}" data-project="${escapeHtml(project)}">
-            <b>${escapeHtml(lot.name)}</b><small>${'★'.repeat(lot.level)} ${escapeHtml(levelName(lot.level))}</small></button>`
+            <b>${escapeHtml(lot.name)}</b><small>Lv ${lot.level} · ${escapeHtml(levelName(lot.level))}</small></button>`
         : `<button class="plot-card empty${this.picked ? ' target' : ''}" data-plot="${i}">Empty plot</button>`;
     }
     for (let row = 0; row < this.plotCount() / 3; row++) {
@@ -110,21 +110,35 @@ export class MapMode {
     this.place();
   }
 
-  /** Position cards over plot centers and street labels at the start of each street. */
+  /** Keep occupied plot cards above their buildings and empty cards at plot centers. */
   place() {
     if (!this.active) return;
     const v = new THREE.Vector3();
     const w = innerWidth;
     const h = innerHeight;
-    const toScreen = (x, z) => {
-      v.set(x, 0.5, z).project(this.camera);
+    const toScreen = (x, z, y = 0.5) => {
+      v.set(x, y, z).project(this.camera);
       return [(v.x * 0.5 + 0.5) * w, (-v.y * 0.5 + 0.5) * h];
     };
     for (const el of this.layer.querySelectorAll('[data-plot]')) {
       const i = Number(el.dataset.plot);
-      const [sx, sy] = toScreen((i % 3) * LOT_W, Math.floor(i / 3) * LOT_D);
+      const lot = el.dataset.project && this.lots().get(el.dataset.project);
+      const x = (i % 3) * LOT_W;
+      const z = Math.floor(i / 3) * LOT_D;
+      const [sx, sy] = toScreen(x, z);
+      let top = sy;
+      if (lot) {
+        // Project the building bounds: height alone doesn't move a card clear of a roof
+        // when the camera looks straight down. Keep the entire card above its silhouette.
+        const height = Math.max(lot.roofTop || 0, lot.plan?.height || 0);
+        const edges = [];
+        for (const dx of [-7.5, 7.5]) for (const dz of [-5.5, 5.5]) for (const y of [0, height]) {
+          edges.push(toScreen(x + dx, z + dz, y)[1]);
+        }
+        top = Math.min(...edges) - el.offsetHeight / 2 - 12;
+      }
       el.style.left = `${sx}px`;
-      el.style.top = `${sy}px`;
+      el.style.top = `${top}px`;
     }
     for (const el of this.layer.querySelectorAll('[data-row-pos]')) {
       const row = Number(el.dataset.rowPos);

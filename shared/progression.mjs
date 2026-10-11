@@ -9,19 +9,30 @@
 
 import { DECOR } from './style.mjs';
 import { CONNECTION_GEMS, gameplaySpent, townHallState } from './gameplay.mjs';
+import { residentCharacters } from './foundation.mjs';
 import { experience, residentKey } from './experience.mjs';
 
 export const GEMS = { acceptedTask: 10, outcomeReached: 25 };
 export const BRICKS = GEMS; // compatibility for older imports
 
-export const LEVELS = [
-  { level: 1, name: 'Cottage' },
-  { level: 2, name: 'House' },
-  { level: 3, name: 'Villa' },
-  { level: 4, name: 'Manor' },
-  { level: 5, name: 'Estate' },
+export const BUILDING_TIERS = [
+  { level: 1, name: 'Cottage', description: 'Small home with a garden' },
+  { level: 2, name: 'Family House', description: 'Larger detached home with a porch' },
+  { level: 3, name: 'Duplex', description: 'Two homes sharing one building' },
+  { level: 4, name: 'Townhouse Row', description: 'Attached homes with individual entrances' },
+  { level: 5, name: 'Small Apartment Building', description: 'Three or four floors with balconies' },
+  { level: 6, name: 'Apartment Block', description: 'Mid-rise building with a shared courtyard' },
+  { level: 7, name: 'Residential Tower', description: 'Tall building with rooftop amenities' },
+  { level: 8, name: 'Landmark Residence', description: 'Distinctive tower with landscaped terraces' },
 ];
-export const MAX_LEVEL = LEVELS.length;
+export const BUILDING_UNLOCK_LEVELS = [1, 4, 6, 8, 10, 12, 14, 15];
+export const MAX_LEVEL = 15;
+export const HOME_XP_THRESHOLDS = [0, 100, 350, 750, 1250, 2000, 3000, 4000, 5500, 7000, 9000, 11000, 13000, 14500, 16000];
+export const buildingTier = level => {
+  level = Math.min(MAX_LEVEL, Math.max(1, Math.floor(Number(level)) || 1));
+  return BUILDING_UNLOCK_LEVELS.filter(unlock => unlock <= level).length;
+};
+export const LEVELS = Array.from({length:MAX_LEVEL},(_,i)=>({ ...BUILDING_TIERS[buildingTier(i+1)-1], level:i+1 }));
 
 /**
  * Neighborhood milestones (phase 3): public spaces in the town square. Each opens when EITHER count is
@@ -44,24 +55,36 @@ export function commonsHint(c) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-export const levelName = (level) => LEVELS[Math.min(MAX_LEVEL, Math.max(1, level)) - 1].name;
+export const levelName = (level) => BUILDING_TIERS[buildingTier(level) - 1].name;
 
 /** Pooled lifetime participation XP of current residents; fixed thresholds for any household size. */
 export function homeExperience(home, residentExperience = {}) {
-  const slots = new Set((home?.characters || []).map(c => c.slot));
-  const xp = [...slots].reduce((sum, slot) => {
+  const slots = new Set(residentCharacters(home).map(c => c.slot));
+  const residentXp = [...slots].reduce((sum, slot) => {
     const value = residentExperience[residentKey(home.project, slot)]?.xp;
     return sum + (Number.isFinite(value) ? Math.max(0, value) : 0);
   }, 0);
-  let level = 1, floor = 0, required = 300;
+  // Explicit player-requested development adjustments belong to gameplay, never run history.
+  const adjustment = home.homeXpAdjustment?.xp;
+  const xp = Math.max(0, residentXp + (Number.isSafeInteger(adjustment) ? adjustment : 0));
+  let level = 1, floor = 0, required = HOME_XP_THRESHOLDS[1];
   while (level < MAX_LEVEL && xp - floor >= required) {
-    floor += required; level++; required = 300 + (level - 1) * 150;
+    floor += required; level++; required = level < MAX_LEVEL ? HOME_XP_THRESHOLDS[level] - floor : 0;
   }
   const capped = level === MAX_LEVEL;
   return { xp, level, current: xp - floor, required: capped ? 0 : required,
     remaining: capped ? 0 : required - (xp - floor), percent: capped ? 100 : (xp - floor) / required * 100 };
 }
 export const homeLevel = (home, residents = {}) => homeExperience(home, residents).level;
+
+/** Testing only: change home XP without altering resident/player XP or recorded work. */
+export function setHomeTestingLevel(home, residents, level, now = new Date().toISOString()) {
+  if (level === null) { delete home.homeXpAdjustment; return; }
+  if (!Number.isInteger(level) || level < 1 || level > MAX_LEVEL) throw Error(`Choose a home level from 1 to ${MAX_LEVEL}.`);
+  const earned = homeExperience({ ...home, homeXpAdjustment: undefined }, residents).xp;
+  home.homeXpAdjustment = { xp: HOME_XP_THRESHOLDS[level - 1] - earned,
+    reason: `Testing: player selected home level ${level}`, at: now };
+}
 
 /** True when an accepted task carries review notes (the "evidence" field). */
 export const hasReviewNotes = (task) => (typeof task.evidence === 'string' && task.evidence.trim().length > 0) || (task.references || []).some(r => ['output', 'check'].includes(r.kind) && r.value?.trim());

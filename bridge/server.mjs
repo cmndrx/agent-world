@@ -1,3 +1,4 @@
+import {roommateView,recruitCandidate,inspectionInstruction} from '../shared/roommates.mjs';
 import { readConnections } from './connections.mjs';
 import { resetTown } from './game-reset.mjs';
 import {projectTeam} from '../shared/team.mjs';
@@ -30,7 +31,8 @@ import { homeDir, cityFile, ensureHome, eventsDir, householdsFile, catalogFile, 
 import { emptyCity, helperKey, helperType, mergeCity, recordEvent, residentKey } from '../shared/city.mjs';
 import { applyStyleChange, emptyStyle, removePhoto } from '../shared/style.mjs';
 import { MAX_PHOTO_BYTES, deletePhoto, listPhotos, photoIds, photoPath, savePhoto } from './photos.mjs';
-import { progress } from '../shared/progression.mjs';
+import { progress, HOME_XP_THRESHOLDS, setHomeTestingLevel } from '../shared/progression.mjs';
+import { experience } from '../shared/experience.mjs';
 import { applyGameplayAction, emptyGameplay, gameplaySpent, townHallState, homeBuildState, startHomeConstruction } from '../shared/gameplay.mjs';
 import { readCodexUsage } from './usage.mjs';
 import { claudeAuth } from './provider-auth.mjs';
@@ -251,6 +253,14 @@ const readUsage = usageReader(allowSynthetic ? async () => ({ status:'unavailabl
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
 
+  if(url.pathname==='/api/roommates'&&req.method==='GET') {
+    if(!isLocalOrigin(req)){res.writeHead(403);return res.end();}
+    const home=world.households[url.searchParams.get('project')];
+    if(!home||!selectedProjects.includes(home.project)){res.writeHead(404);return res.end(JSON.stringify({error:'Choose a home in this town.'}));}
+    const saved=passes.snapshot();
+    res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'});
+    return res.end(JSON.stringify({...roommateView(home,[...saved.proposals,...saved.runs],Object.values(world.households).flatMap(h=>h.characters)),runner:runner.status(),built:homeBuildState(gameplay,home.project).status==='built'}));
+  }
   if(url.pathname==='/api/voice/stream'&&req.method==='GET'){
     if(!isLocalOrigin(req)||req.headers['sec-fetch-site']==='cross-site'||url.searchParams.get('id')!==voice.snapshot().id){res.writeHead(403);return res.end();}
     res.writeHead(200,{'content-type':'text/event-stream','cache-control':'no-store','connection':'keep-alive'});
@@ -330,7 +340,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (['/api/schedules','/api/codex-projects','/api/voice','/api/computer-use','/api/pass-attachment','/api/gameplay','/api/pass-cancel','/api/pass-chat','/api/pass-proposal', '/api/pass-decision', '/api/pass-resolve', '/api/projects', '/api/conversations', '/api/conversation-title', '/api/plan', '/api/task', '/api/briefing-seen', '/api/style', '/api/milestone', '/api/photo-delete', '/api/review', '/api/artifact-preview'].includes(url.pathname) && req.method === 'POST') {
+  if (['/api/home-level','/api/roommates','/api/schedules','/api/codex-projects','/api/voice','/api/computer-use','/api/pass-attachment','/api/gameplay','/api/pass-cancel','/api/pass-chat','/api/pass-proposal', '/api/pass-decision', '/api/pass-resolve', '/api/projects', '/api/conversations', '/api/conversation-title', '/api/plan', '/api/task', '/api/briefing-seen', '/api/style', '/api/milestone', '/api/photo-delete', '/api/review', '/api/artifact-preview'].includes(url.pathname) && req.method === 'POST') {
     res.setHeader('content-type', 'application/json');
     // Browser forms from other websites must not alter the local catalog.
     if (!req.headers['content-type']?.startsWith('application/json')) {
@@ -438,6 +448,38 @@ const server = http.createServer(async (req, res) => {
         if (!task || task.project !== input.project) throw new Error('Task not found.');
         result = previewArtifact(task, input.path);
         res.writeHead(200); return res.end(JSON.stringify({ ok: true, result }));
+      }
+      if(url.pathname==='/api/home-level') {
+        const home=world.households[input.project];
+        if(!home||!selectedProjects.includes(input.project))throw Error('Choose a home in this town.');
+        if(homeBuildState(gameplay,input.project).status!=='built')throw Error('Finish building this home first.');
+        const saved=passes.snapshot();
+        if([...saved.runs,...saved.proposals].some(r=>r.project===home.project&&['approved','queued','running','interrupted'].includes(r.status)))throw Error('Finish or resolve this home’s work before changing its test level.');
+        setHomeTestingLevel(home,experience(saved.runs).residents,input.level);
+        persistHouseholds();broadcast({type:'household',household:home});
+        res.writeHead(200);return res.end(JSON.stringify({ok:true}));
+      }
+      if(url.pathname==='/api/roommates') {
+        if(allowSynthetic)throw Error('Recruitment inspections are unavailable in the demo.');
+        const home=world.households[input.project];
+        if(!home||!selectedProjects.includes(input.project))throw Error('Choose a home in this town.');
+        if(homeBuildState(gameplay,input.project).status!=='built')throw Error('Finish building this home first.');
+        const saved=passes.snapshot(),view=roommateView(home,[...saved.proposals,...saved.runs],Object.values(world.households).flatMap(h=>h.characters));
+        if(input.action==='suggest') {
+          if(view.xp.level<2)throw Error(`Requires home level 2 · ${HOME_XP_THRESHOLDS[1]} pooled XP.`);
+          if(!runner.enabled)throw Error('The local runner is disabled. Reopen the normal app to enable inspections.');
+          if(!['codex','claude'].includes(input.provider)||!runner.status().providers[input.provider].installed)throw Error('Choose an installed provider.');
+          if(!view.owner||!residentCharacters(home).some(c=>c.id===view.owner.id))throw Error('This home needs an active Personal Assistant owner.');
+          if([...saved.runs,...saved.proposals].some(r=>r.project===home.project&&['approved','queued','running','interrupted'].includes(r.status)))throw Error('Finish or resolve this home’s current work before another inspection.');
+          const current=[...saved.proposals].reverse().find(p=>p.project===home.project&&p.slot===view.owner.slot);
+          const proposal=passes.propose({project:home.project,slot:view.owner.slot,provider:input.provider,kind:'roommate_inspection',title:'Suggest Roommates',instruction:inspectionInstruction(),recordedBy:'Human · Suggest Roommates',version:current?.version,enqueue:true},world.households);
+          result=passes.decide({id:proposal.id,version:proposal.version,action:'approve',confirmed:true},world.households);
+          broadcast({type:'passes',passes:passes.snapshot(),runner:runner.status()});
+        } else if(input.action==='recruit') {
+          result=recruitCandidate(home,view,input.candidateId);persistHouseholds();
+          broadcast({type:'household',household:home});
+        } else throw Error('Choose suggest or recruit.');
+        res.writeHead(200);return res.end(JSON.stringify({ok:true,result}));
       }
       if (url.pathname === '/api/gameplay') {
         if (input.action === 'expedite-home' && !selectedProjects.includes(input.project)) throw Error('Choose a home in this town.');

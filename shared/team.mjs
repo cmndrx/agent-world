@@ -1,3 +1,4 @@
+import { PROFESSION_BY_ID } from './catalogs/index.js';
 import { residentCharacters } from './foundation.mjs';
 // Assigned project responsibilities are planning metadata, never inferred activity.
 export const STARTER_ROLES=[
@@ -5,5 +6,5 @@ export const STARTER_ROLES=[
  {id:'junior_developer',title:'Junior developer',description:'Implement and verify code, websites and application changes.',color:0x5fbf73},
  {id:'researcher',title:'Researcher',description:'Investigate questions, inspect sources and return evidence and recommendations.',color:0x4f86c6},
 ];
-export const assignedRole=id=>id==='personal_assistant'?{...STARTER_ROLES[0],id,title:'Personal Assistant'}:STARTER_ROLES.find(r=>r.id===id)||null;
+export const assignedRole=id=>id==='personal_assistant'?{...STARTER_ROLES[0],id,title:'Personal Assistant'}:STARTER_ROLES.find(r=>r.id===id)||(Object.hasOwn(PROFESSION_BY_ID,id)?{id,title:PROFESSION_BY_ID[id].label,description:`Handle the scoped ${PROFESSION_BY_ID[id].label} portion of the request.`,color:0x4f86c6}:null);
 export function projectTeam(home){return home?.starterTeam||home?.ownerAgentId?residentCharacters(home).filter(c=>assignedRole(c.assignedRole)).map(c=>({agentId:c.id,slot:c.slot,name:c.name,role:c.assignedRole==='personal_assistant'?'assistant':c.assignedRole,title:assignedRole(c.assignedRole).title})):[];}

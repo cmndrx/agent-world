@@ -34,7 +34,9 @@ test('bridge withholds residents/work until build finishes and persists paid com
   fs.writeFileSync(preload,`import { LocalProjects } from ${JSON.stringify(pathToFileURL(path.resolve('bridge/local-projects.mjs')).href)}; LocalProjects.prototype.list=async()=>({projects:[{id:'fixture',name:'Fixture',path:${JSON.stringify(project)},rootCount:1}],skipped:0});`);
   fs.writeFileSync(path.join(dir,'gameplay.json'),JSON.stringify(game));
   fs.writeFileSync(path.join(dir,'selected-projects.json'),'[]');
-  const child=spawn(process.execPath,['--import',pathToFileURL(preload).href,'bridge/server.mjs','--port','0'],{env:{...process.env,AGENT_WORLD_HOME:dir,CODEX_HOME:path.join(dir,'codex'),AGENT_WORLD_RUNNER:'0'},stdio:['ignore','pipe','pipe']});
+  const entry=path.join(dir,'entry.mjs');
+  fs.writeFileSync(entry,`await import(${JSON.stringify(pathToFileURL(preload).href)});await import(${JSON.stringify(pathToFileURL(path.resolve('bridge/server.mjs')).href)});`);
+  const child=spawn(process.execPath,[entry,'--port','0'],{env:{...process.env,AGENT_WORLD_HOME:dir,CODEX_HOME:path.join(dir,'codex'),AGENT_WORLD_RUNNER:'0'},stdio:['ignore','pipe','pipe']});
   t.after(async()=>{child.kill();if(child.exitCode===null)await once(child,'exit');fs.rmSync(dir,{recursive:true,force:true});});
   const base=await new Promise((resolve,reject)=>{let out='';const timer=setTimeout(()=>reject(Error('Startup timeout')),10000);child.stdout.on('data',c=>{out+=c;const m=out.match(/http:\/\/127\.0\.0\.1:\d+/);if(m){clearTimeout(timer);resolve(m[0]);}});child.on('error',e=>{clearTimeout(timer);reject(e);});});
   const post=(route,data)=>fetch(base+route,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(data)});
