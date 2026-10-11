@@ -99,6 +99,22 @@ import calendarClock from 'lucide-static/icons/calendar-clock.svg?raw';
 import play from 'lucide-static/icons/play.svg?raw';
 import pause from 'lucide-static/icons/pause.svg?raw';
 import repeat from 'lucide-static/icons/repeat.svg?raw';
+import code from 'lucide-static/icons/code.svg?raw';
+import shield from 'lucide-static/icons/shield.svg?raw';
+import penTool from 'lucide-static/icons/pen-tool.svg?raw';
+import chartLine from 'lucide-static/icons/chart-line.svg?raw';
+import graduationCap from 'lucide-static/icons/graduation-cap.svg?raw';
+import heartPulse from 'lucide-static/icons/heart-pulse.svg?raw';
+import megaphone from 'lucide-static/icons/megaphone.svg?raw';
+import scale from 'lucide-static/icons/scale.svg?raw';
+import flaskConical from 'lucide-static/icons/flask-conical.svg?raw';
+import userRoundPlus from 'lucide-static/icons/user-round-plus.svg?raw';
+import clipboardList from 'lucide-static/icons/clipboard-list.svg?raw';
+import lockKeyhole from 'lucide-static/icons/lock-keyhole.svg?raw';
+import music from 'lucide-static/icons/music.svg?raw';
+import banknote from 'lucide-static/icons/banknote.svg?raw';
+import heartHandshake from 'lucide-static/icons/heart-handshake.svg?raw';
+import bot from 'lucide-static/icons/bot.svg?raw';
 import folderPlus from 'lucide-static/icons/folder-plus.svg?raw';
 import folderInput from 'lucide-static/icons/folder-input.svg?raw';
 import chevronRight from 'lucide-static/icons/chevron-right.svg?raw';
@@ -111,7 +127,7 @@ const RAW = {
   map: mapIcon, cloudSun, cloudRain, cloudSnow, snowflake, leaf, flower, cat, dog, rabbit, gem, sprout, clover, treeDeciduous, landmark,
   camera, images, arrowLeft, shovel, flower2, store, building2, hardHat, info,
   briefcase, inbox, copy, externalLink, messageCircle, gamepad, plug, plus, listChecks, target, arrowRight, circleAlert, flag,
-  arrowUp, square, mic, archive, archiveRestore, search, rotateCcw, chevronRight, folderPlus, folderInput, squarePen, calendarClock, play, pause, repeat,
+  arrowUp, square, mic, archive, archiveRestore, search, rotateCcw, chevronRight, folderPlus, folderInput, code, shield, penTool, chartLine, graduationCap, heartPulse, megaphone, scale, flaskConical, userRoundPlus, clipboardList, lockKeyhole, music, banknote, heartHandshake, bot, squarePen, calendarClock, play, pause, repeat,
 };
 
 const cache = {};

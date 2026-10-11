@@ -41,9 +41,9 @@ Recruitment and city services follow later.
 Stable agent/home IDs and the parallel engineering contracts are documented in
 [docs/FOUNDATION.md](docs/FOUNDATION.md). This supersedes automatic starter-team creation.
 
-**Home levels:** each home's building tier follows its combined resident XP, capped at level 5: Cottage → House → Villa → Manor → Estate. Existing resident XP applies immediately. Returned game responses can upgrade the building and its decor eligibility; reached outcomes continue awarding gems separately.
+**Home levels:** each home's building tier follows its combined resident XP, capped at level 15: Cottage → Family House → Duplex → Townhouse Row → Small Apartment Building → Apartment Block → Residential Tower → Landmark Residence. Existing resident XP applies immediately. Returned game responses can upgrade the building and its decor eligibility; reached outcomes continue awarding gems separately.
 
-**Agent and player XP:** completed game responses award 25 XP to the responding resident and to you. The top-bar level badge opens Levels & experience; resident chats show their own level, XP bar and points remaining. New responses show an XP notification, with level-up notices at increasing thresholds (100, then 150, then 200 XP). Existing saved responses count once; app restarts, archived chats and provider changes do not duplicate awards. Participation XP is independent from reviewed task rewards and home levels.
+**Agent and player XP:** completed game responses award 25 XP to the responding resident and to you. The top-bar level badge opens Levels & experience; resident chats show their own level, XP bar and points remaining. New responses show an XP notification, with level-up notices at increasing thresholds (100, then 150, then 200 XP). Existing saved responses count once; app restarts, archived chats and provider changes do not duplicate awards. Participation XP is independent from reviewed task rewards; home levels pool current residents’ XP.
 
 A low-poly, Sims-style world that **visualizes** the AI agents already working on your machine.
 Its activity layer watches the events agents leave behind and turns them into
@@ -129,7 +129,7 @@ Style is saved in `~/.agent-world/style.json`, separate from observed events and
 
 **Progress (gems and home levels).** Click the gems chip in the top bar.
 - Earn **+10 gems** at most once per project per local calendar day for new tasks you accept *with review notes* (existing accepted credits are preserved), and **+25** when you mark a project's outcome reached (Work → Now → *Reached*, with a confirmation).
-- Each reached outcome grows that house a level: Cottage, House, Villa, Manor, Estate, with new porch, garden and yard details.
+- Homes level from pooled resident XP across eight tiers. Reached outcomes award gems separately. New building designs remain concept art for a later modeling pass.
 - Spend gems in Build mode to unlock nicer decor. Some items also need a higher home level.
 - Work rewards are recomputed from your board. Agents cannot grant gems by doing work or looking busy.
 
@@ -352,9 +352,9 @@ Schedules are persisted atomically alongside the pass queue in passes.json. The 
 
 Agents must not create, resume or edit real schedules without scoped human authorization. QA uses an isolated AGENT_WORLD_HOME and CODEX_HOME and fixture CLIs; scheduled responses do not imply accepted work.
 
-## Starter team and scoped handoffs
+## Recruited household and scoped handoffs
 
-The first added project receives three persistent residents: Assistant (slot 1), Junior developer (slot 2), Researcher (slot 3). Existing first-home names and chat ownership are preserved. Assigned responsibilities are planning metadata, distinct from observed activity and activity-derived downtown specialties; no sessions/events are invented. Further imported homes keep their existing onboarding.
+Every new home starts with one Personal Assistant owner. Saved identities and chat ownership remain intact; only recruited household members spawn and participate in delegation. Assigned responsibilities are planning metadata, distinct from observed activity and activity-derived downtown specialties; no sessions/events are invented.
 
 Sending a prompt to this team authorizes scoped delegation of that request within the project. The selected provider/model/effort are retained throughout the request. The runner gives each resident its responsibility and the roster. Agents choose relevant handoffs in a structured response: role, task title, scoped instruction and earlier prerequisite IDs. For example the Assistant can delegate website implementation to the Junior developer, optionally following a Researcher report. There is no keyword router or direct provider-to-provider messaging.
 
@@ -364,8 +364,35 @@ Runs remain sequential to avoid competing workspace edits. The graph is bounded 
 
 Fixture CLIs verify execution/routing for Codex and Claude without provider spending. Intelligent task decomposition by a real model remains to be evaluated with real user prompts.
 
-Home progression now pools lifetime XP from every current resident in that home (unique slots, same project). Building thresholds are 300 / 750 / 1,350 / 2,100 total XP for House / Villa / Manor / Estate; fixed thresholds do not change with household size. Individual resident/player XP rules are unchanged. Rewards shows pooled XP and the remaining XP to the next home tier.
+Home progression now pools lifetime XP from every current resident in that home (unique slots, same project). Building thresholds are 100 / 750 / 2,000 / 4,000 / 7,000 / 11,000 / 16,000 total XP for Family House / Duplex / Townhouse Row / Small Apartment Building / Apartment Block / Residential Tower / Landmark Residence; fixed thresholds do not change with household size. Individual resident/player XP rules are unchanged. Rewards shows pooled XP and the remaining XP to the next home tier.
 
 The six MP3s in `audio/` form the background soundtrack. Playback begins after a user interaction, shuffles every cycle, avoids immediate repeats between cycles and uses a quiet 20% volume. The existing Sound toggle controls music and chimes together and remembers mute. Assets are bundled by Vite into the Electron package; playback needs no external music service.
 
 Town ambience: the user-supplied Meadows MP3 plays as a quiet (15%) continuous loop alongside the shuffled soundtrack, after the first interaction. It is excluded from the music playlist. The existing Sound toggle pauses/resumes both layers and agent chimes.
+
+## Home overview and Suggest Roommates
+
+Click the project/home sign by the mailbox to open Home overview: pooled home XP, level progress, resident roles and individual levels, and fifteen household slots, unlocking one per home level. Slot 1 belongs to the Personal Assistant. Home level 2 (100 pooled XP) unlocks slot 2 and Suggest Roommates. Slot 3 unlocks at home level 3 (350 pooled XP).
+
+Suggest Roommates authorizes one fresh, read-only inspection conversation by the owner using the selected installed Codex or Claude CLI. The inspection reads project instructions and at most ten relevant files, with a five-minute timeout and no web, external integrations, editing, delegation or automatic follow-up. Codex reads files through its command tool inside the read-only sandbox; Claude exposes only Read/Grep/Glob. Builds and tests are outside the authorized inspection. The assistant reports up to three distinct catalog role IDs with reasons, inspected evidence and uncertainties, ordered from most helpful to least helpful for the inspected project. Each role produces one named candidate, displayed in that recommendation order. The home modal shows the candidates and short, general descriptions of their roles; the full inspection summary, checks and uncertainties remain in the Assistant chat. Saved reports retain their original order; request a new inspection for the explicit usefulness ranking. Recommendations are reports, not proof of competence. Matching named candidates are simulated game identities; click Recruit to choose one explicitly. Capacity and current recommendation IDs are rechecked by the API, and recruitment preserves saved resident/chat identity bindings. Suggestions remain available when current slots are full, with an upgrade explanation. Actual provider inspection quality still requires a real user run.
+
+Delegation uses the household’s recruited catalog roles, including professions beyond the former fixed three-role roster. A solo owner cannot delegate to invented teammates. The inspection creates no team work; later normal prompts capture the actual recruited roster.
+
+## Eight-tier home evolution
+
+Each home level unlocks one resident slot, up to fifteen at Landmark Residence. Recruitment remains explicit. Total pooled XP thresholds are 0 / 100 / 350 / 750 / 1,250 / 2,000 / 3,000 / 4,000 / 5,500 / 7,000 / 9,000 / 11,000 / 13,000 / 14,500 / 16,000. Each tier is its own low-poly building modeled on [its concept image](docs/concepts/home-tiers/README.md): Cottage, two-storey Family House with porch and bay window, Duplex with twin gables and two doors, four-door Townhouse Row, balconied Small Apartment Building, U-shaped Apartment Block with a podium courtyard garden, Residential Tower with a rooftop pool deck, and the stepped Landmark Residence with its crown and spire. Each tier also has its own ground-floor plan, matched to the building type:
+
+- **Cottage:** kitchen and dining, a fireplace living room, a bedroom and a study desk.
+- **Family House:** hall with stairs, living room, kitchen, office and a study with a half-bath.
+- **Duplex:** two mirrored homes behind a party wall, each with its own door.
+- **Townhouse Row:** four narrow homes, each with its own door, kitchen, desk and stairs.
+- **Small Apartment Building:** lobby with elevator, stairs and mailboxes, an apartment, and a residents' lounge with shared desks.
+- **Apartment Block:** staffed lobby, fireplace lounge, laundry and parcel room, and co-working.
+- **Residential Tower:** concierge lobby with two elevators, co-working, café lounge, mail room and mechanical room.
+- **Landmark Residence:** grand lobby, two office suites, a fireplace library and a business center.
+
+Residents, their seats and monitors, conversations, paint, floor, decor and pets carry over when a home upgrades; residents reappear at their spots in the new layout. Extra residents beyond a plan's desks get a desk wherever one fits without blocking a doorway or station. Plants, rugs and similar pieces step aside for your decor. Upper floors and roofs lift away together as you zoom in (like a roof); outer walls facing the camera and all interior partitions lower so residents stay easy to see and click. A tall home standing between the camera and the home you're looking at opens too. Zoom out fully and the camera pulls back and rises far enough to show the tallest home whole, including the one you're centered on. Upper floors are not walkable; residents use the ground floor. House style changes the roof treatment (slate gable, craftsman hip, modern flat or red barn) without changing the silhouette; yard landscaping skips any spot where you placed decor. Screenshots: [docs/screenshots/home-tiers](docs/screenshots/home-tiers).
+
+Home overview includes **Home level · Testing**: choose levels 1–15 and Apply, or Use earned XP to remove the home-only adjustment. This changes building tier and recruitment capacity without modifying agent/player XP, recorded work, or existing residents. Future earned XP remains additive. Finish home construction and active work first.
+
+**Current home progression (October 11, 2026):** 15 levels and resident slots, eight buildings at levels 1, 4, 6, 8, 10, 12, 14 and 15. Max remains 16,000 pooled XP; early slots unlock at 100 and 350 XP. No residents are added automatically. The testing selector supports all 15 levels. When the authored interior lacks enough seats, an open coworking floor provides 15 distinct work screens; shell designs remain unchanged. This supersedes older eight-level/capacity descriptions.

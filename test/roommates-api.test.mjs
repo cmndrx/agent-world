@@ -1,0 +1,44 @@
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs/promises';import os from 'node:os';import path from 'node:path';import {spawn} from 'node:child_process';import {once} from 'node:events';
+import {PassStore} from '../bridge/passes.mjs';
+for(const provider of ['codex','claude'])test(`${provider} roommate inspection, recruitment and API gates stay scoped`,async t=>{
+ const home=await fs.mkdtemp(path.join(os.tmpdir(),'aw-roommate-api-')),project=await fs.realpath(home),cli=path.join(home,'fixture-cli'),log=path.join(home,'calls.json');
+ const result={summary:'A design role would help this fixture project.',checks:['Read fixture README'],limitations:[],next:null,roommateRoles:[{roleId:'graphic_design_assistant',reason:'This project has UI work.'},{roleId:'researcher',reason:'Research comes after the UI work.'}]};
+ await fs.writeFile(cli,`#!${process.execPath}\nconst fs=require('fs'),a=process.argv.slice(2);if(a[0]==='mcp'){console.log('[]');process.exit(0);}let input='';process.stdin.on('data',c=>input+=c);process.stdin.on('end',()=>{fs.writeFileSync(${JSON.stringify(log)},JSON.stringify({a,input}));const r=${JSON.stringify(result)},id='11111111-1111-1111-1111-111111111111';if(a.includes('--print')){console.log(JSON.stringify({type:'system',subtype:'init',session_id:id,model:'fixture'}));console.log(JSON.stringify({type:'result',session_id:id,is_error:false,structured_output:r}));}else{console.log(JSON.stringify({type:'thread.started',thread_id:id}));fs.writeFileSync(a[a.indexOf('--output-last-message')+1],JSON.stringify(r));}});`,{mode:0o700});
+ await fs.writeFile(path.join(home,'households.json'),JSON.stringify({[project]:{project,name:'Fixture',characters:[{id:'owner',slot:1,name:'Otto',seed:1,assignedRole:'personal_assistant'}],ownerAgentId:'owner',residentAgentIds:['owner']}}));
+ await fs.writeFile(path.join(home,'selected-projects.json'),JSON.stringify([project]));
+ const runs=Array.from({length:12},(_,i)=>({id:'xp'+i,project,slot:1,status:'completed',result:{summary:'Old fixture response'}}));
+ const draft={id:'draft',project,slot:1,status:'proposed',version:1,title:'Keep this draft',instruction:'Human draft'};
+ await fs.writeFile(path.join(home,'passes.json'),JSON.stringify({runs,proposals:[draft]}));
+ await fs.writeFile(path.join(home,'README.md'),'Fixture project');
+ const child=spawn(process.execPath,['bridge/server.mjs','--port','0'],{env:{...process.env,AGENT_WORLD_HOME:home,CODEX_HOME:path.join(home,'codex'),AGENT_WORLD_RUNNER:'1',AGENT_WORLD_CODEX_COMMAND:cli,AGENT_WORLD_CLAUDE_COMMAND:cli},stdio:['ignore','pipe','pipe']});
+ t.after(async()=>{child.kill();if(child.exitCode===null)await once(child,'exit');await fs.rm(home,{recursive:true,force:true});});
+ const base=await new Promise((resolve,reject)=>{let out='';const timer=setTimeout(()=>reject(Error('Startup timeout')),10000);child.stdout.on('data',c=>{out+=c;const match=out.match(/http:\/\/127\.0\.0\.1:\d+/);if(match){clearTimeout(timer);resolve(match[0]);}});child.once('exit',()=>{clearTimeout(timer);reject(Error('Server exited'));});});
+ const post=(body,origin)=>fetch(base+'/api/roommates',{method:'POST',headers:{'content-type':'application/json',...(origin?{origin}:{})},body:JSON.stringify({project,...body})});
+ const read=async()=>{const r=await fetch(base+'/api/roommates?'+new URLSearchParams({project}));assert.equal(r.status,200);return r.json();};
+ assert.equal((await post({action:'suggest',provider},'https://bad.invalid')).status,403);
+ assert.equal((await post({action:'recruit',candidateId:'forged'})).status,400);
+ assert.equal((await post({action:'suggest',provider})).status,200);
+ assert.equal((await post({action:'suggest',provider})).status,400);
+ let view;for(let i=0;i<100;i++){view=await read();if(view.inspection?.status==='completed')break;await new Promise(r=>setTimeout(r,100));}
+ assert.equal(view.inspection?.status,'completed');assert.equal(view.candidates.length,2);assert.deepEqual(view.candidates.map(c=>c.roleId),['graphic_design_assistant','researcher']);assert.deepEqual(view.candidates.map(c=>c.rank),[1,2]);
+ const store=new PassStore(path.join(home,'passes.json'));assert.equal(store.snapshot().proposals.find(p=>p.id==='draft').instruction,'Human draft');assert.equal(store.snapshot().runs.filter(r=>r.kind==='roommate_inspection').length,1);
+ const call=JSON.parse(await fs.readFile(log));assert.match(call.input,/at most ten/);assert.ok(call.a.includes('--output-schema')||call.a.includes('--json-schema'));
+ if(provider==='codex'){assert.equal(call.a[call.a.indexOf('--sandbox')+1],'read-only');assert.ok(call.a.includes('features.shell_tool=true'));assert.ok(call.a.includes('web_search="disabled"'));}else assert.equal(call.a[call.a.indexOf('--tools')+1],'Read,Grep,Glob');
+ const candidate=view.candidates[0];assert.equal((await post({action:'recruit',candidateId:candidate.id})).status,200);
+ view=await read();assert.equal(view.residents.length,2);assert.equal(view.residents[1].id,candidate.id);assert.equal(view.residents[1].professionId,'graphic_design_assistant');
+ assert.equal((await post({action:'recruit',candidateId:view.candidates[1].id})).status,400);
+ assert.equal(await fs.readFile(path.join(home,'README.md'),'utf8'),'Fixture project');
+ store.change(data=>{for(const r of data.runs)r.xpExcluded=true;});
+ assert.equal((await read()).xp.level,1);const locked=await post({action:'suggest',provider});assert.equal(locked.status,400);assert.match((await locked.json()).error,/level 2/);
+ const levelPost=(level,extra={},origin)=>fetch(base+'/api/home-level',{method:'POST',headers:{'content-type':'application/json',...(origin?{origin}:{})},body:JSON.stringify({project,level,...extra})});
+ const before=await fs.readFile(path.join(home,'passes.json'),'utf8');
+ assert.equal((await levelPost(3,{},'https://bad.invalid')).status,403);
+ assert.equal((await levelPost(16)).status,400);
+ assert.equal((await levelPost(3,{project:'/not-selected'})).status,400);
+ assert.equal((await levelPost(15)).status,200);assert.equal((await read()).capacity,15);
+ assert.equal(JSON.parse(await fs.readFile(path.join(home,'households.json'),'utf8'))[project].homeXpAdjustment.xp,16000);
+ assert.equal((await levelPost(1)).status,200);assert.equal((await read()).xp.level,1);assert.equal((await read()).residents.length,2);
+ assert.equal((await levelPost(null)).status,200);assert.equal((await read()).testing,null);
+ assert.equal(await fs.readFile(path.join(home,'passes.json'),'utf8'),before);
+
+});

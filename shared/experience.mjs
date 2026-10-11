@@ -11,7 +11,7 @@ export function xpLevel(xp = 0) {
 export function experience(runs = [], households = []) {
   const seen = new Set(), residents = {}, agents = {}, awards = [];
   for (const run of runs) {
-    if (!run.id || seen.has(run.id) || run.status !== 'completed' || !run.result?.summary?.trim() || typeof run.project !== 'string' || !Number.isInteger(run.slot) || run.slot < 1) continue;
+    if (!run.id || seen.has(run.id) || run.xpExcluded === true || run.status !== 'completed' || !run.result?.summary?.trim() || typeof run.project !== 'string' || !Number.isInteger(run.slot) || run.slot < 1) continue;
     seen.add(run.id);
     const key = residentKey(run.project, run.slot);
     residents[key] = (residents[key] || 0) + RESPONSE_XP;

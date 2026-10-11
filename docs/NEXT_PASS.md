@@ -1,3 +1,226 @@
+# Latest pass — Home overview stale bridge fix (October 11, 2026, Windows)
+
+- Reproduced the screenshot failure against the real listener on :4777: GET /api/roommates returned plain-text `404 not found`. The existing bridge process started October 10 and had not loaded the current route; Electron logs confirm it repeatedly reused that bridge. Current checkout was clean before this pass.
+- Added `web/src/home-response.js` to preserve JSON API errors and explain outdated/non-JSON server responses instead of exposing JSON parser errors. Home overview uses it for reads, level changes and roommate actions. A successful poll clears an earlier error; responses from a previously selected home cannot replace the current home's error.
+- Fresh real-state check: no proposals/runs, runner disabled, computer-use idle. Restarted only the verified bridge PID 73652 from this checkout, retaining runner disabled and :4777/dist. Replacement PID 25712. No Electron restart, real prompts, recruitment, XP edits, task/queue writes, commit or push.
+- Verified real GET /api/roommates now returns 200 JSON for Agent World Build, built, level 1, one resident/capacity 1. Browser QA clicked the actual `Open home overview for Agent World Build` button and observed the full overview with home XP, fifteen levels, residents and suggestions. Native Electron window was not reloaded; closing/reopening the existing error modal should use the refreshed API, and a safe window reload loads the new error handling.
+- Checks: focused home-response + roommate tests 10/10 passed; diff check clean. Required `npm run app:build` ran: Vite passed, macOS packaging failed because its command is hard-coded `--mac` on Windows. Direct Windows packaging initially failed extracting signing tools (symlink privilege); `npx electron-builder --win --dir '--config.win.signAndEditExecutable=false'` succeeded. Verified all 88 dist/bridge/shared/adapters packaged files byte-identical. Authenticode reports NotSigned; no signing certificate configured, so signed-package verification remains unavailable. Rebuilt assets/package again after final response-helper refinement.
+- Next smallest follow-up: make app:build platform-aware and configure Windows signing if distribution is intended. Keep runner disabled unless the human authorizes its execution setup.
+
+# Latest pass — Fifteen home levels, eight building unlocks (October 11, 2026)
+
+- Shipping handoff: user authorized committing and pushing the accumulated roommate, building/interior and progression changes on the existing `suggest-roomate` branch. Latest validation is 257/257 tests plus packaged build/signature/asset parity. Running app still needs a safe reopen; fifteen-resident visual/performance QA remains a follow-up.
+
+- Home levels and building tiers are independent. Every level grants one recruit slot (1–15). Building unlock levels: Cottage 1, Family House 4, Duplex 6, Townhouse Row 8, Small Apartment Building 10, Apartment Block 12, Residential Tower 14, Landmark Residence 15. No automatic recruitment.
+- Total home XP thresholds: 0 / 100 / 350 / 750 / 1,250 / 2,000 / 3,000 / 4,000 / 5,500 / 7,000 / 9,000 / 11,000 / 13,000 / 14,500 / 16,000. Keeps max at 16,000; saved XP and adjustments untouched. Existing homes recalculate their levels.
+- Testing selector supports 15 levels; mailbox/map show compact level text rather than 15 stars; overview shows next building unlock. Authored floor plans remain until capacity exceeds their desk count, then an open coworking floor supplies 15 unique desks/screens. Upper floors remain visual only. No screen sharing for new max capacity.
+- Full npm test **257/257 passed**. Coverage includes every XP threshold and building unlock, fifteen-role recruitment and sixteenth refusal, testing levels/reset, unique desk positions and every desk/required station reachable for all 15 levels (including tier yard obstacles). Required app:build, strict codesign and dist (15)/bridge (24)/shared (41)/adapters (8) byte parity passed; existing build warnings remain.
+- Fresh API showed no active/queued/interrupted work and idle computer-use. Native app reopen was twice interrupted by user interaction; stopped closing attempts. Running window still serves its old bundle and needs a safe reopen. No saved XP, home adjustment, residents, work history, queue changes, paid runs, commit or push. Fifteen-resident rendered frame rate and visual coworking layout remain unverified; only navigation/layout/API behavior was tested.
+
+# Latest pass — Tier floor plans and full-building zoom (October 11, 2026)
+
+- **Zoom:** max camera distance now follows the tallest home: 70 for small homes, up to 110 (≈86 with a Landmark). A camera `lift` in `web/src/camera.js` raises the orbit point as you zoom out, so towers stay in frame at the default angle. The centered ("peek") home now shows its full building for the last 16 units of zoom-out (`peekOpen` in `lot.update`). Verified at the default yaw/pitch: the centered Landmark, crown and spire included, and every neighbor are visible whole (`docs/screenshots/home-tiers/zoomed-out-landmark.jpg`).
+- **Floor plans (new `web/src/home-floorplans.js`, pure data plus geometry helpers):** each tier has its own ground floor.
+  - Cottage: kitchen and dining, fireplace living room, partitioned bedroom, study.
+  - Family House: hall with stairs, living room, kitchen, four-desk office, study with half-bath.
+  - Duplex: two mirrored homes behind a solid party wall, each with its own door, kitchen, dining, desks and TV lounge.
+  - Townhouse Row: four narrow homes, each entered by its own door, with a kitchen, a desk on its east wall and stairs.
+  - Small Apartment Building: lobby (elevator, stairs, mailboxes, bench), apartment 1A, residents' lounge and co-working.
+  - Apartment Block: staffed lobby, fireplace lounge, laundry, parcels and kitchenette, co-working.
+  - Residential Tower: concierge lobby with two elevators, co-working, mechanical room, café lounge, mail room.
+  - Landmark Residence: grand lobby, two office suites, fireplace library with a reading desk, business center.
+  - New models in `web/src/furniture.js`: bed, kitchen with espresso machine, fridge, dining set, armchair, loveseat, fireplace with chimney breast, TV, reception, mail wall, elevator, stairs, bath, wardrobe, laundry, lockers, bench, column, planter.
+- **Lot integration (`web/src/lot.js`):** `buildInterior()` rebuilds partitions, tiled and carpeted room floors, items, wall art, stations and desks per tier.
+  - Interior partitions lower with the cutaway (to 16%) and stand when walls are up or the roof is on.
+  - Monitors persist per seat, and residents re-place via `layoutVersion` (`web/src/sim.js`).
+  - Overflow desks for residents beyond a plan's seats are fitted only where every key spot stays reachable; otherwise residents share.
+  - Optional pieces (plants, rugs, armchairs, TV…) yield to decor. Decor overlapping walls, fixed furniture or a door approach is drawn but not walled off.
+  - Yard stroll spots are pruned to reachable ones.
+- **Checks:**
+  - `test/home-tiers.test.mjs` adds floor-plan validation: in-bounds, no overlaps, clears door leaves, desks ≥ slots, eight distinct plans, every desk's chair/wait/visitor spot reachable, each station reachable, three couch seats.
+  - Full `npm test` **255/255**; `git diff --check` clean.
+  - `npm run app:build` passed (existing warnings). Strict codesign passed. dist (15)/bridge (24)/shared (41)/adapters (8) byte parity.
+- **Isolated QA** (`AGENT_WORLD_HOME` in the session scratchpad, :4788, runner off, eight fixture homes, Landmark with eight residents):
+  - Two full 1→8 cycles: meshes/children/residents stable; GPU geometries steady at 1166 across repeated cycles; screens kept; nobody stranded in furniture.
+  - With eight residents in every tier, all key spots stay reachable. Six tiers fit eight desks; the Family House fits six and the Townhouse Row six (with a stale bench in front of home 4's door), and the rest share.
+  - A bench on the Family House study armchair hides it; it returns when the bench is removed.
+  - Clicking a resident inside the Landmark plan selects her.
+  - Overhead floor-plan photos: `docs/screenshots/home-tiers/floorplans/`.
+- **Real app:** idle queue (no approved/queued/running/interrupted proposals or runs), computer-use idle, no voice process; only this session's own Claude Code hooks were active. Reopened the packaged app, which serves the new bundle.
+  - The real home reports level 8 because of a player-selected testing adjustment (`homeXpAdjustment`, "Testing: player selected home level 8", 07:27Z), added by concurrent work in this checkout (`setHomeTestingLevel`, `mapmode.js` card placement). Run XP is still 125, and this pass did not touch it.
+  - The packaged build includes those concurrent working-tree changes. No commit or push.
+- **Limitations / next:**
+  - Upper floors are still visual only, with no walkable interiors; residents use the ground floor.
+  - Partitions lower to stubs in cutaway mode, so wall-hung items live on outer walls only.
+  - A few individual station spots per plan are unreachable while others at the same station work (see `planProblems`-style validator output).
+  - Overflow desks beyond a plan's seats can share in small homes.
+  - Interior art direction is first-pass; the user should review the floor-plan screenshots and say which rooms to tune.
+
+# Latest pass — In-game home testing levels (October 11, 2026)
+
+- Home overview now has Home level · Testing with levels 1–8 and Apply, plus Use earned XP to remove the adjustment. Clearly displays the signed home-only XP adjustment. Existing residents/chats remain when lowering level; future earned XP stays additive. Agent/player XP and run records remain untouched.
+- Same-origin POST /api/home-level validates selected/built homes, integer levels and idle home work, persists households and broadcasts the change. Uses existing homeXpAdjustment metadata. No provider execution.
+- Focused progression + both-provider isolated API checks 15/15 passed: every tier, signed lowering, additive earnings, reset, invalid levels/project/origin, persisted state and unchanged run history. Syntax and diff checks passed. Required app:build, strict codesign and dist (15)/bridge (24)/shared (41)/adapters (8) byte parity passed. Safely reopened idle Electron; native Home overview/dropdown verified all eight tier names, Use earned XP, Apply, signed adjustment and explanatory copy. Left the user’s home at level 3 / 750 XP, agents/player unchanged. No real provider run, recruitment, new testing grant, commit or push.
+
+# Latest pass — Requested home level three (October 11, 2026)
+
+- Added explicit household `homeXpAdjustment` gameplay metadata: signed integer XP with reason/time, applied to home progression only. It never creates completed runs or changes agent/player participation XP. Future earned resident XP remains additive.
+- User requested their selected home at level three: target 750 XP (Duplex, third resident slot). Progression focused tests 12/12 and diff checks passed. Required app:build, strict codesign, dist/bridge/shared/adapters byte parity passed. Backed up households to ~/.agent-world/backups/home-level-three-1791702967 before adding +625 home-only XP. Safely reopened idle app; live packaged state confirms home level 3 / 750 XP, player still 125 XP, resident XP unchanged, and native label shows Duplex. Third slot unlock follows existing level rule; no resident automatically added. No synthetic activity, queue edit, commit or push.
+
+# Latest pass — Map project cards above homes (October 11, 2026)
+
+- Moved occupied Neighborhood map project cards from ground-level plot centers to above each building roof. Projects the building bounds using actual roof/tier height, then places the full card 12 pixels above its screen silhouette at any camera angle; empty plots and street labels keep their positions. Project selection and moving homes remain unchanged. Regular play-mode mailbox labels are unchanged.
+- JavaScript syntax and diff checks passed. Required app:build, strict codesign and dist (15)/bridge (24)/shared (41)/adapters (8) byte parity passed. Safely reopened the idle app. Initial native QA caught top-down overlap and led to the projected-bounds correction. Final map screenshot verification was interrupted by the user navigating the running window; stopped UI actions to preserve their interaction. Final visual placement remains to be reviewed in Neighborhood map. No project layout, XP, residents, queue, commit or push changes.
+
+# Latest pass — Eight residential tier buildings (October 11, 2026)
+
+- **What changed:** every home level now renders its own low-poly building after `docs/concepts/home-tiers/0N-*.png`. Cottage (slate cross gable, half-timbering, chimney smoke, picket fence, vegetable bed), Family House (two storeys, porch with columns and railing, bay window, dormer), Duplex (twin front gables, two doors with canopies, center party line, hedge between paths), Townhouse Row (four colored doors, dormers, party walls, chimney stacks, front planters), Small Apartment Building (four storeys, wood-clad center bay, side balconies, hip roof, rooftop stair box), Apartment Block (six storeys, U-shaped mansard wings around a podium courtyard garden), Residential Tower (ten storeys, stacked corner balconies, rooftop pool/pergola/umbrella), Landmark Residence (thirteen storeys: podium terraces, amenity level, tower, planted setback, crown pavilion, spire).
+  - New `web/src/home-tier-plans.js`: pure layout data per tier (front doors/windows, yard footprints, trees, heights), `frontWallBlocks`, `leafRect`, `yardProps` (props skip any spot holding player decor) and `planProblems`.
+  - New `web/src/home-tiers.js`: facade extras on the ground-floor walls (quoins, plinth/stone base, lanterns, bay window, entrance portals), the upper stack (floors, roofs, balconies, canopies, rooftop amenities) and the yard (five fence styles, paths, beds, hedges, lamps, benches, terraces, trees).
+  - `web/src/lot.js`: `setLevel` now rebuilds only the shell (walls with tier openings, upper stack, studio plants, yard) and disposes the previous geometry. Front-wall obstacles, door leaves, plants and yard props are tier obstacles. The old cumulative porch/arch/fountain/flag/statue extras are gone. Walls support multiple doors and variable-width windows with flower boxes. The ground-floor studio, desks (up to eight), stations, decor, paint, floor, pet and gallery are untouched, so residents, conversations, identities and customization carry over.
+  - Cutaway: the whole upper stack lifts away like a roof (taller stacks lift farther). `main.js` `blocksView` also opens any multi-storey home standing between the camera and the viewed point (or the followed resident). Upper floors are visual only; everyone works in the ground-floor studio.
+  - House style now picks the roof treatment on every tier: slate gable / craftsman hip / modern flat (short chimney stacks) / red barn gable. Paint tints the building body.
+- **Checks:**
+  - `node --test test/home-tiers.test.mjs` covers tier/level alignment, plan problems, door passage on every tier through the real `NavGrid` and decor yielding. Full `npm test` **251/251 passed**.
+  - Required `npm run app:build` passed with the existing chunk/author/asar/notarization warnings. `codesign --verify --deep --strict` passed. dist (15)/bridge (24)/shared (41)/adapters (8) packaged files are byte-identical.
+- **Isolated browser QA:** bridge on :4788 with `AGENT_WORLD_HOME`/`CODEX_HOME` in the session scratchpad, runner off, serving `dist`. The fixture has eight homes, one per tier, with 1,634 simulated completed runs; home 8 has eight residents.
+  - All eight tiers rendered with no console errors.
+  - In-page checks on every tier: every key spot and all eight desks reachable from the street, and each door directly passable (2.3–2.6 m paths).
+  - Three full 1→8→1 upgrade cycles left mesh and child counts, the 21 residents and the 4 walls unchanged.
+  - All 32 House-style × tier combinations built without error, and a bench placed on the cottage vegetable bed hid that bed until removed.
+  - At normal zoom the eight-resident Landmark opens its stack and lowers its facing walls, and all eight residents and desks are visible. Clicking Mira selected her and opened Watch activity. The mailbox sign opened Home overview: "Landmark Residence · 8 of 8 rooms filled".
+  - Upgrade and reload persistence: saved paint, floor, craftsman style and a bench through the isolated style API, added four fixture runs, restarted the bridge and reloaded. The Cottage became Family House (level 2, 100 XP, capacity 2) with Otto, the customization and the bench intact, and no duplicate residents.
+  - Fixture photos via the game's photo capture: `docs/screenshots/home-tiers/` (one per tier, `roof-style-variants.jpg`, `landmark-cutaway-eight-residents.jpg`). The QA camera used a narrowed FOV and a page-only peek override to keep the stacks on. Neither is in source.
+- **Real app:** confirmed no approved/queued/running/interrupted proposals or runs (voice calls register as runs) and idle computer-use, then quit and reopened the packaged app. The only active session was this Claude Code session's own hooks. It serves the new bundle. The real home is unchanged at level 2 / 125 XP / 2 of 2 residents and now renders the Family House. No real XP, recruitment, style, queue or schedule changes. No paid prompts, commit or push.
+- **Limitations / next:**
+  - Upper floors aren't walkable and residents don't use them; a multi-floor interior with stairs/elevator would need multi-level nav.
+  - Buildings are recognizable low-poly interpretations, not exact replicas (for example the landmark's terrace cascade and the apartment block's corner pavilions are simplified).
+  - The centered home still lifts its stack within 76 units, so at max zoom you see your own building's full silhouette only by panning it off-center (existing roof rule).
+  - Frame-rate with eight tall homes was not measured on low-end hardware.
+  - The Landmark (≈36 m) can still hide homes diagonally behind it when nothing is focused there.
+  - A player's yard decor placed before an upgrade can sit next to new hedges and lamps (overlaps are skipped, adjacency is not).
+  - Next smallest step: the user reviews the in-game Family House and the screenshots against the concepts, then tune proportions and colors per tier.
+
+# Latest pass — Eight residential tiers and concept art (October 11, 2026)
+
+- Added the user's eight tier names/descriptions: Cottage, Family House, Duplex, Townhouse Row, Small Apartment Building, Apartment Block, Residential Tower, Landmark Residence. Pooled current-resident XP mechanism and 25-XP successful-response awards unchanged. Total thresholds now 0 / 100 / 750 / 2,000 / 4,000 / 7,000 / 11,000 / 16,000; preserves early unlocks and scales later costs. Max requires 640 total completed responses; this is an initial balance, not a measured playtest result. XP records remain unchanged; tiers recalculate from the new curve.
+- Home capacity equals level, up to eight. Eight slot cards show each exact unlock requirement; dynamic full-house/next-level messages and server recruitment gates support every tier. Slot unlocks do not auto-recruit. Existing eight-desk support retained; real delegation uses actual recruited roles. Three role suggestions per bounded inspection remain intentional; no additional automated inspection or provider execution.
+- Deferred new 3D building designs as requested; existing cutaway building/exterior treatment remains. Sign/Rewards/overview use the new names and max level. Generated eight individual original low-poly concept images, visually inspected in generation outputs, copied into `docs/concepts/home-tiers/` with a README gallery and balance table. Concept assets are not bundled into the game or represented as finished models.
+- Full Node suite **247/247 passed** after updating the renamed level-3 decor assertion. Includes every threshold/cap, eight-slot unlocks, seven distinct recruits into an isolated eight-resident home, ninth refusal and identity reuse. Required `npm run app:build`, strict codesign, dist (15)/bridge (24)/shared (41)/adapters (8) byte parity and diff checks passed; existing package warnings remain.
+- Confirmed idle game queue/connection before safe app reopen. Live packaged API verified level 2 / 125 XP / capacity 2 and all eight exact slot requirements. Native sign shows Family House. User began interacting with the app during modal QA; stopped navigation rather than closing their chat. Eight-resident renderer performance and later-tier visual layouts remain unverified; do not claim new tower models or real maximum-capacity playtesting. No real XP/recruitment/queue metadata changes, paid prompt, commit or push.
+- Next design pass: review the eight concepts before implementing building meshes/cutaways and test eight-resident desk/scene performance using isolated fixtures. Tune balance from actual upgrade intervals across different household sizes.
+
+# Latest pass — Third roommate at home level 3 (October 11, 2026)
+
+- Home capacity now scales 1 / 2 / 3 residents at home levels 1 / 2 / 3. Slot 3 unlocks at the existing 750 pooled XP level-3 threshold. Modal lock/full-house copy and API recruitment refusals show the exact level/XP requirement; all three rooms full still permits suggestions. No automatic recruitment or real XP edits.
+- Updated README, CONCEPT and shared skill guidance. Focused progression/roommate/provider API suite **19/19 passed**, including below-threshold lock, level-3 recruitment into the third slot and refusal beyond three residents. Syntax and diff checks passed.
+- Required `npm run app:build`, strict codesign and dist (15)/bridge (24)/shared (41)/adapters (8) byte parity passed. Safely reopened idle Electron; live API/native overview show the third slot locked at Home level 3 · 750 pooled XP. Screenshot: `/tmp/agent-world-third-slot.png`. Real home remains at 125 XP with Otto and Ellis. Existing build warnings remain; no prompt, recruitment, metadata edit, commit or push.
+
+# Latest pass — Re-recruitment duplicate identity fix (October 11, 2026)
+
+- Root cause: removed candidates remain saved for identity/history preservation. Re-recruiting the same candidate appended a second character with its existing candidate ID and a new slot. Membership by ID selected both records, creating two Ellis residents in roster and scene.
+- Recruit now reactivates an existing candidate record instead of appending another. Keeps the original slot, identity and history; capacity/role gates still run before recruitment. Focused roommate/unit/provider API suite **7/7 passed**, including remove → re-recruit → reload and repeated-request rejection.
+- User-authorized real save repair: confirmed idle game queue/connection, closed Electron, backed up households to `/Users/blacksatoshi/.agent-world/backups/duplicate-roommate-1791693106/households.json`, retained Ellis slot 4 and removed only duplicate slot 5. Checked slot 5 had no saved runs/proposals/schedules. No report, XP flag, chat or unrelated household changed.
+- Required `npm run app:build`, strict codesign, dist (15)/bridge (24)/shared (41)/adapters (8) parity and diff checks passed. Safely reopened Electron; live API/native roster/scene show exactly Otto and one Ellis. Screenshot: `/tmp/agent-world-single-ellis.png`. Existing package warnings remain. Preserved the prior welcome-animation work; no commit/push or paid prompt.
+
+# Latest pass — "new resident" celebration (October 11, 2026)
+
+- **House modal (`web/src/home-overview.js`):** a successful Recruit shows a welcome card over the panel.
+  - The card: the candidate's live 3D bust (pop and bounce, gold ring), rotating light rays, a CSS confetti burst, "New roommate", "Welcome home, <name>!", a role chip, "<name> is moving in now." and a "Nice!" button.
+  - It dismisses after 4.2 s, on click, or on the backdrop. The new resident's room card then pops in with a gold glow (`.just-joined`).
+  - The card element is reused across the 2.5 s polling refreshes, so the animation plays once. Reduced motion disables the animations.
+- **World (`web/src/main.js`, `web/src/sim.js`):** a household update that adds a character to an existing lot, after the first snapshot and not during replay (`knownResidents`), creates the Sim with `arriving: true`.
+  - The new resident starts at the lot entrance and walks in with a bouncy step.
+  - Confetti bursts at the gate, the reminder chime plays, and a "🏡 <name> moved in to <home>! Welcome home." toast appears.
+  - On reaching their spot they do a happy hop (`popT`) with a second confetti burst (`Sim.onArrive`). Initial load and existing residents are unaffected.
+- **Debug handle:** now exposes `applyHousehold`.
+- **QA:** isolated demo.
+  - Modal: page-only mocked `/api/roommates` GET/POST; the welcome card appeared, then Ellis's room card glowed.
+  - World: called `applyHousehold` with an added character. Arriving and walking from the gate with confetti and the toast, then arrived inside. No console errors.
+- **Checks:** npm test passed; app:build, strict codesign and dist parity passed. ⌘R in the running app. No commit or push.
+
+# Latest pass — removed Assistant chat from the home modal (October 11, 2026)
+
+- Removed the "Assistant chat" button and its click handler from `web/src/home-overview.js`. The `onChat` option is still passed by main.js but unused. npm test 244/244; app:build, strict codesign and dist parity passed; the built JS has no "Assistant chat". ⌘R in the running app. No commit or push.
+
+# Latest pass — Home overview (house modal) visual upgrade (October 10, 2026)
+
+- Rewrote `HomeOverview.render()` in `web/src/home-overview.js`. Behavior, API calls and `data-*` hooks are unchanged.
+- **Header:** a house icon in a gradient tile, the home name, and "level name · N of M rooms filled".
+- **Home XP:** uses the shared `xpMarkup` meter in an orange/pink house theme, with a note that home XP pools the residents' XP.
+- **Residents:** three room cards.
+  - A filled room shows a live 3D bust (the resident's real look via the new `look(project, slot)` callback, falling back to `lookFromSeed(seed)`), name, role with a category icon, and a level pill plus mini XP bar.
+  - An open room is a dashed accent card with a "recruit a suggested roommate" icon; a locked room shows a lock and its requirement.
+- **Suggested roommates:** a tinted panel.
+  - The header has a gradient sparkle icon, a short explanation, a pill provider select, a primary "Suggest roommates / Suggest again" button and a ghost "Assistant chat" button.
+  - Status, lock, error and full notes are icon rows.
+  - Candidate cards show a 3D bust, name, a "Top pick" gold badge or "#rank", a role chip with a category icon (15 categories mapped to new Lucide icons), the description, and a Recruit / In home / No open room pill.
+- **Portraits:** cached by resident or candidate id across the 2.5 s polling re-renders, so there's no flicker; they're disposed when the dialog closes.
+- **Icons:** code, shield, penTool, chartLine, graduationCap, heartPulse, megaphone, scale, flaskConical, userRoundPlus, clipboardList, lockKeyhole, music, banknote, heartHandshake, bot.
+- **QA:** isolated demo with a page-only `/api/roommates` mock in the real response shape (demo has no roommate homes). Checked full rooms by day, plus an open room with Recruit buttons at night. Contrast checker 0 failing after darkening the house level badge. No console errors.
+- **Checks:** npm test passed; app:build, strict codesign and dist parity passed. ⌘R in the running app. No commit or push.
+
+# Latest pass — Plain-English candidate role descriptions (October 10, 2026)
+
+- Candidate cards now show short, general role descriptions from the profession catalog instead of project-specific inspection reasons. Added descriptions for all 105 catalog roles; retained recommendation order, IDs, names and the full saved inspection report. Existing suggestions update without another provider run. README reflects the display change.
+- All descriptions verified present and under 110 characters; syntax and diff checks passed. Existing catalog/roommate focused suite **8/8 passed**. No real prompts, recruitment, XP edits, queue changes, commit or push.
+- Required `npm run app:build`, strict codesign and dist (15)/bridge (24)/shared (41)/adapters (8) byte parity passed. Fresh queue and app connection idle; safely reopened Electron. Native home overview verified the short descriptions for Software Developer, Cybersecurity Assistant and Graphic Design Assistant. Screenshot: `/tmp/agent-world-role-descriptions.png`. Existing build warnings remain.
+
+# Latest pass — Simplify home roommate section (October 10, 2026)
+
+- Removed the Assistant recommendation heading, summary, inspected-checks text and uncertainty block from Home overview. Inspection status/errors, roommate candidates with their individual reasons/rank and explicit recruitment controls remain. Full inspection reports remain stored and accessible in Assistant chat. Updated README; no real metadata changed.
+- JavaScript syntax and diff checks passed. Required `npm run app:build`, strict codesign and dist (15)/bridge (24)/shared (41)/adapters (8) byte parity passed. Existing package warnings remain. No new tests for this presentation-only deletion.
+- Fresh queue had no approved/queued/running/interrupted work and computer-use was idle; safely reopened Electron. Native overview verified the removed section is absent and the three candidate cards remain. Screenshot: `/tmp/agent-world-simplified-home.png`. No prompt, recruitment, XP change, commit or push.
+
+# Latest pass — One roommate candidate per role (October 10, 2026)
+
+- Removed the second simulated candidate generated for each recommended role. One candidate per distinct catalog role now appears in saved recommendation order, numbered Recommendation 1 / 2 / 3. Retained the original `:0` IDs and names; no resident, report or queue metadata changed. Existing distinct-role validation rejects duplicate role IDs.
+- New bounded inspections explicitly request most-helpful-first ranking based on inspected project needs, with reasons explaining priority. Existing reports retain their original order; a fresh player-authorized inspection obtains the explicit ranking. No fabricated usefulness scores or automatic inspection/recruitment.
+- Focused roommate/unit/API/handoff checks **16/16 passed**, covering single-role output, multi-role order/numbering, stable IDs, duplicate-role rejection, Codex/Claude fixture flows and recruitment gates. Required `npm run app:build`, strict codesign and dist (15)/bridge (24)/shared (41)/adapters (8) byte parity passed; existing build warnings remain.
+- Fresh real proposals/runs had no active/interrupted work and computer-use was idle; safely reopened Electron. Native overview and live packaged API verified exactly Ellis / software_developer, Mira / cybersecurity_assistant and Kayla / graphic_design_assistant, each once with Recommendation 1–3. Saved screenshot: `/tmp/agent-world-ranked-roommates.png`. Real reports/XP/membership unchanged. No paid prompt, recruitment, commit or push.
+- Next acceptance: the player's next explicit Suggest inspection should return reasons that explain its most-helpful-first order. Provider ranking quality remains a human review question; fixture order checks do not establish intelligent ranking.
+
+# Latest pass — Suggest Roommates Codex startup fix (October 10, 2026)
+
+- User’s inspection failed before thread creation with exit code 1. Reproduced its CLI bootstrap configuration failure without a model turn: per-server `enabled=false` overrides create incomplete transports for desktop-bootstrap MCP services. The prior fixture CLIs did not validate bootstrap configuration.
+- Codex integrations-off now passes a complete map of valid disabled transports, retaining HTTP/stdio type while omitting private endpoints, credentials and launch parameters from generated overrides. Plugins/apps remain disabled. Generic bootstrap errors now receive an actionable, privacy-safe tool-configuration message. Normal prompts still inherit the existing CLI configuration; no security setting or provider file changed.
+- Installed Codex **0.162.0-alpha.17.2** read-only `mcp list` probes accepted the exact corrected overrides: all six desktop services disabled; isolated HTTP/stdio fixture services also disabled. No services launched, model calls, spending, inspection retries, recruitment, XP edits or queue changes. Failed inspection history remains intact; player explicitly retries Suggest after the updated app is loaded.
+- Focused execution/inspection API/pass suite **29/29 passed**, including valid disabled transport generation, endpoint/secret redaction, actionable bootstrap error redaction, ordinary prompt inheritance and both provider fixture inspection flows. Diff checks passed. Required `npm run app:build`, strict codesign and dist (15)/bridge (24)/shared (41)/adapters (8) byte parity passed. Fresh game queue empty of active/interrupted work and app connection idle; safely reopened Electron with the fix. Existing build warnings remain. No commit/push.
+
+# Latest pass — First home upgrade at 100 XP (October 10, 2026)
+
+- User revised the first home upgrade from 200 to 100 pooled XP. Level 2, slot 2 and Suggest Roommates now unlock at 100 XP. Later cumulative thresholds remain 750 / 1,350 / 2,100. Shared threshold-driven API refusals, overview and Rewards labels follow the new value; updated current design/skill docs. No real XP or membership edited.
+- Boundary and failed-response fixtures now check 99/100 XP and four successful 25-XP responses. Focused progression/roommate/inspection API/experience checks **20/20 passed**; diff checks passed. Required `npm run app:build`, strict codesign and dist (15)/bridge (24)/shared (41)/adapters (8) byte parity passed. Verified idle game queue/app connection, then safely reopened Electron. Existing build warnings remain. Preserve all earlier uncommitted work; no commit/push authorized.
+
+# Latest pass — First home upgrade at 200 XP (October 10, 2026)
+
+- User lowered the first home upgrade to 200 pooled resident XP. Shared cumulative thresholds are now 0 / 200 / 750 / 1,350 / 2,100; later total thresholds are preserved. Slot 2 and Suggest Roommates unlock with level 2 at 200 XP. Requirement labels, server refusals, home overview, Rewards explanation and current design/skill docs use the new rule. Runtime labels reference the shared threshold table to avoid drift.
+- Focused progression/roommate/inspection API/experience checks **20/20 passed**, including 199/200 boundaries, eight successful responses unlocking recruitment, failed responses excluded and higher tiers unchanged. No real XP, queue, membership, gems or schedules changed.
+- `npm run app:build`, strict codesign, dist (15)/bridge (24)/shared (41)/adapters (8) byte parity and diff checks passed. Fresh queue had no approved/queued/running/interrupted work; computer-use connection idle and no voice UI. Safely reopened the packaged Electron app; native home overview verified 50 / 200 XP, 150 XP remaining and the 200 XP slot-2 lock. Live packaged API agrees. Existing build warnings remain. No commit/push.
+
+# Latest pass — Home overview and Suggest Roommates (October 10, 2026)
+
+- Mailbox project/home sign now opens Home overview with pooled current-resident XP, home progress, individual resident levels/roles and three slots. Home level 2 / 300 pooled XP unlocks slot 2 and Suggest Roommates. Slot 3 stays locked with “Available in a future upgrade”; no arbitrary future threshold. Existing saved identities remain stored and inactive identities no longer contribute home XP.
+- Suggest explicitly authorizes one fresh Personal Assistant inspection conversation, separate from existing drafts/chats. Codex read-only sandbox or Claude Read/Grep/Glob tools; Claude shell, web and external integrations disabled; Codex command tool retained for file inspection inside its read-only sandbox; instruction caps inspection at ten relevant files and timeout at five minutes. Strict structured result validates up to three distinct catalog profession IDs with reasons, checks/uncertainties, next null and no handoffs. Status/results appear in the overview and owner chat. No automatic retry or recruitment.
+- Stable simulated candidate IDs/names match recommended professions. Explicit Recruit rechecks current report, level, membership and capacity, persists identity, then streams the household change. Slots full still permits suggestions with the future-upgrade explanation. Delegation accepts actual recruited catalog professions, preserves the assistant alias, rejects absent/self targets, and keeps existing graph limits. Persistent identity slots map to active desk positions rather than adding desks for retired identities.
+- Verification: focused roommate/handoff/XP/progression **28/28**; isolated Codex/Claude inspection API **2/2**; full suite **242/242** after correcting two inherited test fixtures (construction preload no longer depends on unsupported Node 18.16 --import; project import now expects construction/one PA). Final runner/permissions/roommate API checks **28/28** passed after tightening read-only controls. Fixture CLIs only; no real provider inspection or intelligent recommendation quality claimed.
+- Isolated browser QA on :4788: mailbox opens overview; level 2 XP and slot 2 unlocked; explicit simulated candidate recruitment adds the resident, survives reload, updates the scene, disables further recruitment and retains Suggest with full-slot explanation; Assistant chat opens Otto. No renderer error/warning logs. Fixture report is explicitly labeled simulated. Real player XP, gems, membership, files, queues and schedules were not changed or spent by QA.
+- Required Mac `npm run app:build` passed; strict codesign passed; all dist (15), bridge (24), shared (41), adapters (8) files match packaged assets. Existing chunk/author/asar/notarization warnings remain. No notarized release, commit or push. Fresh real queue was empty of approved/queued/running/interrupted work with idle computer-use connection before safe app reopen. Preserve prior XP-reset changes below.
+- Native Electron verification: mailbox sign opens the home overview; the real home shows level 1 / 50 pooled XP, its PA owner, locked slot 2 with the 300 XP threshold, and locked slot 3. No real inspection or recruitment was dispatched. Corrected the level-1 copy so the full-house suggestions message appears only after level 2 unlocks.
+- Next acceptance: after the home reaches level 2 naturally, the player clicks Suggest and reviews one real provider report before choosing a roommate. Confirm useful project-grounded roles, readable evidence/uncertainties and a subsequent normal prompt delegates only to the recruited profession. This requires the human’s inspection/recruitment actions; do not seed real XP, fabricate activity or run paid prompts for QA.
+
+# Latest pass — User-authorized player and agent XP reset (October 10, 2026)
+
+- User requested all player/resident XP return to zero. Added explicit `run.xpExcluded === true` exclusion to the shared XP derivation; future unmarked responses still award 25 XP. This excludes old participation rewards without deleting or changing reports, status, conversation ownership or provider history. Home tiers also return to Cottage through pooled XP.
+- After confirming no active work/app connection and safely closing Electron, used PassStore's atomic locked write to mark 22 completed saved runs `xpExcluded` with `xpResetAt`. Full passes backup: `/Users/blacksatoshi/.agent-world/backups/xp-reset-1791680380051/passes.json`. Verified every run is otherwise unchanged, all 32 records remain, and derived player XP is 0 / level 1. No proposals/schedules/statuses modified. No actual town reset, paid prompt, acceptance, gem spending, commit or push.
+- Focused experience/progression suite **15/15 passed**, including reload persistence, preserved reports and fresh-response awards after reset. `npm run app:build`, strict codesign, dist/bridge/shared/adapters parity and diff checks passed. Safely reopened the current Mac app: native UI verified You Lv 1, home Cottage, and Otto Level 1 · 0/100 XP · 0 total. Preserve the prior Mac package refresh handoff and other changes.
+
+# Mac package refresh — Reset control (October 10, 2026)
+
+- User requested rebuilding the Mac app after reporting Reset missing. Current source mounts the control unconditionally, while the previously launched Mac bundle lacked it. No application code changes were needed.
+- `npm run app:build` passed on macOS. Strict codesign passed; all dist (15), bridge (24), shared (39) and adapter (8) files match packaged assets byte for byte. Verified the Reset control is present in the packaged JS. Existing chunk/author/asar/notarization warnings remain; no notarized release is claimed.
+- Fresh queue check found no approved/queued/running/interrupted game work and idle app connection. Safely closed/reopened Electron to load the new UI and backend. Native UI verified the visible Reset button with tooltip Reset town (development), at the top right. No actual reset, prompt, queue mutation, spending, commit or push performed. Automated gameplay tests were not repeated for a build-only pass.
+
 # Reusable content catalogs (October 10, 2026)
 
 - Added `shared/catalogs/professions.js`, `intrests.js` (requested spelling),

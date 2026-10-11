@@ -1,3 +1,4 @@
+import { HomeOverview } from './home-overview.js';
 import { connectionView } from '../../shared/connections.mjs';
 import {assignedRole} from '../../shared/team.mjs';
 import { PassCard } from './pass-card.js';
@@ -175,20 +176,36 @@ function applyHousehold(h) {
   library.setData({ households: [...households.values()] });
   work.setData({ households: [...households.values()] });
   lot.setConversationCount(library.data.conversations.filter(c => c.project === h.project).length);
+  lot.residentSlots = new Map(h.characters.map((c,i)=>[c.slot,i+1]));
   lot.ensureDesks(h.characters.length);
   lot.setConstruction(h.construction);
   for (const c of h.characters) {
     const key = charKey(h.project, c.slot);
     let sim = sims.get(key);
     if (!sim) {
-      sim = new Sim({ key, lot, character: c, seed: c.seed });
+      // A resident added to a home that was already here (not first load) has just been recruited: they move in.
+      const movingIn = !isNew && !firstSnapshot && !replaying && knownResidents.has(h.project);
+      sim = new Sim({ key, lot, character: c, seed: c.seed, arriving: movingIn });
       sims.set(key, sim);
       sim.setTruth(null);
       sim.setLook(style.residents?.[key]);
+      if (movingIn) welcomeResident(sim, h);
     } else {
       sim.character = c;
     }
   }
+  knownResidents.add(h.project);
+  applyRoles();
+}
+
+/** Housewarming: confetti at the gate, a welcome toast, and confetti again when they reach their spot. */
+const knownResidents = new Set();
+function welcomeResident(sim, h) {
+  const door = sim.lot.toWorld(sim.lot.stations.entrance.x, sim.lot.stations.entrance.z);
+  celebrations.confetti(door.clone().setY(1.6), 70);
+  sound.play('reminder');
+  cheer(`<b>${escapeHtml(sim.name)}</b> moved in to <b>${escapeHtml(h.name || h.project.split('/').pop())}</b>! Welcome home.`, '🏡');
+  sim.onArrive = (s) => celebrations.confetti(s.worldPosition().setY(2.2), 45);
 }
 
 function applySession(s) {
@@ -736,6 +753,19 @@ function pickFind() {
   raycaster.setFromCamera(pointer, camera);
   return raycaster.intersectObjects(explore.hitTargets(), false)[0]?.object.userData.findId || null;
 }
+/** Does a home's building stand between the camera and a point (so its upper floors should open)? */
+function blocksView(lot, from, to) {
+  if (!(lot.roofTop > 6)) return false;
+  const p = lot.group.position;
+  for (let i = 1; i < 16; i++) {
+    const k = i / 16;
+    const x = from.x + (to.x - from.x) * k - p.x;
+    const z = from.z + (to.z - from.z) * k - p.z;
+    const y = from.y + (to.y - from.y) * k;
+    if (Math.abs(x) < 7.8 && Math.abs(z) < 6 && y < lot.roofTop + 0.5) return true;
+  }
+  return false;
+}
 /** The home whose lot is under a screen point, if any. */
 function lotAt(clientX, clientY) {
   const p = rig.groundAt(clientX, clientY);
@@ -812,6 +842,13 @@ function frame() {
   }
   rig.panned = false;
   const focus = mapMode.active ? mapFocus : build.active ? buildFocus : followSelected && selected ? selected.worldPosition().setY(0.12) : camFocus;
+  // Zoom out far enough to see the tallest home whole; the view rises with it so towers stay in frame.
+  if (!mapMode.active && !build.active) {
+    const tallest = Math.max(0, ...[...lots.values()].map((l) => l.roofTop || 0));
+    rig.maxDistance = Math.max(70, Math.min(110, tallest * 1.6 + 28));
+    rig.distanceTarget = Math.min(rig.distanceTarget, rig.maxDistance);
+    rig.lift = THREE.MathUtils.smoothstep(rig.distance, 30, rig.maxDistance) * Math.min(18, tallest * 0.45);
+  } else rig.lift = 0;
   rig.update(dt, focus);
   build.update();
   celebrations.update(dt);
@@ -896,12 +933,14 @@ function frame() {
   // The home you're looking at (middle of the screen) lifts its roof from farther out, so you can peek in.
   const centerLot = mapMode.active ? null : [...lots.values()].find((l) => l.getNav().inBounds(rig.target.x - l.group.position.x, rig.target.z - l.group.position.z));
   const petFocus = rig.distance < 26 ? rig.target : null;
+  const sightTarget = mapMode.active ? null : followSelected && selected ? selected.worldPosition().setY(1) : rig.target;
   for (const lot of lots.values()) {
     // Roofs never cover the home you're decorating or inspecting.
     lot.roofAllowed = !build.active && selected?.lot !== lot;
     lot.peek = lot === centerLot;
     if (build.active || mapMode.active || photo.active) lot.hovered = false;
-    lot.update(dt, t, { camera, night: env.night, busy: busyLots.has(lot), avatar: petFocus });
+    const clearView = !!sightTarget && lot !== centerLot && blocksView(lot, camera.position, sightTarget);
+    lot.update(dt, t, { camera, night: env.night, busy: busyLots.has(lot), avatar: petFocus, clearView, peekOpen: rig.maxDistance - 16 });
   }
   ui.updatePreview();
 
@@ -953,9 +992,10 @@ function syncLibrarySessions() {
     lot.setConversationCount(count);
   }
 }
+const homeOverview = new HomeOverview({look: (project, slot) => sims.get(charKey(project, slot))?.look, onChat: (project,slot) => {const sim=sims.get(charKey(project,slot));if(sim)openAgentChat(sim);else passCard.openHome(project);}});
 document.addEventListener('click', e => {
   const home = e.target.closest('[data-work-home]');
-  if (home) passCard.openHome(home.dataset.workHome);
+  if (home) homeOverview.open(home.dataset.workHome);
   const shelf = e.target.closest('[data-conversation-home]');
   if (shelf) library.open(shelf.dataset.conversationHome);
 });
@@ -1129,7 +1169,7 @@ mayor = new MayorOnboarding({
 
 // Debug handle for the console.
 window.agentWorld = {
-  garden, photo, album, weatherFx, get passCard() { return passCard; }, get levels() { return levels; }, downtown, census, streetLife, landscape, city: () => city, sims, lots, player, rig, worldBounds, lookAt, sound, env, pipeline, focusSim, library, work, build, wardrobe, style: () => style, commons, mayorCharacter, seasons, explore, mapMode };
+  garden, photo, album, weatherFx, get passCard() { return passCard; }, get levels() { return levels; }, applyHousehold, downtown, census, streetLife, landscape, city: () => city, sims, lots, player, rig, worldBounds, lookAt, sound, env, pipeline, focusSim, library, work, build, wardrobe, style: () => style, commons, mayorCharacter, seasons, explore, mapMode };
 
 connect();
 frame();

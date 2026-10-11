@@ -4,14 +4,18 @@
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import {
-  buildBookshelf, buildChair, buildCoffeeBar, buildCouch, buildDesk, buildFloorLamp, buildGlobe,
-  buildRack, buildRug, buildSideTable, buildWallArt, buildWhiteboard,
+  buildArmchair, buildBath, buildBed, buildBench, buildBookshelf, buildChair, buildCoffeeBar, buildColumn, buildCouch,
+  buildDesk, buildDining, buildElevator, buildFireplace, buildFloorLamp, buildFridge, buildGlobe, buildKitchen,
+  buildLaundry, buildLockers, buildLoveseat, buildMailboxes, buildPlanter, buildRack, buildReception, buildRug,
+  buildSideTable, buildStairs, buildTV, buildWallArt, buildWardrobe, buildWhiteboard,
 } from './furniture.js';
-import { EXTERIORS, INTERIORS, PALETTE, box, buildBush, buildPlant, buildTree, cyl, glassTexture, ico, mat, mergeStatic, rng, softBox, buildLightPool } from './models.js';
-import { waterMaterial } from './fx.js';
+import { YAW, deskLayout, floorplanFor, rotate } from './home-floorplans.js';
+import { EXTERIORS, INTERIORS, PALETTE, box, buildPlant, cyl, glassTexture, ico, mat, mergeStatic, rng, softBox, buildLightPool } from './models.js';
+import { GROUND_H, YARD_Z, doorsOf, frontWallBlocks, leafRect, tierPlan, yardProps } from './home-tier-plans.js';
+import { buildUpper, buildYard, facadeExtras } from './home-tiers.js';
 import { ARCHES, DECOR, FLOORS } from '../../shared/style.mjs';
 import { floorMaterial } from './textures.js';
-import { levelName } from '../../shared/progression.mjs';
+import { levelName, MAX_LEVEL, buildingTier } from '../../shared/progression.mjs';
 import { buildDecor } from './decor.js';
 import { NavGrid } from './nav.js';
 import { Pet } from './pets.js';
@@ -41,9 +45,6 @@ function photoTexture(id) {
 
 export const LOT_W = 26;
 export const LOT_D = 24;
-/** The yard (and its fence) ends here, short of the lot-side sidewalks at z ±7.7. */
-const YARD_Z = 7.45;
-export const DOOR_HALF = 0.9;
 
 const WALL_H = 2.7;
 const CUT_SCALE = 0.13;
@@ -53,11 +54,15 @@ const FACE_BACK = Math.PI;
 const FACE_LEFT = -Math.PI / 2;
 const FACE_RIGHT = Math.PI / 2;
 
-const spot = (x, z, face) => ({ x, z, face });
+const overlaps = (a, b) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
+/** Interior pieces that step aside for the player's decor (the rest of a floor plan always stays). */
+const OPTIONAL = new Set(['plant', 'rug', 'armchair', 'sideTable', 'floorLamp', 'planter', 'bench', 'column', 'tv']);
+const ROOM_FLOORS = { tile: [0xe4ddd1, 0xcfc6b8], carpet: [0xc9b7a3, null] };
 
 export class Lot {
   constructor(household, index, seed) {
     this.project = household.project;
+    this.residentSlots = new Map(household.characters.map((c,i)=>[c.slot,i+1]));
     this.index = index;
     this.seed = seed;
     this.r = rng(seed);
@@ -77,18 +82,28 @@ export class Lot {
     // Build-mode decor (simulation layer only; see docs/GAMEPLAY.md).
     this.decor = { group: new THREE.Group(), items: [], obstacles: [], glows: [], canopies: [], key: '' };
     this.group.add(this.decor.group);
-    // Home level upgrades: follow the home's combined resident XP.
+    // Home level upgrades: follow the home's combined resident XP. Each level is a residential tier
+    // (home-tier-plans.js / home-tiers.js) with its own facade, upper floors and yard.
     this.level = 0;
+    this.plan = tierPlan(1);
     this.levelGroup = new THREE.Group();
     this.levelObstacles = [];
-    this.levelGlows = [];
+    this.levelGlowMat = new THREE.MeshStandardMaterial({ color: 0xffd28a, emissive: 0xffd28a, emissiveIntensity: 0.15 });
+    this.trees = [];
     this.group.add(this.levelGroup);
 
     this.static = new THREE.Group(); // merged after building
     this.group.add(this.static);
     this.desks = [];
+    this.deskCount = 0;
+    this.deskBlocks = [];
+    this.screens = []; // one monitor per seat, kept across floor plans (residents hold on to theirs)
     this.walls = [];
     this.nightGlows = [];
+    this.globes = [];
+    this.rackLights = [];
+    this.steams = [];
+    this.layoutVersion = 0; // bumped when the floor plan changes, so residents re-place themselves
     this.globeSpin = 0;
     this.coffeeBusy = 0;
     this.obstacles = [];
@@ -96,22 +111,21 @@ export class Lot {
 
     this.buildGround();
     this.buildRoom();
-    this.buildFurniture();
     this.buildSign(household);
-    this.setLevel(1);
     const shelf = document.createElement('button');
     shelf.className = 'conversation-shelf';
     shelf.dataset.conversationHome = this.project;
     shelf.hidden = true;
-    const shelfLabel = new CSS2DObject(shelf);
-    shelfLabel.position.set(-6, 2.2, -0.4);
-    this.group.add(shelfLabel);
+    this.shelfLabel = new CSS2DObject(shelf);
+    this.group.add(this.shelfLabel);
     this.shelfEl = shelf;
-    this.ensureDesks(Math.max(2, household.characters.length));
+    this.setLevel(1);
+    this.ensureDesks(Math.max(1, household.characters.length));
     mergeStatic(this.static);
 
-    // Night: window and door light spilling onto the yard (shared fade in models.js).
-    for (const [w, d, x, z] of [[2.4, 1.6, -5.6, -6.2], [2.4, 1.6, 5.0, -6.2], [1.6, 2.4, -8.2, -3.4], [1.6, 2.4, 8.2, -1.8], [1.6, 2.4, 8.2, 3.2], [2.4, 1.8, -4.2, 6.3], [2.4, 1.8, 4.2, 6.3], [2.8, 2.6, 0, 6.6]]) {
+    // Night: window light spilling onto the side and back yards (shared fade in models.js); the front
+    // windows and doors change with the tier, so their pools live in the tier's yard.
+    for (const [w, d, x, z] of [[2.4, 1.6, -5.6, -6.2], [2.4, 1.6, 5.0, -6.2], [1.6, 2.4, -8.2, -3.4], [1.6, 2.4, 8.2, -1.8], [1.6, 2.4, 8.2, 3.2]]) {
       this.group.add(buildLightPool(w, d, x, 0.075, z));
     }
 
@@ -180,7 +194,17 @@ export class Lot {
 
   /** Navigation grid over the lot, rebuilt lazily when furniture or decor changes. */
   getNav() {
-    if (!this.nav) this.nav = this.makeNav(this.decor.obstacles);
+    if (!this.nav) {
+      this.nav = this.makeNav(this.decor.obstacles);
+      // Strolling spots in the yard only count when this tier's landscaping leaves them reachable.
+      const seen = this.nav.reachableFrom(this.stations.entrance);
+      const ok = (s) => {
+        const c = this.nav.nearestFree(...this.nav.toCell(s.x, s.z), 2);
+        return !!c && !!seen[c[1] * this.nav.w + c[0]];
+      };
+      const wander = this.allWander.filter((s) => !s.yard || ok(s));
+      this.stations.wander.splice(0, this.stations.wander.length, ...(wander.length ? wander : this.allWander));
+    }
     return this.nav;
   }
 
@@ -188,106 +212,198 @@ export class Lot {
     const nav = new NavGrid({ x0: -11, z0: -5, x1: 11, z1: 11.5 }, 0.25, 0.25);
     for (const r of this.obstacles) nav.addRect(r);
     for (const r of this.levelObstacles) nav.addRect(r);
-    for (const r of decorRects) nav.addRect(r);
+    for (const r of this.deskBlocks) nav.addRect(r);
+    // Decor that ended up inside a wall or a fixed piece of the floor plan (placed before an upgrade) is
+    // drawn but not walled off, so it can never trap residents.
+    const fixed = [...(this.fixedBlocks || []), ...this.deskBlocks];
+    for (const r of decorRects) if (!fixed.some((f) => overlaps(r, f))) nav.addRect(r);
     return nav;
   }
 
   /**
-   * Show a home's level (1 Cottage … 5 Estate) with cumulative exterior upgrades. Cosmetic; the level
-   * follows resident participation XP (shared/progression.mjs), independent of reviewed outcomes.
+   * Show a home's level as its residential tier (1 Cottage … 8 Landmark Residence; docs/concepts/home-tiers).
+   * Cosmetic: the level follows the home's pooled resident participation XP (shared/progression.mjs), never
+   * reviewed outcomes. Only the shell changes (front facade, upper floors and roof, yard); the ground-floor
+   * studio, desks, residents, decor, paint and conversations carry over untouched.
    */
   setLevel(level) {
+    level = Math.min(MAX_LEVEL, Math.max(1, Math.floor(level) || 1));
     if (level === this.level) return;
     this.level = level;
-    for (const child of [...this.levelGroup.children]) {
-      this.levelGroup.remove(child);
-      child.traverse((o) => o.isMesh && o.geometry.dispose());
-    }
-    this.levelObstacles = [];
-    this.levelGlows = [];
-    const g = new THREE.Group();
-    const accent = new THREE.Color(this.exterior).multiplyScalar(0.7).getHex();
-    const glowBox = (w, h, d, x, y, z, color = 0xffd28a) => {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.15 }));
-      m.position.set(x, y, z);
-      m.userData.dynamic = true;
-      m.userData.nightGlow = 2.6;
-      this.levelGlows.push(m);
-      return m;
-    };
-    const block = (...r) => this.levelObstacles.push(r);
-    if (level >= 2) {
-      // House: porch deck, door awning, porch lights.
-      for (let i = 0; i < 6; i++) g.add(Object.assign(box(3.6, 0.08, 0.13, PALETTE.woodMid, 0, 0.16, 5.3 + i * 0.14), { castShadow: false }));
-      g.add(softBox(2.8, 0.08, 1.0, accent, 0, 2.5, 5.55, 0.04));
-      for (const s of [1, -1]) {
-        g.add(box(0.08, 2.35, 0.08, PALETTE.trim, s * 1.3, 1.3, 5.98));
-        block(s * 1.3 - 0.06, 5.92, s * 1.3 + 0.06, 6.04);
-        g.add(glowBox(0.14, 0.2, 0.1, s * 1.45, 1.95, 5.27));
-      }
-    }
-    if (level >= 3) {
-      // Villa: flowered garden arch over the path, and a front hedge.
-      for (const s of [1, -1]) {
-        g.add(box(0.12, 2.2, 0.12, PALETTE.trim, s * 1.05, 1.1, 7.2));
-        block(s * 1.05 - 0.08, 7.12, s * 1.05 + 0.08, 7.28);
-        for (let x = 2.45; x < 10.2; x += 0.75) {
-          g.add(ico(0.38, PALETTE.leafDark, s * x, 0.34, 6.95, 0));
-        }
-        block(Math.min(s * 2.1, s * 10.4), 6.6, Math.max(s * 2, s * 10.4), 7.35);
-      }
-      const arch = new THREE.Mesh(new THREE.TorusGeometry(1.05, 0.06, 6, 16, Math.PI), new THREE.MeshStandardMaterial({ color: PALETTE.trim, flatShading: true }));
-      arch.position.set(0, 2.2, 7.2);
-      arch.castShadow = true;
-      g.add(arch);
-      for (let i = 0; i < 9; i++) {
-        const a = (i / 8) * Math.PI;
-        g.add(ico(0.1, PALETTE.flowers[i % PALETTE.flowers.length], Math.cos(a) * 1.05, 2.2 + Math.sin(a) * 1.05, 7.2));
-      }
-    }
-    if (level >= 4) {
-      // Manor: a fountain and a flag in the home's color.
-      g.add(cyl(1.0, 1.1, 0.4, 0xd8d2c6, 16, 8.9, 0.2, 4.6));
-      const water = cyl(0.88, 0.88, 0.02, 0x7fc4ec, 16, 8.9, 0.41, 4.6, { material: waterMaterial() });
-      water.castShadow = false;
-      g.add(water);
-      g.add(cyl(0.12, 0.16, 0.8, 0xd8d2c6, 8, 8.9, 0.8, 4.6));
-      g.add(cyl(0.4, 0.25, 0.14, 0xd8d2c6, 12, 8.9, 1.22, 4.6));
-      g.add(glowBox(0.08, 0.3, 0.08, 8.9, 1.42, 4.6, 0x9fd8ff));
-      block(7.85, 3.55, 9.95, 5.65);
-      g.add(cyl(0.04, 0.05, 4.2, PALETTE.metal, 6, -8.8, 2.1, 5.6));
-      g.add(ico(0.07, 0xd9b55a, -8.8, 4.25, 5.6));
-      g.add(box(1.1, 0.65, 0.03, this.exterior, -8.25, 3.8, 5.6));
-      block(-8.9, 5.5, -8.7, 5.7);
-    }
-    if (level >= 5) {
-      // Estate: lanterns along the path and a golden plumbob statue.
-      for (const s of [1, -1]) {
-        for (const z of [6.3]) {
-          g.add(cyl(0.05, 0.07, 1.1, PALETTE.dark, 6, s * 1.55, 0.55, z));
-          g.add(glowBox(0.18, 0.22, 0.18, s * 1.55, 1.2, z));
-          block(s * 1.55 - 0.1, z - 0.1, s * 1.55 + 0.1, z + 0.1);
-        }
-      }
-      g.add(cyl(0.45, 0.55, 0.6, 0xe9e3d5, 8, -6.6, 0.3, 5.9));
-      const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.35, 0), new THREE.MeshStandardMaterial({ color: 0xffd166, emissive: 0xffb703, emissiveIntensity: 0.6, metalness: 0.6, roughness: 0.25, flatShading: true }));
-      gem.scale.set(1, 1.8, 1);
-      gem.position.set(-6.6, 1.3, 5.9);
-      gem.castShadow = true;
-      gem.userData.dynamic = true;
-      this.statue = gem;
-      g.add(gem);
-      block(-7.1, 5.4, -6.1, 6.4);
-    } else {
-      this.statue = null;
-    }
-    mergeStatic(g);
-    this.levelGroup.add(g);
+    this.plan = tierPlan(level);
+    this.buildWalls();
+    this.buildRoof();
+    this.buildYard();
+    this.buildInterior();
+    const badge = this.signEl.querySelector('.lot-level');
+    badge.textContent = `Lv ${level} · ${levelName(level)}`;
+    badge.title = `Home level ${level} of ${MAX_LEVEL}: follows this home's combined resident XP`;
+  }
+
+  /** Remove an object built for a tier and free its geometry (shared materials stay cached). */
+  disposeObject(obj) {
+    if (!obj) return;
+    obj.parent?.remove(obj);
+    obj.traverse((o) => {
+      if (!o.isMesh) return;
+      o.geometry.dispose();
+      if (o.userData.ownMaterial) o.material.dispose();
+    });
+  }
+
+  /** Obstacles that change with the tier: front wall segments and door leaves, the floor plan, yard props. */
+  refreshLevelObstacles() {
+    this.levelObstacles = [...frontWallBlocks(this.plan), ...(this.interiorBlocks || []), ...(this.yardBlocks || [])];
     this.nav = null;
     this.reachCache = null;
-    const badge = this.signEl.querySelector('.lot-level');
-    badge.textContent = `${'★'.repeat(level)} ${levelName(level)}`;
-    badge.title = `Home level ${level} of 5: follows this home's combined resident XP`;
+  }
+
+  /**
+   * The tier's ground-floor plan (home-floorplans.js): partitions, room floors, furniture, stations and desks.
+   * Optional pieces (plants, rugs, armchairs…) step aside for the player's decor. Residents keep their seats and
+   * monitors; they re-place themselves when the plan changes (layoutVersion).
+   */
+  buildInterior() {
+    const fp = floorplanFor(this.plan.key, this.yardBlocks || [], this.level);
+    const decorRects = this.decor.items.map((it) => this.footprint(it.item, it.x, it.z, it.rot));
+    const items = fp.items.filter((it) => !(OPTIONAL.has(it.kind) && it.rect && decorRects.some((d) => overlaps(it.rect, d))));
+    const key = `${fp.key}|${this.interior}|${items.length}`;
+    if (key === this.interiorKey) return;
+    const planChanged = fp.key !== this.floorplan?.key;
+    this.interiorKey = key;
+    this.floorplan = fp;
+    this.disposeObject(this.interiorGroup);
+    this.disposeObject(this.partitionGroup);
+    this.nightGlows = [];
+    this.globes = [];
+    this.rackLights = [];
+    this.steams = [];
+
+    const g = new THREE.Group();
+    const dyn = new THREE.Group(); // live parts (globes, steam, glowing lamps) stay out of the static merge
+    dyn.userData.dynamic = true;
+    // Tiled and carpeted rooms on top of the main floor.
+    for (const [, kind, x0, z0, x1, z1] of fp.rooms) {
+      const colors = ROOM_FLOORS[kind];
+      if (!colors) continue;
+      const [base, grout] = colors;
+      const w = x1 - x0;
+      const d = z1 - z0;
+      const tint = kind === 'carpet' ? new THREE.Color(this.interior).lerp(new THREE.Color(base), 0.7).getHex() : base;
+      g.add(Object.assign(box(w, 0.012, d, tint, (x0 + x1) / 2, 0.126, (z0 + z1) / 2), { castShadow: false }));
+      if (grout) {
+        for (let x = x0 + 0.5; x < x1 - 0.05; x += 0.5) g.add(Object.assign(box(0.02, 0.014, d, grout, x, 0.127, (z0 + z1) / 2), { castShadow: false }));
+        for (let z = z0 + 0.5; z < z1 - 0.05; z += 0.5) g.add(Object.assign(box(w, 0.014, 0.02, grout, (x0 + x1) / 2, 0.127, z), { castShadow: false }));
+      }
+    }
+    items.forEach((it, i) => {
+      const seed = this.seed + 31 + i * 7;
+      let obj;
+      let rot = 0;
+      let live = false;
+      switch (it.kind) {
+        case 'bookshelf': obj = buildBookshelf(seed); rot = -Math.PI / 2; break;
+        case 'whiteboard': obj = buildWhiteboard(); rot = -Math.PI / 2; break;
+        case 'globe': { const b = buildGlobe(); obj = mergeStatic(b.group); this.globes.push(b.spinner); live = true; break; }
+        case 'rack': { const b = buildRack(); obj = mergeStatic(b.group); this.rackLights.push(...b.lights); live = true; break; }
+        case 'coffeeBar': { const b = buildCoffeeBar(); obj = mergeStatic(b.group); this.steams.push(b.steam); rot = Math.PI / 2; live = true; break; }
+        case 'kitchen': { const b = buildKitchen(it.len ?? 3, it.coffee ?? null); obj = b.group; if (b.steam) { mergeStatic(obj); this.steams.push(b.steam); live = true; } break; }
+        case 'couch': obj = buildCouch(seed); break;
+        case 'loveseat': obj = buildLoveseat(seed); break;
+        case 'armchair': obj = buildArmchair(seed); break;
+        case 'sideTable': obj = buildSideTable(); break;
+        case 'floorLamp': { const b = buildFloorLamp(); obj = mergeStatic(b.group); this.nightGlows.push(b.shade); live = true; break; }
+        case 'plant': obj = buildPlant(0, 0, seed); break;
+        case 'rug': obj = buildRug(it.w ?? 2, it.d ?? 2, PALETTE.rug, 0, 0); break;
+        case 'bed': obj = buildBed(seed); break;
+        case 'fridge': obj = buildFridge(); break;
+        case 'dining': obj = buildDining(seed); break;
+        case 'fireplace': { const b = buildFireplace(); obj = mergeStatic(b.group); this.nightGlows.push(b.glow); live = true; break; }
+        case 'tv': obj = buildTV(); break;
+        case 'reception': obj = buildReception(it.w ?? 2.6); break;
+        case 'mailboxes': obj = buildMailboxes(); break;
+        case 'elevator': { const b = buildElevator(it.w ?? 2.2); obj = mergeStatic(b.group); this.nightGlows.push(b.glow); live = true; break; }
+        case 'stairs': obj = buildStairs(it.len ?? 2.6, it.w ?? 1.0); break;
+        case 'bath': obj = buildBath(); break;
+        case 'wardrobe': obj = buildWardrobe(); break;
+        case 'laundry': obj = buildLaundry(); break;
+        case 'lockers': obj = buildLockers(); break;
+        case 'bench': obj = buildBench(); break;
+        case 'column': obj = buildColumn(); break;
+        case 'planter': obj = buildPlanter(seed); break;
+        default: return;
+      }
+      obj.position.set(it.x, 0, it.z);
+      obj.rotation.y = (YAW[it.facing] ?? 0) + rot;
+      (live ? dyn : g).add(obj);
+    });
+    // Wall art on the outer walls.
+    fp.art.forEach(([x, z, facing], i) => {
+      const art = buildWallArt(this.seed + 11 + i, i ? 0.8 : 1.0, i ? 0.6 : 0.75);
+      art.rotation.y = YAW[facing] - Math.PI / 2;
+      art.position.set(x, 1.95, z);
+      g.add(art);
+    });
+    mergeStatic(g);
+    g.add(dyn);
+    this.interiorGroup = g;
+    this.group.add(g);
+
+    // Interior partitions, lowered with the cutaway walls so residents stay in view.
+    const pg = new THREE.Group();
+    pg.userData.dynamic = true;
+    const trimColor = new THREE.Color(this.interior).multiplyScalar(0.55).getHex();
+    for (const [x0, z0, x1, z1] of fp.partitions) {
+      const w = x1 - x0;
+      const d = z1 - z0;
+      pg.add(box(w, WALL_H - 0.05, d, this.interior, (x0 + x1) / 2, (WALL_H - 0.05) / 2, (z0 + z1) / 2));
+      pg.add(box(w + 0.02, 0.12, d + 0.02, trimColor, (x0 + x1) / 2, 0.06, (z0 + z1) / 2));
+      pg.add(box(w + 0.04, 0.06, d + 0.04, PALETTE.trim, (x0 + x1) / 2, WALL_H - 0.04, (z0 + z1) / 2));
+    }
+    mergeStatic(pg);
+    pg.userData.scale = 1;
+    this.partitionGroup = pg;
+    this.group.add(pg);
+
+    // Stations, obstacles and the conversation shelf by the first bookshelf.
+    this.stations = fp.stations;
+    this.allWander = [...fp.stations.wander];
+    const shelfItem = items.find((it) => it.kind === 'bookshelf');
+    this.shelfLabel.position.set(shelfItem?.x ?? 0, 2.2, shelfItem?.z ?? 0);
+    // Fixed ground: walls, the plan's main furniture, and the approach to every front door (decor placed there
+    // under an earlier tier stays drawn but never walls residents out).
+    const approaches = doorsOf(this.plan).map((d) => [d.x - d.w / 2, 5.2, d.x + d.w / 2, 6.7]);
+    this.fixedBlocks = [...fp.partitions, ...approaches, ...items.filter((it) => it.rect && !OPTIONAL.has(it.kind)).map((it) => it.rect)];
+    this.interiorBlocks = [...fp.partitions, ...items.map((it) => it.rect).filter(Boolean)];
+    this.claims = new Map();
+    if (planChanged) {
+      this.layoutVersion++;
+      const ids = this.galleryIds || [];
+      this.galleryKey = null;
+      this.setGallery(ids);
+    }
+    this.refreshLevelObstacles(); // before the desks: extra residents' desks are fitted around this plan
+    this.rebuildDesks();
+  }
+
+  /** The tier's yard: fence, paths, beds and trees. Props that would sit on the player's decor are left out. */
+  buildYard() {
+    const props = yardProps(this.plan, this.decor.items.map((it) => this.footprint(it.item, it.x, it.z, it.rot)));
+    const key = `${this.plan.key}|${JSON.stringify(props)}`;
+    if (key === this.yardKey) return;
+    this.yardKey = key;
+    this.disposeObject(this.yardGroup);
+    for (const t of this.trees) this.disposeObject(t);
+    const built = buildYard(this.plan, this, props, this.levelGlowMat, rng(this.seed + this.level * 101));
+    mergeStatic(built.group);
+    this.yardGroup = built.group;
+    this.levelGroup.add(built.group);
+    this.yardGlows = built.glows;
+    // Trees sway, so they stay out of the static merge.
+    this.trees = built.trees;
+    for (const t of this.trees) this.group.add(t);
+    this.yardBlocks = props.blocking.map(([, ...r]) => r);
+    this.refreshLevelObstacles();
   }
 
   // ---- Customization (paint + decor) ---------------------------------------------------
@@ -304,10 +420,8 @@ export class Lot {
       this.arch = arch;
       this.buildWalls();
       this.buildRoof();
+      if (this.level) this.buildInterior();
       this.signEl.querySelector('.lot-dot').style.background = `#${exterior.toString(16).padStart(6, '0')}`;
-      const level = this.level; // awning and flag use the house color
-      this.level = 0;
-      this.setLevel(level);
     }
     const floor = home?.floor || 'oak';
     if (floor !== this.floorStyle) this.buildFloor(floor);
@@ -321,6 +435,7 @@ export class Lot {
    */
   setGallery(ids = []) {
     const key = ids.join(',');
+    this.galleryIds = ids;
     if (key === this.galleryKey) return;
     this.galleryKey = key;
     if (this.gallery) {
@@ -335,8 +450,9 @@ export class Lot {
     this.group.add(this.gallery);
     ids.forEach((id, i) => {
       const frame = new THREE.Group();
-      // Centered in the gap between the two paintings (x −2.4 … 1.9).
-      frame.position.set(-0.25 + (i - (ids.length - 1) / 2) * 0.55, 2.0 + (i % 2 ? -0.06 : 0.04), -4.96);
+      // On the floor plan's gallery wall (a free stretch of the back wall).
+      const [gx, gz] = this.floorplan?.gallery || [-0.25, -4.96];
+      frame.position.set(gx + (i - (ids.length - 1) / 2) * 0.55, 2.0 + (i % 2 ? -0.06 : 0.04), gz);
       frame.rotation.z = ((this.seed >> i) % 7 - 3) * 0.02;
       frame.add(box(0.42, 0.5, 0.015, 0xfbfaf6, 0, 0, 0));
       frame.add(box(0.05, 0.05, 0.02, 0xe56b6f, 0, 0.22, 0.012)); // pin
@@ -382,6 +498,10 @@ export class Lot {
       d.canopies.push(...built.canopies);
       if (!DECOR[it.item].walkable) d.obstacles.push(this.footprint(it.item, it.x, it.z, it.rot));
     }
+    if (this.level) {
+      this.buildYard();
+      this.buildInterior();
+    }
     this.nav = null;
   }
 
@@ -404,7 +524,7 @@ export class Lot {
 
     const overlaps = (r) => x0 < r[2] && x1 > r[0] && z0 < r[3] && z1 > r[1];
     const others = this.decor.items.filter((it) => it.id !== ignoreId && !DECOR[it.item].walkable).map((it) => this.footprint(it.item, it.x, it.z, it.rot));
-    if (this.obstacles.some(overlaps) || this.levelObstacles.some(overlaps) || others.some(overlaps)) return { ok: false, reason: 'Something is already there' };
+    if (this.obstacles.some(overlaps) || this.levelObstacles.some(overlaps) || this.deskBlocks.some(overlaps) || others.some(overlaps)) return { ok: false, reason: 'Something is already there' };
 
     // Every spot Sims can reach today (from the street) must stay reachable with the item placed.
     const reachable = (nav) => {
@@ -427,7 +547,7 @@ export class Lot {
     return [
       ...this.desks.flatMap((d) => [d.chair, d.wait, d.visitorWait, d.guests[0]]),
       ...st.coffee, ...st.couch, ...st.bookshelf.slice(0, 1), ...st.whiteboard.slice(0, 1), ...st.globe.slice(0, 1), ...st.rack.slice(0, 1),
-    ];
+    ].filter(Boolean);
   }
 
   /** Decor item under a raycast hit object, if any. */
@@ -439,65 +559,21 @@ export class Lot {
   // ---- Outside ------------------------------------------------------------------------
 
   buildGround() {
-    const r = this.r;
     const grass = box(22, 0.1, 20, PALETTE.grassLot, 0, 0, 0);
     grass.castShadow = false;
     this.add(grass);
 
-    // Stepping-stone path from the sidewalk to the door.
-    for (let i = 0; i < 2; i++) {
-      const s = softBox(1.3 + r() * 0.2, 0.06, 0.75, PALETTE.sidewalk, (r() - 0.5) * 0.15, 0.08, 5.9 + i * 0.95, 0.15);
-      s.rotation.y = (r() - 0.5) * 0.15;
-      s.castShadow = false;
-      this.add(s);
+    // Fence lines around the yard, open at the gate. Each tier draws its own fence style (home-tiers.js) on the
+    // same footprint; it stops short of the lot-side sidewalks (which start at z ±7.7).
+    for (const [x0, z0, x1, z1] of [[-10.8, YARD_Z, -1.2, YARD_Z], [1.2, YARD_Z, 10.8, YARD_Z], [-10.8, -YARD_Z, -10.8, YARD_Z], [10.8, -YARD_Z, 10.8, YARD_Z]]) {
+      this.block(Math.min(x0, x1) - 0.12, Math.min(z0, z1) - 0.12, Math.max(x0, x1) + 0.12, Math.max(z0, z1) + 0.12);
     }
-
-    // Picket fence around the yard, open at the path. It stops short of the sidewalks (which start at z ±7.7).
-    const fence = (x0, z0, x1, z1) => {
-      const len = Math.hypot(x1 - x0, z1 - z0);
-      const n = Math.floor(len / 0.45);
-      for (let k = 0; k <= n; k++) {
-        const t = k / n;
-        const post = box(0.08, 0.62, 0.08, PALETTE.trim, x0 + (x1 - x0) * t, 0.31, z0 + (z1 - z0) * t);
-        this.add(post);
-      }
-      const rail = box(Math.abs(x1 - x0) || 0.05, 0.06, Math.abs(z1 - z0) || 0.05, PALETTE.trim, (x0 + x1) / 2, 0.42, (z0 + z1) / 2);
-      this.add(rail);
-      this.block(Math.min(x0, x1) - 0.05, Math.min(z0, z1) - 0.05, Math.max(x0, x1) + 0.05, Math.max(z0, z1) + 0.05);
-    };
-    fence(-10.8, YARD_Z, -1.2, YARD_Z);
-    fence(1.2, YARD_Z, 10.8, YARD_Z);
-    fence(-10.8, -YARD_Z, -10.8, YARD_Z);
-    fence(10.8, -YARD_Z, 10.8, YARD_Z);
 
     // Mailbox by the gate.
     this.add(box(0.08, 1.0, 0.08, PALETTE.wood, 1.62, 0.5, 7.0));
     this.add(softBox(0.42, 0.3, 0.24, 0x4f6d8f, 1.62, 1.08, 7.0, 0.08));
     this.add(box(0.03, 0.22, 0.03, 0xd94f4f, 1.85, 1.2, 6.96));
     this.add(box(0.1, 0.05, 0.03, 0xd94f4f, 1.9, 1.29, 6.96));
-
-    // Flower beds under the front windows.
-    for (const side of [-1, 1]) {
-      const cx = side * 4.2;
-      const bed = box(3.2, 0.14, 0.7, 0x6b4a33, cx, 0.08, 5.75);
-      bed.castShadow = false;
-      this.add(bed);
-      for (let k = 0; k < 9; k++) {
-        const fx = cx - 1.4 + k * 0.35 + (r() - 0.5) * 0.1;
-        const fz = 5.75 + (r() - 0.5) * 0.4;
-        this.add(cyl(0.015, 0.015, 0.25, PALETTE.leafDark, 4, fx, 0.25, fz));
-        this.add(ico(0.08, PALETTE.flowers[Math.floor(r() * PALETTE.flowers.length)], fx, 0.4, fz));
-      }
-      this.block(cx - 1.6, 5.4, cx + 1.6, 6.1);
-    }
-
-    for (const [x, z, sc] of [[-9.7, 6.6, 1.0], [9.7, 6.7, 0.9], [-9.6, 2.5, 0.8], [9.6, -2, 0.85]]) {
-      this.add(buildBush(x, z, sc));
-      this.block(x - 0.5 * sc, z - 0.5 * sc, x + 0.5 * sc, z + 0.5 * sc);
-    }
-    // Trees in the back yard sway, so they stay out of the static merge.
-    this.trees = [buildTree(this.seed + 1, -8.9, -6.4), buildTree(this.seed + 2, 8.9, -6.2), buildTree(this.seed + 3, -9.3, -1.6)];
-    for (const t of this.trees) this.group.add(t);
   }
 
   // ---- Room ---------------------------------------------------------------------------
@@ -505,26 +581,12 @@ export class Lot {
   buildRoom() {
     this.glass = new THREE.MeshStandardMaterial({ map: glassTexture(), roughness: 0.08, metalness: 0.05, transparent: true, opacity: 0.82, emissive: 0xffcf8a, emissiveIntensity: 0 });
     this.buildFloor('oak');
-    this.buildWalls();
-    this.buildRoof();
-
+    // Walls and the upper stack are built by setLevel for the home's tier. The front wall's openings
+    // change with the tier, so its obstacles are tier obstacles (frontWallBlocks).
     this.block(-7.25, -5.25, -6.95, 5.25);
     this.block(-7.25, -5.25, 7.25, -4.95);
     this.block(6.95, -5.25, 7.25, 5.25);
-    this.block(-7.25, 4.95, -DOOR_HALF - 0.05, 5.25);
-    this.block(DOOR_HALF - 0.12, 3.25, DOOR_HALF + 0.05, 5.0); // the open door leaf
-    this.block(DOOR_HALF + 0.05, 4.95, 7.25, 5.25);
-
-
-    // Wall art
-    const art1 = buildWallArt(this.seed + 11, 1.0, 0.75);
-    art1.rotation.y = -Math.PI / 2; // canvas faces into the room (+z)
-    art1.position.set(-2.9, 1.95, -4.97);
-    this.add(art1);
-    const art2 = buildWallArt(this.seed + 12, 0.8, 0.6);
-    art2.rotation.y = -Math.PI / 2;
-    art2.position.set(2.3, 2.0, -4.97);
-    this.add(art2);
+    // Furniture, partitions and wall art come from the tier's floor plan (buildInterior).
   }
 
   /** The room floor, rebuilt when the floor style changes (see FLOORS in shared/style.mjs). */
@@ -546,27 +608,27 @@ export class Lot {
     this.group.add(g);
   }
 
-  /** The four walls in the current exterior/interior colors, rebuilt when repainted. */
+  /** The four ground-floor walls in the current colors and tier facade, rebuilt when repainted or upgraded. */
   buildWalls() {
-    for (const w of this.walls) {
-      this.group.remove(w);
-      w.traverse((o) => o.isMesh && o.geometry.dispose());
-    }
+    for (const w of this.walls) this.disposeObject(w);
     this.walls = [];
+    this.facadeGlows = [];
+    const plan = this.plan;
     const glassMat = this.glass;
     const wainscot = new THREE.Color(this.interior).multiplyScalar(0.8).getHex();
     const baseboard = new THREE.Color(this.interior).multiplyScalar(0.55).getHex();
-    // Outside walls get clapboard lines (fx.js); a slightly different roughness keeps the material separate.
+    // Outside walls get clapboard lines (fx.js) on clapboard tiers; a slightly different roughness keeps the material separate.
     const siding = mat(this.exterior, { roughness: 0.83 });
-    siding.userData.siding = this.arch === 'modern' ? 0 : 0.26;
+    siding.userData.siding = this.arch === 'modern' ? 0 : plan.siding;
     const shutterColor = new THREE.Color(this.exterior).multiplyScalar(0.55).getHex();
-    const shutters = this.arch === 'cottage' || this.arch === 'barn';
+    const shutters = plan.key === 'cottage' || this.arch === 'cottage' || this.arch === 'barn';
 
     /**
-     * A wall segment along x (dir 'x') or z (dir 'z'), with its outward normal, as a group that can
-     * be lowered to a stub when it faces the camera.
+     * A wall segment along x or z (from its outward normal) with window and door openings
+     * ({ kind, x, w, box, color }; x runs along the wall), as a group that can be lowered to a stub
+     * when it faces the camera.
      */
-    const makeWall = (normal, center, length, windows = [], door = false) => {
+    const makeWall = (normal, center, length, openingList, side) => {
       const g = new THREE.Group();
       g.userData.dynamic = true;
       const along = normal.x === 0 ? 'x' : 'z';
@@ -600,10 +662,9 @@ export class Lot {
           pieces.push(trim(to - from, 0.12, 0.06, (from + to) / 2, 0.045, baseboard)); // grounds the room
         }
       };
-      // Cut openings for windows (y 1.0–2.05) and the door (y 0–2.15).
+      // Cut openings for windows (y 1.0–2.05) and doors (y 0–2.15).
       const half = length / 2;
-      const openings = windows.map((c) => [c - 0.8, c + 0.8, 1.0, 2.05]);
-      if (door) openings.push([-DOOR_HALF, DOOR_HALF, 0, 2.15]);
+      const openings = openingList.map((o) => (o.kind === 'door' ? [o.x - o.w / 2, o.x + o.w / 2, 0, 2.15] : [o.x - o.w / 2, o.x + o.w / 2, 1.0, 2.05]));
       openings.sort((a, b) => a[0] - b[0]);
       let cursor = -half;
       for (const [a, b, y0, y1] of openings) {
@@ -619,46 +680,56 @@ export class Lot {
       const cap = along === 'x' ? box(length + 0.24, 0.08, 0.24, PALETTE.trim, 0, WALL_H, 0) : box(0.24, 0.08, length + 0.24, PALETTE.trim, 0, WALL_H, 0);
       g.add(cap);
       g.userData.windows = [];
-      for (const c of windows) {
+      for (const o of openingList.filter((o) => o.kind === 'window')) {
         const win = new THREE.Group();
-        const frame = (w, h, d, ox, oy) => win.add(along === 'x' ? box(w, h, d, PALETTE.trim, ox, oy, 0) : box(d, h, w, PALETTE.trim, 0, oy, ox));
-        frame(1.7, 0.08, 0.3, 0, 0.98);
-        frame(1.7, 0.08, 0.26, 0, 2.08);
-        frame(0.08, 1.1, 0.26, -0.82, 1.53);
-        frame(0.08, 1.1, 0.26, 0.82, 1.53);
+        const ww = o.w;
+        const frame = (w, h, d, ox, oy, color = PALETTE.trim, on = 0) => win.add(along === 'x' ? box(w, h, d, color, ox, oy, normal.z * on) : box(d, h, w, color, normal.x * on, oy, ox));
+        frame(ww + 0.1, 0.08, 0.3, 0, 0.98);
+        frame(ww + 0.1, 0.08, 0.26, 0, 2.08);
+        frame(0.08, 1.1, 0.26, -ww / 2 - 0.02, 1.53);
+        frame(0.08, 1.1, 0.26, ww / 2 + 0.02, 1.53);
         frame(0.05, 1.05, 0.22, 0, 1.53);
-        if (shutters) {
-          // Louvered shutters on the outside.
-          for (const sx of [-1.12, 1.12]) {
-            const sh = along === 'x' ? box(0.5, 1.15, 0.05, shutterColor, sx, 1.53, normal.z * 0.14) : box(0.05, 1.15, 0.5, shutterColor, normal.x * 0.14, 1.53, sx);
-            win.add(sh);
+        if (shutters) for (const sx of [-1, 1]) frame(Math.min(0.5, ww * 0.32), 1.15, 0.05, sx * (ww / 2 + Math.min(0.32, ww * 0.2)), 1.53, shutterColor, 0.14);
+        if (o.box) {
+          // A flower box under the sill.
+          frame(ww + 0.1, 0.2, 0.24, 0, 0.84, PALETTE.wood, 0.22);
+          for (let k = 0; k < Math.max(3, Math.round(ww / 0.3)); k++) {
+            const fx = -ww / 2 + 0.12 + k * 0.3;
+            if (fx > ww / 2) break;
+            const at = along === 'x' ? [fx, 1.0, normal.z * 0.24] : [normal.x * 0.24, 1.0, fx];
+            win.add(ico(0.1, PALETTE.leafDark, ...at), ico(0.06, PALETTE.flowers[k % PALETTE.flowers.length], at[0] + (along === 'x' ? 0.04 : normal.x * 0.05), 1.08, at[2] + (along === 'x' ? normal.z * 0.05 : 0.04)));
           }
         }
-        const pane = new THREE.Mesh(along === 'x' ? new THREE.BoxGeometry(1.6, 1.05, 0.03) : new THREE.BoxGeometry(0.03, 1.05, 1.6), glassMat);
+        const pane = new THREE.Mesh(along === 'x' ? new THREE.BoxGeometry(ww, 1.05, 0.03) : new THREE.BoxGeometry(0.03, 1.05, ww), glassMat);
         pane.position.y = 1.53;
         win.add(pane);
-        if (along === 'x') win.position.x = c;
-        else win.position.z = c;
+        if (along === 'x') win.position.x = o.x;
+        else win.position.z = o.x;
         win.userData.dynamic = true;
         mergeStatic(win); // frames, shutters and pane: a few draws per window instead of ~10
         g.add(win);
         g.userData.windows.push(win);
       }
-      if (door) {
+      for (const o of openingList.filter((o) => o.kind === 'door')) {
         const frame = (w, h, ox, oy) => g.add(along === 'x' ? box(w, h, 0.28, PALETTE.trim, ox, oy, 0) : box(0.28, h, w, PALETTE.trim, 0, oy, ox));
-        frame(0.1, 2.2, -DOOR_HALF - 0.05, 1.1);
-        frame(0.1, 2.2, DOOR_HALF + 0.05, 1.1);
-        frame(2.0, 0.1, 0, 2.18);
-        // An open front door, swung in against the wall on its hinge.
+        frame(0.1, 2.2, o.x - o.w / 2 - 0.05, 1.1);
+        frame(0.1, 2.2, o.x + o.w / 2 + 0.05, 1.1);
+        frame(o.w + 0.2, 0.1, o.x, 2.18);
+        // An open door, swung in against its hinge (the footprint matches leafRect in home-tier-plans.js).
+        const len = 5.0 - leafRect(o)[1];
         const hinge = new THREE.Group();
-        hinge.position.set(DOOR_HALF - 0.02, 0, -0.14);
+        hinge.position.set(o.x + o.w / 2 - 0.02, 0, -0.14);
         hinge.rotation.y = -Math.PI / 2 * 0.96;
-        const doorColor = new THREE.Color(this.exterior).multiplyScalar(0.62).getHex();
-        hinge.add(softBox(1.74, 2.1, 0.06, doorColor, -0.87, 1.05, 0, 0.02));
-        for (const y of [0.55, 1.45]) hinge.add(box(1.4, 0.6, 0.02, new THREE.Color(doorColor).multiplyScalar(0.85).getHex(), -0.87, y, 0.035));
-        hinge.add(cyl(0.035, 0.035, 0.08, 0xd9b55a, 10, -1.6, 1.0, 0.07));
+        const doorColor = o.color ?? new THREE.Color(this.exterior).multiplyScalar(0.62).getHex();
+        hinge.add(softBox(len, 2.1, 0.06, doorColor, -len / 2, 1.05, 0, 0.02));
+        for (const y of [0.55, 1.45]) hinge.add(box(len * 0.8, 0.6, 0.02, new THREE.Color(doorColor).multiplyScalar(0.85).getHex(), -len / 2, y, 0.035));
+        hinge.add(cyl(0.035, 0.035, 0.08, 0xd9b55a, 10, -len * 0.92, 1.0, 0.07));
         g.add(hinge);
       }
+      // Tier details on the outside: quoins, plinth, lanterns, the bay window and entrance portals.
+      const extra = facadeExtras(plan, this, side, length, this.levelGlowMat);
+      for (const o of extra.objects) g.add(o);
+      this.facadeGlows.push(...extra.glows);
 
       mergeStatic(g);
       g.position.set(center.x, 0, center.z);
@@ -669,217 +740,108 @@ export class Lot {
       return g;
     };
 
-    makeWall(new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 0, -5.1), 14.4, [-5.6, 5.0]);
-    makeWall(new THREE.Vector3(-1, 0, 0), new THREE.Vector3(-7.1, 0, 0), 10.0, [-3.4]);
-    makeWall(new THREE.Vector3(1, 0, 0), new THREE.Vector3(7.1, 0, 0), 10.0, [-1.8, 3.2]);
-    makeWall(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 5.1), 14.4, [-4.2, 4.2], true);
-
-  }
-
-  /** Roof in the home's architecture style (ARCHES). Sits on the walls at y 2.74; lot.update lifts it away. */
-  buildRoof() {
-    this.smoke = null;
-    if (this.roof) {
-      this.group.remove(this.roof);
-      this.roof.traverse((o) => o.isMesh && o.geometry.dispose());
-    }
-    const g = new THREE.Group();
-    const W = 14.3;
-    const D = 10.3;
-    const ov = 0.5;
-    const ext = this.exterior;
-    const shingle = (color) => {
-      const m = mat(color, { roughness: 0.81 });
-      m.userData.bands = 0.12; // shingle rows (fx.js)
-      return m;
-    };
-    const gable = (H, color, chimney) => {
-      const half = D / 2 + ov;
-      const slope = Math.hypot(half, H);
-      const ang = Math.atan2(H, half);
-      for (const s of [1, -1]) {
-        const slab = box(W + ov * 2, 0.14, slope, 0, 0, H / 2, (s * half) / 2, { material: shingle(color) });
-        slab.rotation.x = s * ang;
-        g.add(slab);
-        g.add(box(W + ov * 2, 0.1, 0.12, 0xe9e5dc, 0, -0.02, s * (half - 0.05))); // gutter
-      }
-      // Gable ends in the house color.
-      const tri = new THREE.Shape([new THREE.Vector2(-D / 2, 0), new THREE.Vector2(D / 2, 0), new THREE.Vector2(0, H - 0.08)]);
-      const end = new THREE.Mesh(new THREE.ExtrudeGeometry(tri, { depth: W - 0.1, bevelEnabled: false }), mat(ext));
-      end.rotation.y = Math.PI / 2;
-      end.position.x = -(W - 0.1) / 2;
-      end.castShadow = true;
-      g.add(end);
-      if (this.arch === 'barn') {
-        for (const x of [-W / 2 - 0.02, W / 2 + 0.02]) {
-          const vent = cyl(0.45, 0.45, 0.06, 0xfbfaf6, 16, x, H * 0.45, 0);
-          vent.rotation.z = Math.PI / 2;
-          g.add(vent);
-        }
-      }
-      if (chimney) addChimney(W / 2 - 2.2, -1.6, H);
-    };
-    // A brick chimney with a lazy curl of smoke (animated in update; lifts away with the roof).
-    const addChimney = (x, z, H) => {
-      g.add(box(0.9, H + 0.8, 0.9, 0x9a5b45, x, (H + 0.8) / 2, z), box(1.05, 0.15, 1.05, 0x6b3f30, x, H + 0.85, z));
-      const smoke = new THREE.Group();
-      smoke.userData.dynamic = true;
-      smoke.position.set(x, H + 1, z);
-      const puffMat = new THREE.MeshLambertMaterial({ color: 0xf2f2f2, transparent: true, opacity: 0, depthWrite: false });
-      for (let i = 0; i < 6; i++) {
-        const puff = new THREE.Mesh(new THREE.IcosahedronGeometry(0.28, 0), puffMat.clone());
-        puff.userData.phase = i / 6;
-        puff.userData.dynamic = true;
-        smoke.add(puff);
-      }
-      g.add(smoke);
-      this.smoke = smoke;
-    };
-    if (this.arch === 'craftsman') {
-      // Hip roof: two sloped sides meeting at a ridge plus two triangular ends, over wide eaves.
-      const a = (W + ov * 3) / 2;
-      const b = (D + ov * 3) / 2;
-      const H = 2.3;
-      const r = a - b;
-      const v = (x, y, z) => [x, y, z];
-      const tris = [
-        [v(-a, 0, b), v(a, 0, b), v(r, H, 0)], [v(-a, 0, b), v(r, H, 0), v(-r, H, 0)], // front slope
-        [v(a, 0, -b), v(-a, 0, -b), v(-r, H, 0)], [v(a, 0, -b), v(-r, H, 0), v(r, H, 0)], // back slope
-        [v(a, 0, b), v(a, 0, -b), v(r, H, 0)], // right end
-        [v(-a, 0, -b), v(-a, 0, b), v(-r, H, 0)], // left end
-      ];
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.Float32BufferAttribute(tris.flat(2), 3));
-      geo.computeVertexNormals();
-      const tints = [0x56606c, 0x6a5246, 0x4d6358, 0x6b5a4c];
-      const hash = [...this.project].reduce((h, ch) => (Math.imul(h, 31) + ch.charCodeAt(0)) | 0, 7);
-      const hip = new THREE.Mesh(geo, shingle(tints[Math.abs(hash) % tints.length]));
-      hip.castShadow = true;
-      g.add(hip);
-      g.add(box(r * 2 + 0.3, 0.12, 0.22, 0x3b414a, 0, H + 0.02, 0)); // ridge cap
-      g.add(box(W + ov * 3, 0.12, D + ov * 3, 0xe9e5dc, 0, 0.02, 0));
-      addChimney(-a + 3.2, -b + 2.6, H * 0.55);
-    } else if (this.arch === 'modern') {
-      g.add(box(W + 0.4, 0.3, D + 0.4, 0xd9d4ca, 0, 0.15, 0));
-      for (const [w, d, x, z] of [[W + 0.4, 0.25, 0, (D + 0.4) / 2], [W + 0.4, 0.25, 0, -(D + 0.4) / 2], [0.25, D + 0.4, (W + 0.4) / 2, 0], [0.25, D + 0.4, -(W + 0.4) / 2, 0]]) {
-        g.add(box(w, 0.55, d, ext, x, 0.45, z)); // parapet in the house color
-      }
-      for (let i = 0; i < 4; i++) {
-        const panel = box(1.6, 0.06, 1.0, 0x1f3354, -4.5 + i * 1.9, 0.75, -2.2, { roughness: 0.25, metalness: 0.5 });
-        panel.rotation.x = -0.35;
-        g.add(panel);
-      }
-      g.add(box(1.2, 0.8, 1.0, 0xb8bec7, 4.6, 0.7, 2.2)); // AC unit
-    } else {
-      gable(this.arch === 'barn' ? 3.1 : 2.2, this.arch === 'barn' ? 0xb5452b : 0x8a4b3c, this.arch === 'cottage');
-    }
-    mergeStatic(g);
-    g.position.y = 2.74;
-    g.visible = false;
-    this.roof = g;
-    this.group.add(g);
-  }
-
-  buildFurniture() {
-    const place = (obj, x, z, rotY = 0) => {
-      obj.position.set(x, 0, z);
-      obj.rotation.y = rotY;
-      return obj;
-    };
-
-    // Bookshelf (reading) on the left wall.
-    this.add(place(buildBookshelf(this.seed + 5), -6.78, -0.4));
-    this.block(-7.0, -1.42, -6.55, 0.62);
-
-    // Whiteboard (delegating) on the left wall.
-    this.add(place(buildWhiteboard(), -6.97, 2.4));
-
-    // Globe (web search).
-    const globe = buildGlobe();
-    this.group.add(place(mergeStatic(globe.group), -3.2, 3.3));
-    this.globe = globe.spinner;
-    this.block(-3.5, 3.0, -2.9, 3.6);
-
-    // Server rack (running commands).
-    const rack = buildRack();
-    this.group.add(place(mergeStatic(rack.group), 6.3, -4.35));
-    this.rackLights = rack.lights;
-    this.block(5.8, -4.75, 6.8, -3.95);
-
-    // Coffee bar (flavor) against the right wall.
-    const bar = buildCoffeeBar();
-    this.group.add(place(mergeStatic(bar.group), 6.5, 0.9));
-    this.steam = bar.steam;
-    this.block(6.05, 0.0, 6.95, 1.8);
-
-    // Living corner: couch facing the street, side table, floor lamp, rug.
-    this.add(buildRug(4.0, 2.6, PALETTE.rug, 2.0, 3.4));
-    this.add(place(buildCouch(this.seed + 7), 2.0, 2.9));
-    this.block(0.62, 2.42, 3.38, 3.38);
-    this.add(place(buildSideTable(), 3.85, 2.9));
-    this.block(3.55, 2.6, 4.15, 3.2);
-    const floorLamp = buildFloorLamp();
-    this.group.add(place(mergeStatic(floorLamp.group), 0.15, 2.65));
-    this.nightGlows.push(floorLamp.shade);
-    this.block(-0.05, 2.45, 0.35, 2.85);
-
-    const plants = [[-6.4, -4.45], [-6.4, 4.45], [5.2, -4.5], [6.5, 4.45], [-4.2, 4.5]];
-    plants.forEach(([x, z], k) => {
-      this.add(buildPlant(x, z, this.seed + 20 + k));
-      this.block(x - 0.24, z - 0.24, x + 0.24, z + 0.24);
-    });
-
-    this.stations = {
-      bookshelf: [spot(-5.95, -1.1, FACE_LEFT), spot(-5.95, -0.2, FACE_LEFT), spot(-5.95, 0.5, FACE_LEFT)],
-      whiteboard: [spot(-6.05, 2.0, FACE_LEFT), spot(-6.05, 2.9, FACE_LEFT)],
-      globe: [spot(-3.2, 2.45, FACE_FRONT), spot(-2.35, 3.3, FACE_LEFT), spot(-4.05, 3.3, FACE_RIGHT)],
-      rack: [spot(6.3, -3.35, FACE_BACK), spot(5.45, -3.35, FACE_BACK)],
-      coffee: [spot(5.6, 0.55, FACE_RIGHT), spot(5.6, 1.35, FACE_RIGHT)],
-      couch: [1.15, 2.0, 2.85].map((x) => spot(x, 2.92, FACE_FRONT)),
-      wander: [spot(-1, 0.6, 0.4), spot(1.6, 1.2, -0.6), spot(-0.6, 3.6, 0.2), spot(-4.6, 0.9, 1.2), spot(4.9, 3.9, -0.9),
-        spot(0.4, 6.6, 0.3), spot(-3.4, 6.8, -0.5), spot(4.4, 6.8, 0.8), spot(-7.5, 4, 1.2)],
-      entrance: spot(0, 10.6, FACE_BACK),
-    };
+    const win = (x) => ({ kind: 'window', x, w: 1.6 });
+    makeWall(new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 0, -5.1), 14.4, [win(-5.6), win(5.0)], 'back');
+    makeWall(new THREE.Vector3(-1, 0, 0), new THREE.Vector3(-7.1, 0, 0), 10.0, [win(-3.4)], 'left');
+    makeWall(new THREE.Vector3(1, 0, 0), new THREE.Vector3(7.1, 0, 0), 10.0, [win(-1.8), win(3.2)], 'right');
+    makeWall(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 5.1), 14.4, plan.front, 'front');
   }
 
   /**
-   * Desk i: a back row of 4, then a second row. The user sits on the street side facing the wall,
-   * so the camera looks over their shoulder at the screen.
+   * The tier's upper floors and roof (home-tiers.js), sitting on the walls at GROUND_H. Shown from afar;
+   * lot.update lifts the whole stack away as you zoom in so the studio and its residents stay visible.
    */
+  buildRoof() {
+    this.disposeObject(this.roof);
+    const built = buildUpper(this.plan, this, rng(this.seed + 7 + this.level * 13));
+    const g = built.group;
+    mergeStatic(g);
+    g.position.y = GROUND_H;
+    g.visible = false;
+    this.roof = g;
+    this.smoke = built.smoke;
+    this.roofTop = GROUND_H + built.top;
+    this.group.add(g);
+  }
+
+  /** Desks for n residents (up to fifteen), at the floor plan's seats; extra residents get a free spot. */
   ensureDesks(n) {
-    n = Math.min(n, 8);
-    while (this.desks.length < n) {
-      const i = this.desks.length;
-      const back = i < 4;
-      const x = -4.2 + (i % 4) * 2.6;
-      const deskZ = back ? -3.55 : 0.35;
-      const chairZ = deskZ + 0.78;
+    this.deskCount = Math.max(this.deskCount, Math.min(Math.max(1, n), MAX_LEVEL));
+    while (this.desks.length < this.deskCount) if (!this.addDesk(this.desks.length)) break;
+  }
 
-      const screen = new Screen();
-      const desk = buildDesk(i, screen);
-      desk.group.position.set(x, 0, deskZ);
-      this.group.add(mergeStatic(desk.group));
-      this.nightGlows.push(desk.lamp);
-      const chair = mergeStatic(buildChair());
-      chair.position.set(x, 0, chairZ + 0.04);
-      chair.rotation.y = Math.PI;
-      this.group.add(chair);
-      this.block(x - 0.85, deskZ - 0.43, x + 0.85, deskZ + 0.43);
+  rebuildDesks() {
+    this.disposeObject(this.deskGroup);
+    this.deskGroup = new THREE.Group();
+    this.group.add(this.deskGroup);
+    this.desks = [];
+    this.deskBlocks = [];
+    this.deskGlows = [];
+    this.ensureDesks(this.deskCount);
+  }
 
-      this.desks.push({
-        screen,
-        chair: spot(x, chairZ, FACE_BACK),
-        // Visiting helpers stand at the user's right (+x) with a laptop, facing the desk.
-        guests: [spot(x + 1.3, deskZ + 0.85, -2.2), spot(x + 1.3, deskZ + 1.6, -2.6), spot(x - 1.3, deskZ + 0.85, 2.2)],
-        wait: spot(x, chairZ + 0.95, FACE_FRONT),
-        visitorWait: spot(x + 0.85, chairZ + 1.0, FACE_FRONT),
-      });
+  /** Seat i: the floor plan's desk, or the first free spot that fits a desk and its chair. */
+  addDesk(i) {
+    const layout = this.floorplan.desks[i] || this.overflowDesk();
+    if (!layout) return false;
+    const screen = (this.screens[i] ||= new Screen());
+    const desk = buildDesk(i, screen);
+    desk.group.position.set(layout.x, 0, layout.z);
+    desk.group.rotation.y = layout.yaw;
+    this.deskGroup.add(mergeStatic(desk.group));
+    this.nightGlows.push(desk.lamp);
+    this.deskGlows.push(desk.lamp);
+    const chair = mergeStatic(buildChair());
+    const [cx, cz] = rotate(0, 0.82, layout.yaw);
+    chair.position.set(layout.x + cx, 0, layout.z + cz);
+    chair.rotation.y = layout.yaw + Math.PI;
+    this.deskGroup.add(chair);
+    this.deskBlocks.push(layout.block);
+    // Visiting helpers stand at the user's right with a laptop, facing the desk.
+    this.desks.push({ screen, chair: layout.chair, guests: layout.guests, wait: layout.wait, visitorWait: layout.visitorWait });
+    this.nav = null;
+    this.reachCache = null;
+    return true;
+  }
+
+  /**
+   * A desk for a resident beyond the floor plan's seats: the first spot that fits a desk with its chair and
+   * keeps every existing desk, station and doorway reachable from the street.
+   */
+  overflowDesk() {
+    const taken = [...this.obstacles, ...this.levelObstacles, ...this.deskBlocks, ...this.decor.obstacles];
+    const clearAt = (s) => s.x > -6.7 && s.x < 6.7 && s.z > -4.7 && s.z < 4.6 && !taken.some((r) => s.x > r[0] - 0.3 && s.x < r[2] + 0.3 && s.z > r[1] - 0.3 && s.z < r[3] + 0.3);
+    const reach = (nav) => {
+      const seen = nav.reachableFrom(this.stations.entrance);
+      return (s, r = 4) => {
+        const c = nav.nearestFree(...nav.toCell(s.x, s.z), r);
+        return !!c && !!seen[c[1] * nav.w + c[0]];
+      };
+    };
+    const now = reach(this.makeNav(this.decor.obstacles));
+    const needed = this.keySpots().filter((s) => now(s));
+    for (let z = -3.4; z <= 2.6; z += 0.5) {
+      for (let x = -5.6; x <= 5.6; x += 0.5) {
+        for (const look of ['n', 'e', 'w']) {
+          const d = deskLayout(x, z, look);
+          const [x0, z0, x1, z1] = d.block;
+          if (x0 < -6.95 || x1 > 6.95 || z0 < -4.95 || z1 > 4.95) continue;
+          if (taken.some((r) => x0 < r[2] + 0.05 && x1 > r[0] - 0.05 && z0 < r[3] + 0.05 && z1 > r[1] - 0.05)) continue;
+          if (![d.chair, d.wait, d.visitorWait].every(clearAt)) continue;
+          this.deskBlocks.push(d.block);
+          const after = reach(this.makeNav(this.decor.obstacles));
+          this.deskBlocks.pop();
+          if ([d.chair, d.wait, d.visitorWait].every((s) => after(s, 1)) && needed.every((s) => after(s))) return d;
+        }
+      }
     }
+    return null;
   }
 
   desk(slot) {
-    this.ensureDesks(slot);
-    return this.desks[(slot - 1) % this.desks.length];
+    const seat=this.residentSlots?.get(slot)||slot;
+    this.ensureDesks(seat);
+    return this.desks[(seat - 1) % this.desks.length];
   }
 
 
@@ -897,7 +859,7 @@ export class Lot {
     el.dataset.workHome = this.project;
     el.setAttribute('role', 'button');
     el.tabIndex = 0;
-    el.setAttribute('aria-label', `Open project command center for ${household.name}`);
+    el.setAttribute('aria-label', `Open home overview for ${household.name}`);
     el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); } });
     el.innerHTML = `<span class="lot-dot" style="background:#${this.exterior.toString(16).padStart(6, '0')}"></span><span class="lot-name"></span><span class="lot-level"></span>`;
     el.querySelector('.lot-name').textContent = household.name;
@@ -927,7 +889,7 @@ export class Lot {
    * @param {number} o.night 0..1
    * @param {boolean} o.busy someone is running commands here
    */
-  update(dt, t, { camera, night, busy, avatar = null }) {
+  update(dt, t, { camera, night, busy, avatar = null, clearView = false, peekOpen = 76 }) {
     if (this.constructing) {
       this.setConstruction(this.construction);
       if (this.constructing) {
@@ -938,7 +900,7 @@ export class Lot {
       }
     }
     this.pet?.update(dt, t, avatar);
-    if (this.globeSpin > 0) this.globe.rotation.y += dt * 2.5;
+    if (this.globeSpin > 0) for (const globe of this.globes) globe.rotation.y += dt * 2.5;
     this.globeSpin = 0;
 
     this.rackLights.forEach((l, i) => {
@@ -949,7 +911,7 @@ export class Lot {
     // Coffee steam: a lazy loop of puffs while someone is at the bar.
     const steaming = this.coffeeBusy > 0;
     this.coffeeBusy = 0;
-    this.steam.children.forEach((puff) => {
+    for (const steam of this.steams) steam.children.forEach((puff) => {
       const p = (t * 0.45 + puff.userData.phase) % 1;
       puff.position.set(Math.sin(p * 9 + puff.userData.phase * 6) * 0.04, p * 0.6, 0);
       puff.scale.setScalar(0.6 + p * 1.6);
@@ -974,8 +936,7 @@ export class Lot {
     for (const tree of this.trees) sway(tree.getObjectByName('canopy'));
     for (const c of this.decor.canopies) sway(c);
     for (const glow of this.decor.glows) glow.material.emissiveIntensity = (glow.userData.dayGlow ?? 0) + night * glow.userData.nightGlow;
-    for (const glow of this.levelGlows) glow.material.emissiveIntensity = 0.15 + night * glow.userData.nightGlow;
-    if (this.statue) this.statue.rotation.y += dt * 0.6;
+    this.levelGlowMat.emissiveIntensity = 0.15 + night * 2.5; // door lanterns and yard lamps
 
     // Night: interior light, window glow, lamps. Each home switches on at its own moment around dusk,
     // so the street lights up house by house instead of all at once.
@@ -984,7 +945,7 @@ export class Lot {
     this.lamp.intensity = lit * 14;
     this.glass.emissiveIntensity = lit * 0.9;
     this.glass.opacity = 0.82 + night * 0.12;
-    for (const glow of this.nightGlows) glow.material.emissiveIntensity = lit * (glow.userData.nightGlow ?? 1);
+    for (const glow of this.nightGlows) glow.material.emissiveIntensity = (glow.userData.dayGlow ?? 0) + lit * (glow.userData.nightGlow ?? 1);
 
     // Roof: shown when you're zoomed out, lifting away as you zoom in so the room (and the truth inside it)
     // is always visible up close.
@@ -992,8 +953,10 @@ export class Lot {
     const camDist = camera.position.distanceTo(center);
     // The roof is either on or off (never parked half-lifted). The home in the middle of the screen (`peek`)
     // opens up from farther out so you can look inside; the gap between thresholds stops flicker.
-    const openBelow = this.peek ? 76 : 48;
-    if (!this.roofAllowed || this.wallMode === 'down') this.roofOn = false;
+    // Tall tiers also open while they stand between the camera and the home you're looking at (`clearView`).
+    // Zoomed all the way out, even the centered home shows its whole building.
+    const openBelow = this.peek ? Math.max(48, peekOpen) : 48;
+    if (!this.roofAllowed || this.wallMode === 'down' || clearView) this.roofOn = false;
     else if (this.roofOn && camDist < openBelow) this.roofOn = false;
     else if (!this.roofOn && camDist > openBelow + 8) this.roofOn = true;
     // A soft spring, so the roof settles with a little bounce instead of sliding.
@@ -1006,7 +969,9 @@ export class Lot {
     if (this.roof) {
       const k = THREE.MathUtils.clamp(this.roofK, 0, 1.08);
       this.roof.visible = k > 0.01;
-      this.roof.position.y = 2.74 + (1 - Math.min(k, 1)) * 5 + this.hoverK * 0.45 * Math.min(k, 1);
+      // Taller stacks lift farther so their lowest floor clears the residents' heads quickly.
+      const lift = 5 + Math.max(0, (this.roofTop || 0) - 8) * 0.35;
+      this.roof.position.y = GROUND_H + (1 - Math.min(k, 1)) * lift + this.hoverK * 0.45 * Math.min(k, 1);
       this.roof.scale.setScalar(0.55 + 0.45 * k);
     }
     // Cutaway walls: lower the walls between the camera and the room (all up while the roof is on).
@@ -1019,6 +984,13 @@ export class Lot {
       w.userData.scale += (target - w.userData.scale) * (1 - Math.exp(-dt * 7));
       w.scale.y = w.userData.scale;
       for (const win of w.userData.windows) win.visible = w.userData.scale > 0.75;
+    }
+    // Interior partitions drop to a low stub whenever the room is open (cutaway or walls down).
+    if (this.partitionGroup) {
+      const pg = this.partitionGroup;
+      const target = this.roofK > 0.3 || this.wallMode === 'up' ? 1 : 0.16;
+      pg.userData.scale += (target - pg.userData.scale) * (1 - Math.exp(-dt * 7));
+      pg.scale.y = pg.userData.scale;
     }
   }
 

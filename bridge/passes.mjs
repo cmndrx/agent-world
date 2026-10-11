@@ -1,3 +1,4 @@
+import {roommateRoles} from '../shared/roommates.mjs';
 import {validateHandoffs,recordHandoffs,reconcileTeam} from './handoffs.mjs';
 import {fixedExecution,defaultExecution} from '../shared/execution.mjs';
 import {validModel,validEffort,validClaudeModel,validClaudeEffort} from './models.mjs';
@@ -36,9 +37,9 @@ export class PassStore {
     const execution=fixedExecution(input.execution,provider);
     const dependency=input.enqueue===true&&input.afterProposal?data.proposals.find(p=>p.id===input.afterProposal&&p.project===input.project&&p.slot===slot&&(p.provider||'codex')===provider):null;
     if(input.afterProposal&&!dependency)throw new Error('Choose an existing pending conversation.');
-    const proposal={team:Array.isArray(input.team)?input.team:null,enqueue:input.enqueue===true,afterProposal:dependency?.id||null,execution,attachments,isolate:!!input.isolate,model:input.model||null,effort:input.effort||null,resumeSession:input.resumeSession||null,id:randomUUID(),project:input.project,slot,title:text(input.title,200),instruction:text(input.instruction,4000),provider,recordedBy:text(input.recordedBy,100)||'Unspecified',status:'proposed',version:(current?.version||0)+1,createdAt:new Date().toISOString()};
+    const proposal={kind:input.kind==='roommate_inspection'?'roommate_inspection':null,team:Array.isArray(input.team)?input.team:null,enqueue:input.enqueue===true,afterProposal:dependency?.id||null,execution,attachments,isolate:!!input.isolate,model:input.model||null,effort:input.effort||null,resumeSession:input.resumeSession||null,id:randomUUID(),project:input.project,slot,title:text(input.title,200),instruction:text(input.instruction,4000),provider,recordedBy:text(input.recordedBy,100)||'Unspecified',status:'proposed',version:(current?.version||0)+1,createdAt:new Date().toISOString()};
     proposal.agentId = this.agentIdFor(proposal);
-    data.proposals=data.proposals.filter(p=>p!==current||p.teamRoot||['approved','running'].includes(p.status));data.proposals.push(proposal);return proposal;
+    data.proposals=data.proposals.filter(p=>p!==current||input.kind==='roommate_inspection'||p.teamRoot||['approved','running'].includes(p.status));data.proposals.push(proposal);return proposal;
   });}
   decide(input,homes) {return this.change(data=>{
     const p=data.proposals.find(p=>p.id===input.id);
@@ -63,7 +64,7 @@ export class PassStore {
     }
     const p=data.proposals.find(p=>p.status==='approved'&&!p.afterProposal&&!p.teamDependencies?.length&&canRun(p));if(!p)return null;
     const previous=p.resumeSession?data.runs.find(r=>r.project===p.project&&r.slot===p.slot&&(r.provider||'codex')===(p.provider||'codex')&&r.conversationSession===p.resumeSession&&r.workspace):null;
-    const run={teamFromName:p.teamFromName||null,recordedBy:p.recordedBy||null,team:p.team||null,teamRoot:p.teamRoot||null,teamParent:p.teamParent||null,teamDepth:p.teamDepth||0,teamFinal:!!p.teamFinal,teamContext:p.teamContext||[],teamOriginal:p.teamRoot?data.runs.find(r=>r.id===p.teamRoot)?.instruction:null,scheduleId:p.scheduleId||null,scheduledAt:p.scheduledAt||null,execution:defaultExecution(p.provider||'codex'),attachments:p.attachments||[],isolate:!!p.isolate,workspace:previous?.workspace||null,model:p.model||null,effort:p.effort||null,resumeSession:p.resumeSession||null,id:randomUUID(),proposalId:p.id,project:p.project,executionProject:p.executionProject,slot:p.slot,title:p.title,instruction:p.instruction,provider:p.provider,status:'running',startedAt:new Date().toISOString(),approvalVersion:p.version};
+    const run={kind:p.kind||null,teamFromName:p.teamFromName||null,recordedBy:p.recordedBy||null,team:p.team||null,teamRoot:p.teamRoot||null,teamParent:p.teamParent||null,teamDepth:p.teamDepth||0,teamFinal:!!p.teamFinal,teamContext:p.teamContext||[],teamOriginal:p.teamRoot?data.runs.find(r=>r.id===p.teamRoot)?.instruction:null,scheduleId:p.scheduleId||null,scheduledAt:p.scheduledAt||null,execution:defaultExecution(p.provider||'codex'),attachments:p.attachments||[],isolate:!!p.isolate,workspace:previous?.workspace||null,model:p.model||null,effort:p.effort||null,resumeSession:p.resumeSession||null,id:randomUUID(),proposalId:p.id,project:p.project,executionProject:p.executionProject,slot:p.slot,title:p.title,instruction:p.instruction,provider:p.provider,status:'running',startedAt:new Date().toISOString(),approvalVersion:p.version};
     run.agentId = p.agentId || this.agentIdFor(run);
     p.status='running';p.version++;data.runs.push(run);return run;
   });}
@@ -124,5 +125,6 @@ export function passResult(value){
   if(next!==null&&(typeof next!=='object'||Array.isArray(next)||!text(next.title,200)||!text(next.instruction,4000)))throw new Error('Invalid next proposal.');
   let findings;if(value.findings!=null){if(!Array.isArray(value.findings)||value.findings.length>30||value.findings.some(f=>!f||!['P0','P1','P2','P3'].includes(f.priority)||!text(f.title,200)||!text(f.body,2000)||!text(f.file,500)||!Number.isInteger(f.line)||f.line<1))throw new Error('Invalid review findings.');findings=value.findings.map(f=>({priority:f.priority,title:text(f.title,200),body:text(f.body,2000),file:text(f.file,500),line:f.line}));}
   const handoffs=validateHandoffs(value.handoffs);
-  return {...(handoffs.length?{handoffs}:{}),...(findings?{findings}:{}),summary:text(value.summary,2000),checks:value.checks.slice(0,20).map(v=>text(v,500)),limitations:value.limitations.slice(0,20).map(v=>text(v,500)),next:next?{title:text(next.title,200),instruction:text(next.instruction,4000)}:null};
+  const roles=value.roommateRoles==null?null:roommateRoles(value.roommateRoles);
+  return {...(roles?{roommateRoles:roles}:{}),...(handoffs.length?{handoffs}:{}),...(findings?{findings}:{}),summary:text(value.summary,2000),checks:value.checks.slice(0,20).map(v=>text(v,500)),limitations:value.limitations.slice(0,20).map(v=>text(v,500)),next:next?{title:text(next.title,200),instruction:text(next.instruction,4000)}:null};
 }

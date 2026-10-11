@@ -23,6 +23,7 @@ export class CameraRig {
     this.distance = 22;
     this.distanceTarget = 22;
     this.maxDistance = 60;
+    this.lift = 0; // raises the orbit point when zoomed out, so tall buildings stay in frame (main.js)
     this.target = new THREE.Vector3();
     this.fly = null;
     this.keys = new Set();
@@ -178,9 +179,9 @@ export class CameraRig {
     const d = this.distance;
     this.camera.position.set(
       this.target.x + Math.sin(this.yaw) * Math.cos(this.pitch) * d,
-      this.target.y + Math.sin(this.pitch) * d,
+      this.target.y + this.lift + Math.sin(this.pitch) * d,
       this.target.z + Math.cos(this.yaw) * Math.cos(this.pitch) * d,
     );
-    this.camera.lookAt(this.target.x, this.target.y + 1, this.target.z);
+    this.camera.lookAt(this.target.x, this.target.y + this.lift + 1, this.target.z);
   }
 }

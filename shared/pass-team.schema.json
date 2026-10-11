@@ -65,12 +65,7 @@
             "type": "string"
           },
           "role": {
-            "type": "string",
-            "enum": [
-              "assistant",
-              "junior_developer",
-              "researcher"
-            ]
+            "type": "string"
           },
           "title": {
             "type": "string"

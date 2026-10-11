@@ -14,3 +14,11 @@ test('errors, queued work, cancelled runs and missing responses do not award XP;
  const e=experience([run('a',1,'failed'),run('b',1,'running'),run('c',1,'cancelled'),run('d',1,'interrupted'),{...run('e'),result:null},run('f'),{...run('g'),project:'/other'}]);
  assert.equal(e.player.xp,50);assert.equal(Object.keys(e.residents).length,2);
 });
+
+test('explicit XP reset preserves reports while future completed responses start earning again',()=>{
+ const old={...run('old'),xpExcluded:true};
+ const reset=experience([old]);assert.equal(reset.player.level,1);assert.equal(reset.player.xp,0);assert.deepEqual(reset.residents,{});
+ const next=experience([old,run('new')]);assert.equal(next.player.xp,25);assert.equal(next.residents[residentKey('/project',1)].xp,25);
+ assert.equal(old.result.summary,'Response returned');assert.equal(old.status,'completed');
+ assert.deepEqual(experience(JSON.parse(JSON.stringify([old,run('new')]))),next);
+});

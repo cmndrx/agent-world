@@ -107,7 +107,7 @@ export class Sim {
    * @param {{slot:number,name:string,seed:number}|null} o.character   null for visitors
    * @param {Sim|null} o.parent   the Sim a visitor belongs to
    */
-  constructor({ key, lot, character = null, parent = null, seed }) {
+  constructor({ key, lot, character = null, parent = null, seed, arriving = false }) {
     this.key = key;
     this.lot = lot;
     this.character = character;
@@ -178,9 +178,12 @@ export class Sim {
     this.needs = { energy: 0.4 + Math.random() * 0.6, fun: 0.4 + Math.random() * 0.6 };
 
     this.pos = new THREE.Vector2();
-    const start = this.isVisitor ? lot.stations.entrance : null;
+    // Visitors and newly recruited residents walk in through the front door; everyone else appears in place.
+    this.arriving = arriving;
+    const start = this.isVisitor || arriving ? lot.stations.entrance : null;
     if (start) this.pos.set(start.x, start.z);
     this.placed = !!start;
+    this.layoutVersion = lot.layoutVersion;
   }
 
   get name() {
@@ -387,6 +390,14 @@ export class Sim {
 
   update(dt, t) {
     if (this.truth && this.observationConnected === false) { this.plumbob.userData.material.color.setHex(0x9299a5); this.plumbob.userData.material.emissive.setHex(0x9299a5); this.plumbob.userData.material.emissiveIntensity = 0.25; this.updateLabel(); return; }
+    if (this.layoutVersion !== this.lot.layoutVersion) {
+      // The home was rebuilt with a new floor plan: reappear at the matching spot in the new rooms.
+      this.layoutVersion = this.lot.layoutVersion;
+      this.release();
+      this.activity = null;
+      this.path = [];
+      this.placed = false;
+    }
     if (!this.activity) this.decide();
     const now = performance.now() / 1000;
     this.needs.energy = Math.max(0, this.needs.energy - dt * 0.012);
@@ -422,6 +433,12 @@ export class Sim {
     if (!walking && !this.arrived) {
       this.arrived = true;
       if (this.leaving) this.gone = true;
+      if (this.arriving) {
+        // Made it in: a happy hop and a little celebration (main listens for this).
+        this.arriving = false;
+        this.popT = 0;
+        this.onArrive?.(this);
+      }
     }
 
     // Smooth turning.
@@ -433,6 +450,7 @@ export class Sim {
     this.root.rotation.y = this.facing;
     // Selecting a Sim gives it a quick squash-and-stretch hop (pure feedback; says nothing about the agent).
     if (this.selected && !this.wasSelected) this.popT = 0;
+    if (this.arriving && this.root.visible) this.root.position.y += Math.abs(Math.sin(performance.now() / 160)) * 0.05; // bouncy, excited walk-in
     this.wasSelected = this.selected;
     const base = (this.root.userData.baseScale ??= this.root.scale.x);
     if (this.popT !== undefined && this.popT < 0.9) {

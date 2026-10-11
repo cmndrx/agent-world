@@ -7,7 +7,7 @@ export function claudeConfiguration(project,root=process.env.CLAUDE_CONFIG_DIR||
 }
 export async function integrationCatalog(project,provider,{command=codexCommand(),codexHome=process.env.CODEX_HOME||path.join(os.homedir(),'.codex'),claudeRoot}={}){
  if(provider==='claude'){const config=claudeConfiguration(project,claudeRoot);return {status:'available',servers:Object.keys(config.servers).map(name=>({name,enabled:true})),plugins:Object.entries(config.plugins).map(([name,enabled])=>({name,enabled:enabled===true})),note:'Configured names only. MCP project trust, login and tool permissions still apply.'};}
- try{const {stdout}=await exec(command,['mcp','list','--json'],{cwd:project,timeout:10000,maxBuffer:1024*1024});const values=JSON.parse(stdout);if(!Array.isArray(values))throw new Error();return {status:'available',servers:values.filter(s=>typeof s.name==='string').map(s=>({name:s.name,enabled:s.enabled!==false})),plugins:codexPlugins([path.join(codexHome,'config.toml'),path.join(project,'.codex','config.toml')]),note:'Names from CLI configuration; this is not a connection health check. Workspace-managed plugins may override local preferences.'};}catch{return {status:'unavailable',servers:[],plugins:[],note:'Could not read CLI integrations. Check installation and configuration.'};}
+ try{const {stdout}=await exec(command,['mcp','list','--json'],{cwd:project,timeout:10000,maxBuffer:1024*1024});const values=JSON.parse(stdout);if(!Array.isArray(values))throw new Error();return {status:'available',servers:values.filter(s=>typeof s.name==='string').map(s=>({name:s.name,enabled:s.enabled!==false,transportType:s.transport?.type==='streamable_http'?'http':'stdio'})),plugins:codexPlugins([path.join(codexHome,'config.toml'),path.join(project,'.codex','config.toml')]),note:'Names from CLI configuration; this is not a connection health check. Workspace-managed plugins may override local preferences.'};}catch{return {status:'unavailable',servers:[],plugins:[],note:'Could not read CLI integrations. Check installation and configuration.'};}
 }
 export async function integrationArgs(e,provider,project,dir,options={}){
  if(e.external==='inherit'&&!e.connections.length)return [];
@@ -21,6 +21,13 @@ export async function integrationArgs(e,provider,project,dir,options={}){
   return ['--strict-mcp-config','--mcp-config',file,'--settings',JSON.stringify(settings),...(e.external==='off'?['--disallowedTools','mcp__*']:[])];
  }
  const args=[],set=(key,value)=>args.push('-c',key+'='+JSON.stringify(value));
+ // Bootstrap-provided MCP servers may have no user TOML table. A nested enabled
+ // override creates an incomplete transport before bootstrap can populate it.
+ // Override the complete server map with valid, disabled entries instead.
+ if(e.external==='off'&&!e.connections.length){
+  const disabled='{'+catalog.servers.map(s=>JSON.stringify(s.name)+(s.transportType==='http'?'={url="http://127.0.0.1:1",enabled=false}':'={command="agent-world-disabled-mcp",enabled=false}')).join(',')+'}';
+  return ['-c','mcp_servers='+disabled,'-c','features.apps=false','-c','features.plugins=false','-c','features.remote_plugin=false'];
+ }
  if(e.external!=='inherit'){for(const s of catalog.servers)set(`mcp_servers.${JSON.stringify(s.name)}.enabled`,selected&&e.servers.includes(s.name));for(const p of catalog.plugins)set(`plugins.${JSON.stringify(p.name)}.enabled`,selected&&e.plugins.includes(p.name));set('features.apps',false);if(e.external==='off'){set('features.plugins',false);set('features.remote_plugin',false);}}
  for(const c of e.connections){set(`mcp_servers.${JSON.stringify(c.name)}.url`,c.url);set(`mcp_servers.${JSON.stringify(c.name)}.enabled`,true);set(`mcp_servers.${JSON.stringify(c.name)}.required`,true);if(c.tools.length)set(`mcp_servers.${JSON.stringify(c.name)}.enabled_tools`,c.tools);}
  return args;
