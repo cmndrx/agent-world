@@ -159,8 +159,7 @@ export class Pet {
     // Come say hi when you zoom in close by (same lot).
     let greet = null;
     if (avatar) {
-      const lx = avatar.x - this.lot.group.position.x;
-      const lz = avatar.z - this.lot.group.position.z;
+      const { x: lx, z: lz } = this.lot.toLocal(avatar.x, avatar.z);
       const d = Math.hypot(lx - this.pos.x, lz - this.pos.y);
       if (d < 6 && this.lot.getNav().inBounds(lx, lz)) greet = { x: lx, z: lz, d };
     }

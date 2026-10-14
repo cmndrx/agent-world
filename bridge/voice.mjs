@@ -1,11 +1,11 @@
-import {spawn} from 'node:child_process';
+import { spawnProvider } from './cli-process.mjs';
 import {randomUUID} from 'node:crypto';
 import os from 'node:os';
 import {codexCommand} from './providers.mjs';
 
 // Audio stays in transport memory. Only provider-authored transcript text is recorded.
 export class VoiceSession {
-  constructor({spawnChild=spawn,command=codexCommand(),onThread=()=>{},onTranscript=()=>{},onFinish=()=>{},timeoutMs=25000}={}){Object.assign(this,{spawnChild,command,onThread,onTranscript,onFinish,timeoutMs});this.state={status:'idle'};this.listeners=new Set();this.events=[];this.sequence=0;}
+  constructor({spawnChild=spawnProvider,command=codexCommand(),onThread=()=>{},onTranscript=()=>{},onFinish=()=>{},timeoutMs=25000}={}){Object.assign(this,{spawnChild,command,onThread,onTranscript,onFinish,timeoutMs});this.state={status:'idle'};this.listeners=new Set();this.events=[];this.sequence=0;}
   snapshot(){return {...this.state};}
   emit(type,value){const event={sequence:++this.sequence,type,...value};this.events.push(event);while(this.events.length>64)this.events.shift();for(const f of this.listeners)f(event);}
   start({project,slot,thread,model,effort,ephemeral=false}){

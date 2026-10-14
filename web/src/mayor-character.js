@@ -1,16 +1,16 @@
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { buildContactShadow, buildPerson, box } from './models.js';
+import { DOOR_ZONE, MAYOR_ROUTE, MAYOR_SEAT, hallFloorAt } from './town-hall.js';
 
 const LOOK = {
   skin: 0xd99c76, hair: 0x77736d, shirt: 0x205e70, pants: 0x303b4a,
   shoes: 0x573b2e, hairStyle: 2, top: 'collar', build: 1,
 };
 const OUTSIDE = new THREE.Vector3(3.5, 0.12, -5.4);
-const OFFICE_SEAT = new THREE.Vector3(0, 0.35, -17.05);
-const OFFICE_ROUTE = [
-  [2.1, -8.2], [0, -9.5], [0, -12.3], [2.45, -13.4], [2.45, -17.05], [0, -17.05],
-];
+// Martin's chair in the Town Hall office and his walk there from the square (town-hall.js).
+const OFFICE_SEAT = new THREE.Vector3(MAYOR_SEAT.x, MAYOR_SEAT.y, MAYOR_SEAT.z);
+const OFFICE_ROUTE = MAYOR_ROUTE;
 
 function makeMayor(scale) {
   const parts = buildPerson(LOOK, { scale });
@@ -145,7 +145,7 @@ export class MayorCharacter {
       this.routeIndex = OFFICE_ROUTE.length;
       this.seatBlend = 1;
       this.world.root.position.copy(OFFICE_SEAT);
-      this.world.root.rotation.y = 0;
+      this.world.root.rotation.y = MAYOR_SEAT.yaw;
     } else {
       this.routeIndex = 0;
       this.seatBlend = 0;
@@ -170,9 +170,9 @@ export class MayorCharacter {
         travel -= step;
         if (step === distance) this.routeIndex++;
       }
-      this.world.root.position.y = THREE.MathUtils.lerp(0.12, 0.35, THREE.MathUtils.clamp((-this.world.root.position.z - 9.5) / 2, 0, 1));
+      this.world.root.position.y = hallFloorAt(this.world.root.position.z);
     }
-    this.commons.doorOpen = walking && this.world.root.position.z < -8.5 && this.world.root.position.z > -12.5;
+    this.commons.doorOpen = walking && this.world.root.position.z > DOOR_ZONE[0] && this.world.root.position.z < DOOR_ZONE[1];
     const sitting = this.hallStatus === 'built' && !walking;
     this.seatBlend += ((sitting ? 1 : 0) - this.seatBlend) * (1 - Math.exp(-dt * 5));
     pose(this.world, t, talking && !walking && !sitting, 0);
@@ -189,7 +189,9 @@ export class MayorCharacter {
       this.world.kneeL.rotation.x = this.world.kneeR.rotation.x = Math.PI / 2 * this.seatBlend;
       this.world.body.position.y -= 0.42 * this.seatBlend;
       if (sitting) {
-        this.world.root.rotation.y += (0 - this.world.root.rotation.y) * (1 - Math.exp(-dt * 6));
+        // Turn the short way round to face the desk.
+        const d = Math.atan2(Math.sin(MAYOR_SEAT.yaw - this.world.root.rotation.y), Math.cos(MAYOR_SEAT.yaw - this.world.root.rotation.y));
+        this.world.root.rotation.y += d * (1 - Math.exp(-dt * 6));
         this.world.armL.rotation.x = this.world.armR.rotation.x = -0.45;
       }
     }

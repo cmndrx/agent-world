@@ -65,7 +65,7 @@ function setOffset(sim, target, crowded) {
   if (sim.bubbleEl.style.getPropertyValue('--dy') !== px) sim.bubbleEl.style.setProperty('--dy', px);
 }
 
-const SIGNS = '.biz-sign, .lot-sign, .commons-sign, .commons-title, .street-sign, .conversation-shelf, .downtown-title, .street-tag, .garden-chip';
+const SIGNS = '.civic-sign, .lot-sign, .commons-sign, .commons-title, .street-sign, .conversation-shelf, .garden-chip';
 
 /**
  * World signs (homes, businesses, streets, shelves): never cover an agent's bubble, and where two signs

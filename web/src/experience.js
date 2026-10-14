@@ -5,7 +5,8 @@ import { icon } from './icons.js';
 
 // Navigation preferences are local UI choices, separate from planning and observed activity.
 export class Experience {
-  constructor({ work, action, pets, leavePlay, onConversations, onMayor }) {
+  constructor({ work, onClaude, onCodex, action, pets, leavePlay, onConversations, onMayor }) {
+    this.onClaude=onClaude;this.onCodex=onCodex;
     this.usage = new ConnectedUsage();
     this.onConversations = onConversations; this.onMayor = onMayor;
     this.work = work; this.action = action; this.pets = pets; this.leavePlay = leavePlay;
@@ -20,6 +21,8 @@ export class Experience {
     document.getElementById('status').addEventListener('click', () => this.open('sources'));
     this.dialog.addEventListener('click', e => {
       const b = e.target.closest('button'); if (!b) return;
+      if(b.hasAttribute('data-sign-in-codex')){this.dialog.close();this.onCodex();return;}
+      if(b.hasAttribute('data-sign-in-claude')){this.dialog.close();this.onClaude();return;}
       if (b.hasAttribute('data-close')) this.dialog.close();
       if (b.dataset.go) {
         this.dialog.close();
@@ -82,7 +85,7 @@ export class Experience {
     const row = (ic, label, st, source = '') => `<div class="row-card"><span class="row-icon">${icon(ic)}</span><div class="row-main"><b>${label}</b><small><span class="dot ${st.cls}"></span> <span ${source ? `data-source-age="${source}"` : ''}>${st.text}</span></small></div></div>`;
     return `<p class="connection-summary" data-provider-connections>${(this.connections || connectionView(null, false)).providers.map(p => `${p.label}: ${p.status}`).join(' · ')}</p><p class="connection-summary">${CONNECTION_MEANING}</p><p class="connection-summary" data-bridge-status>${this.work.connected ? 'Live bridge · observations below are history' : 'Offline · current activity unavailable'}</p>${row('terminal', 'Codex', status('codex'), 'codex')}${row('terminal', 'Claude Code', status('claude-code'), 'claude-code')}${row('messageCircle', 'ChatGPT & Claude chats', { cls: 'saved', text: 'Saved links only' })}
       <div data-connected-usage></div>
-      <h3 class="sec" style="margin:14px 0 8px">Connect an agent</h3>
+      <h3 class="sec" style="margin:14px 0 8px">Connect an agent</h3><p>Connect either provider at any time. Open its account to see who is signed in or sign out.</p><div class="row-actions"><button data-sign-in-codex>Codex account</button><button data-sign-in-claude>Claude Code account</button></div>
       <ol class="steps"><li><span>${icon('terminal')}</span>Sign in to the Codex or Claude Code CLI on this computer</li><li><span>${icon('gem')}</span>Return to Mayor Martin to link that provider to this town and claim your first gems</li></ol>
       <div class="row-actions" style="justify-content:flex-start"><button class="primary" data-go="mayor">${icon('landmark')} Mayor Martin</button></div>
       <h3 class="sec" style="margin:14px 0 8px">Work setup</h3>

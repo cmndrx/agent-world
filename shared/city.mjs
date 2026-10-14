@@ -1,4 +1,5 @@
-// The city (play layer): downtown grows from the *kinds* of work your agents actually do.
+// The city (play layer): a ledger of the *kinds* of work your agents actually do. It gives residents their
+// work roles (Tester, Writer, …) and hires helpers; buildings are placed by the player (shared/town.mjs).
 //
 // Rules (docs/GAMEPLAY.md, "City"):
 // - Variety, not volume. Each kind of work counts at most once per day. How much, how long, or how many
@@ -9,7 +10,7 @@
 //   the "targets" privacy level; at "state" the city simply gets fewer signals.
 //
 // The ledger is a projection of the event log, kept in ~/.agent-world/city.json so deleting old event
-// files never takes buildings away. It is shared by the bridge (recording) and the client (display).
+// files never takes roles away. It is shared by the bridge (recording) and the client (display).
 
 import { commandKind } from './commands.mjs';
 import { dayKey } from './collectibles.mjs';
@@ -26,64 +27,19 @@ export const SIGNALS = {
   delegate: { label: 'Teamwork', phrase: 'started helper agents' },
 };
 
-/** Downtown businesses: one per kind of work. Each opens after its work shows up on DAYS_TO_OPEN days. */
-export const BUSINESSES = {
-  qa_lab: { name: 'QA lab', landmark: 'Testing tower', signal: 'tests', color: 0x5fbf73, prop: 'lens' },
-  post_office: { name: 'Post office', landmark: 'Clock tower post office', signal: 'git', color: 0x4f86c6, prop: 'envelope' },
-  shipping: { name: 'Shipping depot', landmark: 'Freight terminal', signal: 'ship', color: 0xd9886a, prop: 'crates' },
-  library: { name: 'Library', landmark: 'Grand library', signal: 'search', color: 0x9b7ede, prop: 'books' },
-  studio: { name: 'Design studio', landmark: 'Art gallery', signal: 'frontend', color: 0xe56b8a, prop: 'palette' },
-  print_shop: { name: 'Print shop', landmark: 'Newspaper building', signal: 'docs', color: 0xe6c84f, prop: 'paper' },
-  research_lab: { name: 'Research lab', landmark: 'Observatory', signal: 'data', color: 0x3fb7b0, prop: 'dome' },
-  coworking: { name: 'Coworking space', landmark: 'Innovation hub', signal: 'delegate', color: 0xef8354, prop: 'chairs' },
-};
-
-/**
- * Upgrades by use: the more different days a business's kind of work happens, the bigger it gets.
- * Usage is counted in days (once per day), never volume, so an agent looping all afternoon adds nothing.
- */
-export const TIERS = [
-  { name: 'Open', days: 2 },
-  { name: 'Expanded', days: 7 },
-  { name: 'Flagship', days: 14 },
-  { name: 'Landmark', days: 30 },
-];
-
-/** 0 = not open yet; 1 Open … 4 Landmark. */
-export function businessTier(city, id) {
-  const days = city?.signals?.[BUSINESSES[id].signal]?.count || 0;
-  let tier = 0;
-  TIERS.forEach((t, i) => days >= t.days && (tier = i + 1));
-  return tier;
-}
-
-/** The business's display name at a tier (landmarks get their own). */
-export const businessName = (id, tier = 1) => (tier >= TIERS.length ? BUSINESSES[id].landmark : BUSINESSES[id].name);
-
-/** { days, tier, next: { name, days } | null } for progress displays. */
-export function businessProgress(city, id) {
-  const days = city?.signals?.[BUSINESSES[id].signal]?.count || 0;
-  const tier = businessTier(city, id);
-  const next = TIERS[tier] || null;
-  return { days, tier, next };
-}
-
-// Pacing: construction starts the first day a kind of work is seen, and the business opens on its second.
-export const DAYS_TO_OPEN = 2;
-export const STAGE_NAMES = ['Not started', 'Lot surveyed', 'Under construction', 'Open'];
 const MAX_PROJECTS = 20;
 const MAX_PEOPLE = 400;
 
-/** Roles: a resident's (or hired helper's) most common kind of work, and where that work happens downtown. */
+/** Roles: a resident's (or hired helper's) most common kind of work, with an apron color. */
 export const ROLES = {
-  tests: { title: 'Tester', business: 'qa_lab' },
-  git: { title: 'Clerk', business: 'post_office' },
-  ship: { title: 'Shipper', business: 'shipping' },
-  search: { title: 'Researcher', business: 'library' },
-  frontend: { title: 'Designer', business: 'studio' },
-  docs: { title: 'Writer', business: 'print_shop' },
-  data: { title: 'Analyst', business: 'research_lab' },
-  delegate: { title: 'Manager', business: 'coworking' },
+  tests: { title: 'Tester', color: 0x5fbf73 },
+  git: { title: 'Clerk', color: 0x4f86c6 },
+  ship: { title: 'Shipper', color: 0xd9886a },
+  search: { title: 'Researcher', color: 0x9b7ede },
+  frontend: { title: 'Designer', color: 0xe56b8a },
+  docs: { title: 'Writer', color: 0xe6c84f },
+  data: { title: 'Analyst', color: 0x3fb7b0 },
+  delegate: { title: 'Manager', color: 0xef8354 },
 };
 /** A helper type (e.g. "Explore") that worked on this many different days in a project is hired. */
 export const HIRE_AFTER_DAYS = 3;
@@ -222,46 +178,9 @@ export function mergeCity(a, b) {
   return out;
 }
 
-/** Stage of a business: 0 not started, 1 surveyed, 2 under construction, 3 open. */
-export function businessStage(city, id) {
-  const days = city?.signals?.[BUSINESSES[id].signal]?.count || 0;
-  return days >= DAYS_TO_OPEN ? 3 : days ? 2 : 0; // 0 not started · 2 under construction · 3 open
-}
-
-/**
- * Downtown plots in the order work first showed up, so every player's main street is different.
- * Returns [{ id, stage, since }] for businesses that have started.
- */
-export function downtown(city) {
-  return Object.keys(BUSINESSES)
-    .map((id) => ({ id, stage: businessStage(city, id), tier: businessTier(city, id), since: city?.signals?.[BUSINESSES[id].signal]?.first }))
-    .filter((b) => b.stage > 0)
-    .sort((a, b) => (a.since < b.since ? -1 : a.since > b.since ? 1 : a.id < b.id ? -1 : 1));
-}
-
-const fmtDay = (iso) => new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-
-/** "Opened because your agents ran tests on 3 different days (first Oct 2, latest Oct 5) across 2 projects." */
-export function whyText(city, id) {
-  const b = BUSINESSES[id];
-  const s = city?.signals?.[b.signal];
-  const sig = SIGNALS[b.signal];
-  if (!s?.count) return `Opens when your agents ${sig.phrase} on ${DAYS_TO_OPEN} different days.`;
-  const span = s.count > 1 ? ` (first ${fmtDay(s.first)}, latest ${fmtDay(s.last)})` : ` (${fmtDay(s.first)})`;
-  const where = s.projects.length > 1 ? ` across ${s.projects.length} projects` : '';
-  const days = `${s.count} different day${s.count === 1 ? '' : 's'}`;
-  if (s.count >= DAYS_TO_OPEN) {
-    const { tier, next } = businessProgress(city, id);
-    const now = ['Opened', 'Opened', 'Expanded', 'Became a flagship', 'Became a landmark'][tier];
-    const upcoming = next ? ` Next: ${next.name.toLowerCase()} at ${next.days} days.` : ' Fully grown.';
-    return `${now} because your agents ${sig.phrase} on ${days}${span}${where}.${upcoming}`;
-  }
-  return `Your agents ${sig.phrase} on ${days}${span}${where}. It opens on day ${DAYS_TO_OPEN}; any later day counts, and nothing is lost by waiting.`;
-}
-
 /**
  * A person's role: their most common kind of work by days (ties go to the most recent, then catalog order).
- * Returns { signal, title, business, days } or null before any kind of work was observed.
+ * Returns { signal, title, color, days } or null before any kind of work was observed.
  */
 export function roleOf(person) {
   let best = null;

@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { LOT_D, LOT_W } from './lot.js';
 import { PALETTE, box, cyl, ico, mat, mergeStatic, rng } from './models.js';
+import { entranceTile, key, localToWorld, roadMap, roadShape, tileCenter } from '../../shared/town.mjs';
 import { waterMaterial } from './fx.js';
 
 const CAR_COLORS = [0xd94f4f, 0x4f86c6, 0xf2c14e, 0xf4f1ea, 0x6b7f99, 0x5fbf73, 0x9b7ede, 0xef8354];
@@ -49,7 +50,6 @@ export class Landscape {
     this.scene = scene;
     this.group = new THREE.Group();
     scene.add(this.group);
-    this.rows = 0;
     this.lightMats = [];
     this.parked = []; // [x0, z0, x1, z1] rectangles the avatar can't walk through
     this.buildGroves();
@@ -73,9 +73,10 @@ export class Landscape {
     };
     tryArea(-110, 190, -95, -20, 220); // north (behind the first row)
     tryArea(-140, -62, -20, 160, 120); // west, past the town square
-    tryArea(140, 220, -20, 160, 120); // east, past downtown
-    // Keep the pond clear.
-    const clear = spots.filter(([x, z]) => Math.hypot((x - 26) / 16, (z + 36) / 10) > 1);
+    tryArea(140, 220, -20, 160, 120); // east, past the town's edge
+    // Keep the pond and the town square's lawn (its Town Hall reaches back into the north meadow) clear.
+    const square = { x: -LOT_W - 6, w: 21.5, z0: -30, z1: 11 };
+    const clear = spots.filter(([x, z]) => Math.hypot((x - 26) / 16, (z + 36) / 10) > 1 && !(Math.abs(x - square.x) < square.w && z > square.z0 && z < square.z1));
     const trunkGeo = new THREE.CylinderGeometry(0.16, 0.24, 1.6, 6);
     trunkGeo.translate(0, 0.8, 0);
     const roundGeo = new THREE.IcosahedronGeometry(1.25, 0);
@@ -191,44 +192,71 @@ export class Landscape {
     this.group.add(car.group);
   }
 
-  /** Parked cars and street furniture for each row (called as rows are added). */
-  ensureRows(rows) {
-    for (let row = this.rows; row < rows; row++) {
-      const r = rng(900 + row);
-      const z = row * LOT_D + LOT_D / 2;
-      const g = new THREE.Group();
-      // Parked along the far curb, clear of the crosswalks in front of each home.
-      for (let x = STREET_X0 + 8; x < STREET_X1 - 6; x += 7 + r() * 9) {
-        const nearCrossing = [0, 1, 2].some((c) => Math.abs(x - (c * LOT_W + LOT_W / 2)) < 4.5);
-        if (nearCrossing || r() < 0.35) continue;
-        const { group } = buildCar(CAR_COLORS[Math.floor(r() * CAR_COLORS.length)], { lit: false }); // parked: lights off
-        group.position.set(x, 0, z + 1.75);
-        group.rotation.y = r() < 0.5 ? 0 : Math.PI;
-        g.add(group);
-        this.parked.push([x - 1.9, z + 0.8, x + 1.9, z + 2.7]);
-      }
-      // Hydrants on the lot-side sidewalk, benches and bins by the crossings.
-      for (let c = 0; c < 3; c++) {
-        const hx = c * LOT_W - 6;
-        g.add(cyl(0.12, 0.14, 0.55, 0xd94f4f, 8, hx, 0.35, z - 2.9), ico(0.13, 0xd94f4f, hx, 0.66, z - 2.9));
-        const bx = c * LOT_W + LOT_W / 2 + 4;
-        g.add(box(1.4, 0.08, 0.45, PALETTE.woodMid, bx, 0.55, z + 4.0), box(1.4, 0.4, 0.06, PALETTE.woodMid, bx, 0.82, z + 4.2));
-        for (const dx of [-0.6, 0.6]) g.add(box(0.06, 0.5, 0.45, PALETTE.dark, bx + dx, 0.3, z + 4.0));
-        g.add(cyl(0.22, 0.2, 0.7, 0x3f8a4f, 10, bx + 1.3, 0.42, z + 4.0));
-      }
-      if (row === 0) {
-        // Bus stop at the start of main street.
-        const sx = LOT_W * 2.5 + 2;
-        g.add(box(3.0, 0.1, 1.3, 0x34405a, sx, 2.5, z + 4.1));
-        for (const dx of [-1.4, 1.4]) g.add(box(0.08, 2.4, 0.08, 0x34405a, sx + dx, 1.25, z + 4.6));
-        g.add(box(2.8, 1.8, 0.05, 0x9fc6e0, sx, 1.3, z + 4.7, { roughness: 0.1, metalness: 0.3 }));
-        g.add(box(2.2, 0.08, 0.4, PALETTE.woodMid, sx, 0.55, z + 4.4));
-        g.add(cyl(0.05, 0.05, 2.6, PALETTE.metal, 6, sx - 2, 1.3, z + 3.6), box(0.6, 0.6, 0.05, 0x4f86c6, sx - 2, 2.5, z + 3.6));
-      }
-      mergeStatic(g);
-      this.group.add(g);
+  /**
+   * Parked cars, hydrants and benches along the town's streets (shared/town.mjs), clear of junctions and of the
+   * crossings in front of each home. Rebuilt when streets or plots change. Scenery only.
+   */
+  setTown(town) {
+    const layoutKey = JSON.stringify([town.roads.map((r) => [r.i0, r.j0, r.i1, r.j1]), town.homes.map((h) => [h.i, h.j, h.rot]), (town.civic || []).map((c) => [c.i, c.j, c.rot])]);
+    if (layoutKey === this.layoutKey) return;
+    this.layoutKey = layoutKey;
+    if (this.streetProps) {
+      this.group.remove(this.streetProps);
+      this.streetProps.traverse((o) => o.geometry?.dispose());
     }
-    this.rows = Math.max(this.rows, rows);
+    this.parked = [];
+    const roads = roadMap(town);
+    const entrances = new Set([...town.homes.filter((h) => h.i != null), ...(town.civic || [])].map((h) => key(entranceTile(h).i, entranceTile(h).j)));
+    const g = new THREE.Group();
+    for (const k of roads.keys()) {
+      const [i, j] = k.split(',').map(Number);
+      const shape = roadShape(roads, i, j);
+      if (shape.kind !== 'straight' || entrances.has(k)) continue;
+      const r = rng(900 + (i + 40) * 131 + (j + 40) * 7);
+      const junction = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([di, dj]) => roadShape(roads, i + di, j + dj).count >= 3 && roads.has(key(i + di, j + dj)));
+      if (junction || r() < 0.68) continue;
+      const { x, z } = tileCenter(i, j);
+      const { group } = buildCar(CAR_COLORS[Math.floor(r() * CAR_COLORS.length)], { lit: false }); // parked: lights off
+      const across = !!shape.e; // an east–west street
+      const along = (r() - 0.5) * 2.4;
+      if (across) {
+        group.position.set(x + along, 0, z + 1.75);
+        group.rotation.y = r() < 0.5 ? 0 : Math.PI;
+        this.parked.push([x + along - 1.9, z + 0.8, x + along + 1.9, z + 2.7]);
+      } else {
+        group.position.set(x - 1.75, 0, z + along);
+        group.rotation.y = r() < 0.5 ? Math.PI / 2 : -Math.PI / 2;
+        this.parked.push([x - 2.7, z + along - 1.9, x - 0.8, z + along + 1.9]);
+      }
+      g.add(group);
+    }
+    // A hydrant by each home's front path, and a bench across the street where that sidewalk exists.
+    for (const h of town.homes) {
+      if (h.i == null) continue;
+      const e = entranceTile(h);
+      const at = (lx, lz) => localToWorld(h, lx, lz);
+      const hy = at(-3, 9.1);
+      g.add(cyl(0.12, 0.14, 0.55, 0xd94f4f, 8, hy.x, 0.35, hy.z), ico(0.13, 0xd94f4f, hy.x, 0.66, hy.z));
+      if (roadShape(roads, e.i, e.j).kind !== 'straight') continue;
+      const b = at(2.6, 15.3);
+      const bench = new THREE.Group();
+      bench.add(box(1.4, 0.08, 0.45, PALETTE.woodMid, 0, 0.55, 0), box(1.4, 0.4, 0.06, PALETTE.woodMid, 0, 0.82, 0.2));
+      for (const dx of [-0.6, 0.6]) bench.add(box(0.06, 0.5, 0.45, PALETTE.dark, dx, 0.3, 0));
+      bench.add(cyl(0.22, 0.2, 0.7, 0x3f8a4f, 10, 1.3, 0.42, 0));
+      bench.position.set(b.x, 0, b.z);
+      bench.rotation.y = (h.rot || 0) * Math.PI / 2;
+      g.add(bench);
+    }
+    // Bus stop at the east end of Main Street.
+    const sx = [LOT_W * 2.5 + 2, LOT_W * 2.5 + 10, LOT_W * 2.5 + 18].find((x) => !roads.has(key(Math.round(x / 8), 2))) ?? LOT_W * 2.5 + 2, z = LOT_D / 2;
+    g.add(box(3.0, 0.1, 1.3, 0x34405a, sx, 2.5, z + 4.1 - 0.4));
+    for (const dx of [-1.4, 1.4]) g.add(box(0.08, 2.4, 0.08, 0x34405a, sx + dx, 1.25, z + 4.2 - 0.4));
+    g.add(box(2.8, 1.8, 0.05, 0x9fc6e0, sx, 1.3, z + 4.3 - 0.4, { roughness: 0.1, metalness: 0.3 }));
+    g.add(box(2.2, 0.08, 0.4, PALETTE.woodMid, sx, 0.55, z + 4.0 - 0.4));
+    g.add(cyl(0.05, 0.05, 2.6, PALETTE.metal, 6, sx - 2, 1.3, z + 3.3), box(0.6, 0.6, 0.05, 0x4f86c6, sx - 2, 2.5, z + 3.3));
+    mergeStatic(g);
+    this.streetProps = g;
+    this.group.add(g);
   }
 
   /** Avatar collision with parked cars (null when not near one). */

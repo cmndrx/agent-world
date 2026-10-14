@@ -4,7 +4,7 @@ import { icon } from './icons.js';
 // Participation XP display. Shown in three places, all with the same markup:
 //   - your level number on the "You" button, and your XP bar in the You card (wardrobe);
 //   - an agent's level and XP bar in their agent card (inspect drawer);
-//   - the agent's level in the prompter header (compact).
+//   - the agent's level chip beside their name in the prompter header (level only, XP in the tooltip).
 // XP celebrates participation; it never verifies or accepts work.
 
 /** Level badge + bar + numbers. `compact` drops the "to next level" line (for tight headers). */
@@ -16,6 +16,12 @@ export function xpMarkup(level = xpLevel(), { compact = false, label = '' } = {}
     `<span class="xp-track" role="progressbar" aria-label="Experience toward level ${level.level + 1}" aria-valuemin="0" aria-valuemax="${level.required}" aria-valuenow="${level.current}"><span style="width:${pct}%"></span></span>` +
     (compact ? '' : `<small class="xp-next">${icon('sparkles')} ${level.remaining} XP to level ${level.level + 1} · ${level.xp} total</small>`) +
     `</div></div>`;
+}
+
+/** Level-only pill for tight headers: "LV 7", with XP progress in the tooltip. */
+export function levelChip(level = xpLevel()) {
+  return `<span class="chat-level" role="img" aria-label="Level ${level.level}" title="Level ${level.level} · ${level.current} / ${level.required} XP · ${level.xp} total">` +
+    `<small aria-hidden="true">Lv</small><b aria-hidden="true">${level.level}</b></span>`;
 }
 
 export class Levels {
