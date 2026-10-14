@@ -155,6 +155,8 @@ kbd {
 #status[data-state='offline'] .dot { background: var(--error); }
 @keyframes live { 50% { box-shadow: 0 0 0 7px rgba(34, 197, 94, 0); } }
 #clock .icon { font-size: 15px; }
+#clock { flex-shrink: 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#clock > span { min-width: 8ch; text-align: center; }
 #demo-chip { background: linear-gradient(135deg, #7343e0, #4352d6); color: #fff; border-color: transparent; }
 
 @keyframes pop-in { from { opacity: 0; transform: translateY(-8px) scale(0.92); } }
