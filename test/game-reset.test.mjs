@@ -22,7 +22,8 @@ test('reset API rejects foreign and unconfirmed requests and resets without rest
   const post = (confirmed, origin) => fetch(base + '/api/gameplay', { method: 'POST', headers: { 'content-type': 'application/json', ...(origin ? { origin } : {}) }, body: JSON.stringify({ action: 'reset', confirmed }) });
   assert.equal((await post(true, 'https://foreign.invalid')).status, 403);
   assert.equal((await post(false)).status, 400);
-  assert.equal(fs.existsSync(path.join(dir, 'backups')), false);
+  // The first start migrated the town layout (and backed up what it read); no reset backup exists yet.
+  assert.deepEqual((fs.existsSync(path.join(dir, 'backups')) ? fs.readdirSync(path.join(dir, 'backups')) : []).filter(n => n.startsWith('game-reset')), []);
   assert.equal((await post(true)).status, 200);
   const state = await (await fetch(base + '/api/state')).json();
   assert.deepEqual(state.gameplay, emptyGameplay());

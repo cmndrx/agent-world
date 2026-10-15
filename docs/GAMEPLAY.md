@@ -19,11 +19,10 @@ neighborhood, and watching projects' houses grow as you accept real work. It nev
 ## Ground rules
 
 1. **Observed work shapes *what exists*, by kind and never by amount** (changed 2026-10-05 with the human's
-   approval). Downtown businesses appear from the *kinds* of work agents were observed doing, each kind
+   approval). Roles come from the *kinds* of work agents were observed doing, each kind
    counted at most once per day. No rewards for tool calls, tokens, session counts or time running: that
    would reward waste and let an agent farm progress. Nothing decays and there are no streaks. Synthetic
-   (fake demo) events never count outside demo mode. Businesses also **upgrade by use**, which the human
-   asked for and is measured in different days of that kind of work, never volume. Gems still follow
+   (fake demo) events never count outside demo mode. (The downtown businesses that grew from this were removed on 2026-10-14; buildings are placed by the player.) Gems still follow
    human decisions. Resident participation XP now determines home tiers and decor level eligibility.
 2. **Rewards follow human decisions and play.** Only tasks you accept with review notes, outcomes you mark
    reached, and in-game play (exploring, decorating) count toward reviewed-work and play rewards. The
@@ -35,67 +34,38 @@ neighborhood, and watching projects' houses grow as you accept real work. It nev
 5. **Local and separate.** Style and unlocks live in `~/.agent-world/style.json`, apart from observed events
    (`events/`), households and the task board (`productivity.json`).
 
-## City (downtown)
+## Civic buildings and roles
 
-`shared/city.mjs`, `web/src/downtown.js` and `web/src/census.js`. The bridge folds observed events into a ledger of kinds of work by
-day (`~/.agent-world/city.json`). It is a union with what it rebuilds from `events/`, so deleting event files
-never removes buildings. The ledger keeps only categories, never file names, paths or commands.
+**Civic buildings** (`shared/town.mjs` `CIVIC`, `web/src/civic.js`, the Civic tool in `web/src/town-planner.js`). The fixed
+downtown strip, its eight work businesses, the City census and street-life walks were removed on 2026-10-14: the
+player places every building. Civic infrastructure unlocks by player level, one of each:
 
-| Kind of work (observed) | Business |
-| --- | --- |
-| Running tests | QA lab |
-| Using git | Post office |
-| `git push`, deploy or containers | Shipping depot |
-| Searching the web | Library |
-| Editing frontend files (needs the "targets" privacy level) | Design studio |
-| Editing docs (needs "targets") | Print shop |
-| Notebooks, CSV, SQL or a database | Research lab |
-| Starting helper agents | Coworking space |
+| Building | Player level | Plot (tiles, front × depth) | Inside |
+| --- | --- | --- | --- |
+| Fire station | 2 | 3 × 2 | Two engine bays with fire engines, lockers, the pole, crew table; hose tower |
+| Police department | 3 | 2 × 2 | Front counter, desks, filing cabinets, two barred holding cells; patrol car |
+| Library | 4 | 3 × 2 | Portico, shelves, reading tables with lamps, librarian's desk, globe; dome |
+| School | 5 | 4 × 3 | Two classrooms off a locker hallway, second storey, bell tower; playground and court |
+| Hospital | 6 | 4 × 4 | Reception, waiting rows, a ward of beds with curtains, nurses' station; four storeys, helipad, ambulance |
+| City dump | 7 | 4 × 3 | A fenced yard of heaps and skips; weighbridge office; bulldozer and truck |
+| Water tower | 8 | 2 × 2 | Pump house with pumps, valves and a control panel; the tank on its legs |
+| Power plant | 10 | 4 × 4 | Turbine hall with two generator sets and a control room; cooling towers, stack, switchyard |
 
-- Each business goes from a surveyed lot (day 1) to construction (day 2) to open (day 3), on any days; nothing is lost by waiting.
-- Main street fills in the order each kind of work first appeared, so cities differ by player.
-- Every building has a "why it's here" card, and the City census (the building button in the dock) explains the rules.
+Homes are 3 × 3. A building's entrance is the middle of its front edge (for an even width, the tile right of
+centre as seen from the street). Zoomed in, a civic building opens like a home: the roof and any upper storeys
+lift away and the walls facing the camera drop (the Walls setting applies), and its halls stay dry in rain and
+snow. The build list shows a rendered picture of each building (made once in the browser, `civicPictures`).
 
-**People and jobs** (step 3, shipped):
-- The bridge attributes each event to a person: a resident (home + desk slot) or a helper type (home + what it was delegated as, e.g. "Explore").
-- A resident's **role** is their most common kind of work, by days (ties go to the most recent). Tester, Clerk, Shipper, Researcher, Designer, Writer, Analyst and Manager each map to a downtown workplace.
-- (Work clothes were removed on 2026-10-09; roles no longer change what a resident wears.) Roles previously showed as an apron in the workplace color (darkened when it's close to the shirt color, and placed below the provider badge), plus a role card in the inspect drawer that explains why. The wardrobe can hide the work clothes per resident (`uniform: false`).
-- **Helper types start as interns** (a lanyard with an ID card). After working on 3 different days in a home they are **hired**: they get a stable staff name ("Eli · Explore helper"; the observed helper type stays visible) and a role of their own.
-- The City census lists everyone's job.
+- Stored in `town.json` as `civic: [{ id, kind, i, j, rot }]` ((i, j) is the north-west tile). A building uses its own plot and the entrance rule above; homes, streets and other civic buildings can't overlap it, and removing a street can't cut it off from Main Street.
+- The bridge checks the player level on `place-civic` (moving an already placed building never needs the level again) and accepts `remove-civic`. A level never drops a placed building.
+- The dock's landmark button opens Plan town on the Civic tool, with the list of buildings (Place / Move / Remove, or the level that unlocks it).
+- Scenery only: nothing about civic buildings reflects agent work.
 
-**Upgrades by use** (step 4, shipped). The more different days a business's kind of work happens, the bigger it gets:
-
-| Tier | Days of use | What changes |
-| --- | --- | --- |
-| Open | 3 | The storefront |
-| Expanded | 7 | A second floor |
-| Flagship | 14 | Three floors, a rooftop billboard and flags |
-| Landmark | 30 | Its own building |
-
-The eight landmarks:
-
-| Business | Landmark |
-| --- | --- |
-| QA lab | Glass testing tower |
-| Post office | Clock tower post office (the clock shows local time) |
-| Shipping depot | Freight terminal with containers and a gantry |
-| Library | Grand library with columns and a dome |
-| Design studio | Art gallery with a rainbow sculpture |
-| Print shop | Newspaper building with a lit marquee |
-| Research lab | Observatory |
-| Coworking space | Innovation hub with terraced gardens |
-
-- An upgrade that happens while you're watching gets quiet confetti and a toast, with no sound.
-- Signs show the tier and the days to the next one, and the census shows progress bars.
-
-**Street life** (step 5, shipped; made up). `web/src/streetlife.js`.
-- While a resident's agent is off duty and their workplace is open, they sometimes walk from home to the business door and back:
-  - along their row's sidewalk, through the east gap (x = 64) for later rows, then along main street;
-  - they wait about 40 seconds before leaving, stay 45–95 seconds, and rest 2.5–5 minutes afterward;
-  - at most 4 walkers at once.
-- While away, the real Sim stays at home hidden and keeps simulating. A walker figure in the same look walks with a dashed "Just for fun · their agent is off duty" tag.
-- **Truth wins at once.** The moment a session attaches (or you select the resident), the walk ends and the real Sim is visible at home, going to its desk.
-- Toggle it in the Walls menu under "Street life" (`settings.streetLife`). It's paused in Build and Map mode.
+**Roles** (`shared/city.mjs`). The bridge still folds observed events into a ledger of kinds of work by day
+(`~/.agent-world/city.json`, categories only), which gives people their roles:
+- A resident's **role** is their most common kind of work, by days (ties go to the most recent): Tester, Clerk, Shipper, Researcher, Designer, Writer, Analyst or Manager.
+- **Helper types start as interns**. After working on 3 different days in a home they are **hired**: they get a stable staff name ("Eli · Explore helper") and a role of their own.
+- Off-duty residents stay inside their home (a bed when they have one, otherwise an indoor spot; never the yard).
 
 Ideas for later:
 - Click a walker to see the made-up explanation.

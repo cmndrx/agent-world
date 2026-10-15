@@ -1,3 +1,4 @@
+import {ClaudeSignIn,CodexSignIn} from './claude-login.js';
 import { HomeOverview } from './home-overview.js';
 import { connectionView } from '../../shared/connections.mjs';
 import {assignedRole} from '../../shared/team.mjs';
@@ -14,6 +15,7 @@ import { Lot } from './lot.js';
 import { Pipeline } from './pipeline.js';
 import { Scenery } from './scenery.js';
 import { Sim, separateSims } from './sim.js';
+import { FloorPicker } from './floor-picker.js';
 import { Sound } from './sound.js';
 import { ConversationLibrary } from './conversations.js';
 import { shouldNotify } from '../../shared/productivity.mjs';
@@ -35,23 +37,22 @@ import { escapeHtml } from './sim.js';
 import { Commons } from './commons.js';
 import { Seasons } from './seasons.js';
 import { Explore, foundMessage } from './explore.js';
-import { MapMode } from './mapmode.js';
+import { TownPlanner } from './town-planner.js';
+import { BUILDABLE, eligiblePlots, emptyTown, homeTransform, tilesRect } from '../../shared/town.mjs';
 import { WeatherFx, fxUniforms } from './fx.js';
 import { Garden } from './garden.js';
 import { Album, PhotoMode } from './photo.js';
-import { DOWNTOWN_X, Downtown } from './downtown.js';
-import { Census } from './census.js';
-import { StreetLife } from './streetlife.js';
+import { CivicBuildings } from './civic.js';
 import { Landscape } from './landscape.js';
 import { declutter, declutterSigns } from './declutter.js';
-import { BUSINESSES, HIRE_AFTER_DAYS, SIGNALS, TIERS, businessName, businessStage, businessTier, emptyCity, helperKey, helperType, residentKey, roleOf, roleWhy, staff } from '../../shared/city.mjs';
+import { HIRE_AFTER_DAYS, emptyCity, helperKey, helperType, residentKey, roleOf, roleWhy, staff } from '../../shared/city.mjs';
 import { CROPS } from '../../shared/garden.mjs';
 import { DECOR } from '../../shared/style.mjs';
 
 // ---- Settings (per viewer, local only) ---------------------------------------------------
 
 const SETTINGS_KEY = 'agent-world:settings';
-const settings = { time: 'auto', walls: 'cutaway', quality: 'auto', roster: 'open', focusProject: '', season: 'auto', weather: 'auto', streetLife: 'on' };
+const settings = { time: 'auto', walls: 'cutaway', quality: 'auto', roster: 'open', focusProject: '', season: 'auto', weather: 'auto' };
 try {
   Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'));
 } catch {}
@@ -81,8 +82,11 @@ const camera = new THREE.PerspectiveCamera(36, 1, 0.5, 900);
 const env = new Environment(renderer, scene);
 env.setMode(settings.time);
 const pipeline = new Pipeline(renderer, scene, camera, env);
+// The town layout (shared/town.mjs): streets and plots, from the bridge. Rendering, labels, picking and
+// navigation all read this one record.
+let town = emptyTown();
 const scenery = new Scenery(scene);
-scenery.ensureRows(1);
+scenery.setTown(town);
 // Phase 3 (docs/GAMEPLAY.md): town square, seasons and weather (ambience).
 const commons = new Commons(scene);
 const mayorCharacter = new MayorCharacter(commons);
@@ -91,19 +95,13 @@ seasons.set({ season: settings.season, weather: settings.weather });
 const weatherFx = new WeatherFx(scene);
 // The world around the neighborhood (scenery only): groves, pond, cars, birds, skyline.
 const landscape = new Landscape(scene);
-landscape.ensureRows(1);
-// Downtown (play layer): grows from the kinds of work agents do, once per day per kind (shared/city.mjs).
-const downtown = new Downtown(scene);
+landscape.setTown(town);
+// Civic buildings the player placed (fire station, hospital, …): shared/town.mjs, unlocked by player level.
+const civic = new CivicBuildings(scene);
+// The work ledger (play layer): kinds of work per day, which gives residents their roles (shared/city.mjs).
 let city = emptyCity();
 let demoMode = false;
 let bridgeReady = false;
-function applyCityVisibility() {
-  const visible = gameplay.connection ? city : emptyCity();
-  downtown.set(visible);
-  census?.setCity(visible, !!gameplay.connection && demoMode && city.demo);
-}
-// Street life (made up): off-duty residents sometimes walk to their workplace downtown and back.
-const streetLife = new StreetLife(scene, { downtown });
 
 // ---- World state --------------------------------------------------------------------------
 
@@ -119,11 +117,10 @@ const charKey = (project, slot) => `${project}#${slot}`;
 let style = emptyStyle();
 let build = null; // BuildMode, created below
 let explore = null; // Explore, created below
-let mapMode = null; // MapMode, created below
+let planner = null; // TownPlanner (Plan town), created below
 let garden = null; // Garden, created below
 let photo = null; // PhotoMode, created below
 let album = null; // Album, created below
-let census = null; // Census, created below
 let photos = []; // photo album (newest first)
 // Progression (phase 2): derived from the human's board + style; see shared/progression.mjs.
 let board = { tasks: [], plans: [] };
@@ -147,8 +144,6 @@ function ensureLot(household) {
     lot.applyStyle(style.homes?.[household.project]);
     lots.set(household.project, lot);
     scene.add(lot.group);
-    scenery.ensureRows(Math.ceil(lots.size / 3));
-  landscape.ensureRows(Math.ceil(lots.size / 3));
   }
   return lot;
 }
@@ -208,7 +203,7 @@ function welcomeResident(sim, h) {
   celebrations.confetti(door.clone().setY(1.6), 70);
   sound.play('reminder');
   cheer(`<b>${escapeHtml(sim.name)}</b> moved in to <b>${escapeHtml(h.name || h.project.split('/').pop())}</b>! Welcome home.`, '🏡');
-  sim.onArrive = (s) => celebrations.confetti(s.worldPosition().setY(2.2), 45);
+  sim.onArrive = (s) => { const p = s.worldPosition(); p.y += 2.2; celebrations.confetti(p, 45); };
 }
 
 const observedSessions = new Map();
@@ -279,7 +274,8 @@ function renderSessionEnd(sessionId) {
   syncLibrarySessions();
 }
 
-function applySnapshot({ selectedProjects: chosen=null, households: hs, sessions, projects = [], conversations = [], plans = [], tasks = [], passes, runner }) {
+function applySnapshot({ selectedProjects: chosen=null, households: hs, sessions, projects = [], conversations = [], plans = [], tasks = [], passes, runner, town: layout }) {
+  if (layout) { town = layout; ui.projectsPanel.setTown(town); }
   observedSessions.clear();
   activityRuns = passes?.runs || [];
   selectedProjects=chosen===null?null:new Set(chosen);
@@ -289,7 +285,7 @@ function applySnapshot({ selectedProjects: chosen=null, households: hs, sessions
   if(!hs.length&&!emptyLot){
     emptyLot=new THREE.Group();
     const plot=new THREE.Mesh(new THREE.BoxGeometry(22,.15,20),new THREE.MeshStandardMaterial({color:0x96b782,roughness:1}));plot.receiveShadow=true;emptyLot.add(plot);
-    const button=document.createElement('button');button.className='first-project-lot';button.textContent='Build your first home';button.addEventListener('click',()=>{if(townHallState(gameplay).status!=='built'){mayor.open();return;}document.querySelector('[data-roster-view="projects"]').click();ui.projectsPanel.importing=false;ui.projectsPanel.render();});
+    const button=document.createElement('button');button.className='first-project-lot';button.textContent='Build your first home';button.addEventListener('click',()=>{if(townHallState(gameplay).status!=='built'){mayor.open();return;}planner.openProjects();});
     const label=new CSS2DObject(button);label.position.set(0,1.5,0);emptyLot.add(label);scene.add(emptyLot);
   }
   passCard.setData({passes,runner,tasks,households:visibleHouseholds,sessions:visibleSessions,conversations});
@@ -302,6 +298,7 @@ function applySnapshot({ selectedProjects: chosen=null, households: hs, sessions
   // Primary sessions first so visitors can find their parent.
   [...visibleSessions].sort((a, b) => (a.parent_session ? 1 : 0) - (b.parent_session ? 1 : 0)).forEach(applySession);
   replaying = false;
+  applyLayout();
   syncRunnerActivity();
   levels.setData(passes?.runs || []);
   syncLibrarySessions();
@@ -357,7 +354,6 @@ function connect() {
       photos = m.photos || [];
       city = m.city || emptyCity();
       demoMode = !!m.demo;
-      applyCityVisibility();
       album?.setPhotos(photos);
       board = { tasks: m.tasks || [], plans: m.plans || [] };
       applySnapshot(m);
@@ -369,15 +365,11 @@ function connect() {
     else if (m.type === 'style') { style = m.style || emptyStyle(); applyStyleAll(); refreshProgress(); if (build.active) build.render(); }
     else if (m.type === 'gameplay') applyGameplay(m.gameplay);
     else if (m.type === 'city') {
-      const before = city;
       city = m.city || emptyCity();
-      applyCityVisibility();
-      if (gameplay.connection) {
-        applyRoles();
-        celebrateCity(before, city);
-      }
+      if (gameplay.connection) applyRoles();
     }
     else if (m.type === 'photos') { photos = m.photos || []; album?.setPhotos(photos); }
+    else if (m.type === 'town') { town = m.town || emptyTown(); applyLayout(); planner?.refresh(); ui.projectsPanel.setTown(town); }
     else if (m.type === 'catalog') { if(selectedProjects!==null){m.projects=m.projects.filter(p=>selectedProjects.has(p.home));m.conversations=m.conversations.filter(p=>selectedProjects.has(p.project));} library.setData({ projects: m.projects, conversations: m.conversations }); work.setData({ conversations: m.conversations }); passCard.setData({conversations:m.conversations}); syncLibrarySessions(); }
     else if (m.type === 'passes') { passCard.setData(m); activityRuns = m.passes?.runs || []; syncRunnerActivity(); levels.setData(m.passes?.runs || []); }
     else if (m.type === 'productivity') {
@@ -406,7 +398,6 @@ function connect() {
 function applyGameplay(next) {
   const wasConnected = !!gameplay.connection;
   gameplay = next || emptyGameplay();
-  applyCityVisibility();
   refreshProgress();
   if (!wasConnected && gameplay.connection) {
     fetch('/api/state').then(response => response.ok ? response.json() : null).then(snapshot => {
@@ -425,26 +416,28 @@ function setBridgeConnection(ready, state) {
 }
 setInterval(refreshProviderConnections, 1000);
 
-/** Plot order: the saved layout first, then any new homes in the first free plots. */
-function computePlots() {
-  const plots = (style.layout || []).map((p) => (lots.has(p) ? p : null));
-  for (const project of lots.keys()) {
-    if (plots.includes(project)) continue;
-    const free = plots.indexOf(null);
-    if (free >= 0) plots[free] = project;
-    else plots.push(project);
-  }
-  return plots;
-}
-
+/** Put every home on its plot from the town layout; streets and street furniture follow the same record. */
 function applyLayout() {
-  const plots = computePlots();
-  plots.forEach((p, i) => p && lots.get(p).setIndex(i));
-  scenery.ensureRows(Math.max(1, Math.ceil(plots.length / 3)));
-  landscape.ensureRows(Math.max(1, Math.ceil(plots.length / 3)));
-  scenery.setStreetNames(style.streets || {});
-  // Rooms stay dry and snow-free (fx.js); the room spans x −7.25…7.25, z −5.25…5.25 in each lot.
-  weatherFx.setRooms([...lots.values()].map(({ group: { position: p } }) => [p.x - 7.25, p.z - 5.25, p.x + 7.25, p.z + 5.25]));
+  const placed = new Map(town.homes.filter((h) => h.i != null).map((h) => [h.project, h]));
+  for (const lot of lots.values()) {
+    const h = placed.get(lot.project);
+    // A home waiting for a plot (an unresolved migration) stays saved but off the map until you choose one.
+    lot.unplaced = !h;
+    lot.group.visible = !!h;
+    if (h) lot.setPlacement(homeTransform(h));
+  }
+  scenery.setTown(town);
+  landscape.setTown(town);
+  civic.setTown(town);
+  // Rooms stay dry and snow-free (fx.js); the room spans x −7.25…7.25, z −5.25…5.25 in each lot (turned with it).
+  weatherFx.setRooms([...lots.values()].filter((l) => !l.unplaced).map((l) => {
+    const p = l.group.position, turned = Math.abs(Math.sin(l.yaw || 0)) > 0.5, [hx, hz] = turned ? [5.25, 7.25] : [7.25, 5.25];
+    return [p.x - hx, p.z - hz, p.x + hx, p.z + hz];
+  }).concat(civic.rooms()));
+  if (emptyLot) {
+    const first = eligiblePlots(town, { limit: 1 })[0];
+    if (first) { const t = homeTransform(first); emptyLot.position.set(t.x, 0, t.z); emptyLot.rotation.y = t.yaw; }
+  }
 }
 
 /** Recompute gems and levels, then update houses, the chip and the catalog. */
@@ -500,26 +493,6 @@ function cheer(html, badge = '🎉') {
   }, 6000);
 }
 
-/** A business opened or upgraded while you were watching (live only, never on page load). Quiet: no sound. */
-function celebrateCity(before, next) {
-  for (const id of Object.keys(BUSINESSES)) {
-    const was = businessTier(before, id);
-    const now = businessTier(next, id);
-    if (now <= was) continue;
-    const at = downtown.positionOf(id);
-    if (at) celebrations.confetti(at.setY(4), now >= TIERS.length ? 90 : 50);
-    const days = next.signals[BUSINESSES[id].signal].count;
-    const what = now === 1 ? `opened downtown` : now >= TIERS.length ? `became the ${businessName(id, now)}` : now === 2 ? 'expanded' : 'became a flagship';
-    cheer(`<b>${escapeHtml(businessName(id, now === TIERS.length ? 1 : now))}</b> ${what} · <span>your agents ${escapeHtml(SIGNALS[BUSINESSES[id].signal].phrase)} on ${days} different days</span>`, '🏙️');
-  }
-}
-
-/** "QA lab", or "QA lab (being built)" while it isn't open yet. */
-function workplace(business) {
-  const stage = businessStage(city, business);
-  return `${BUSINESSES[business].name}${stage === 3 ? '' : stage ? ' (being built)' : ' (not started yet)'}`;
-}
-
 /**
  * Work roles (play layer, shared/city.mjs): residents get a role and an apron from the kind of work their
  * sessions did most (counted once per day). Helper types are interns with a lanyard until they've worked
@@ -533,14 +506,13 @@ function applyRoles() {
       const fixed=assignedRole(sim.character.assignedRole);
       if(fixed){sim.setRole({...fixed,workplace:'Project team',why:'Assigned project responsibility, not an inferred activity score.'});continue;}
       const r = roleOf(person);
-      sim.setRole(r ? { title: r.title, business: r.business, color: BUSINESSES[r.business].color, kind: 'apron', workplace: workplace(r.business), why: roleWhy(person, `${sim.character.name}'s sessions`) } : null);
+      sim.setRole(r ? { title: r.title, color: r.color, kind: 'apron', why: roleWhy(person, `${sim.character.name}'s sessions`) } : null);
     } else if (sim.roleName) {
       const st = team.get(helperKey(sim.lot.project, helperType(sim.roleName)));
       if (!st) sim.setRole(null);
       else if (st.hired) {
         sim.setRole({
-          title: st.role?.title || 'Staff', staffName: st.name, kind: 'apron', color: st.role ? BUSINESSES[st.role.business].color : 0x5b6cf9,
-          workplace: st.role ? workplace(st.role.business) : '',
+          title: st.role?.title || 'Staff', staffName: st.name, kind: 'apron', color: st.role?.color ?? 0x5b6cf9,
           why: `Hired after this ${st.type} helper worked here on ${st.days} different days. ${roleWhy(city.people[st.key], 'it')}`,
         });
       } else {
@@ -550,28 +522,10 @@ function applyRoles() {
   }
 }
 
-/** Everyone with a job, for the census. */
-function cityPeople() {
-  const out = [];
-  for (const h of households.values()) {
-    for (const c of h.characters) {
-      const r = roleOf(city.people?.[residentKey(h.project, c.slot)]);
-      if (r) out.push({ name: c.name, home: h.name, title: r.title, workplace: workplace(r.business), days: r.days, kind: 'resident' });
-    }
-  }
-  for (const st of staff(city).sort((a, b) => Number(b.hired) - Number(a.hired))) {
-    const home = households.get(st.project)?.name || st.project.split('/').pop();
-    out.push(st.hired
-      ? { name: `${st.name} (${st.type} helper)`, home, title: st.role?.title || 'Staff', workplace: st.role ? workplace(st.role.business) : '', days: st.days, kind: 'staff' }
-      : { name: `${st.type} helper`, home, title: 'Intern', workplace: `${st.days} of ${HIRE_AFTER_DAYS} days to get hired`, days: st.days, kind: 'intern' });
-  }
-  return out;
-}
-
 function applyStyleAll() {
   applyLayout();
   explore?.setStyle(style);
-  if (mapMode?.active) mapMode.render();
+  if (planner?.active) planner.render();
   for (const lot of lots.values()) {
     lot.applyStyle(style.homes?.[lot.project]);
     lot.setGallery(style.gallery?.[lot.project] || []);
@@ -600,7 +554,7 @@ const camFocus = new THREE.Vector3(0, 0.12, 0); // what the free camera looks at
 const rig = new CameraRig(camera, renderer.domElement, {
   // Dragging moves whatever the current mode is looking at; grabbing the map stops following a Sim.
   panTarget: () => {
-    if (mapMode?.active) return mapFocus;
+    if (planner?.active) return mapFocus;
     if (build?.active) return buildFocus;
     if (followSelected) {
       followSelected = false;
@@ -614,11 +568,12 @@ rig.pitch = 1.0;
 let selected = null;
 let hovered = null;
 
-/** Where the camera may pan: homes, the square and downtown, plus a little margin. */
+/** Where the camera may pan: homes, the square and civic buildings, plus a little margin. */
 const worldBounds = new THREE.Box3();
+const planBounds = (() => { const [x0, z0, x1, z1] = tilesRect(BUILDABLE.i0, BUILDABLE.j0 - 4, BUILDABLE.i1, BUILDABLE.j1); return new THREE.Box3(new THREE.Vector3(x0 - 8, 0, z0 - 8), new THREE.Vector3(x1 + 8, 0, z1 + 8)); })();
 function updateWorldBounds() {
   worldBounds.makeEmpty();
-  for (const g of [...[...lots.values()].map((l) => l.group), commons?.group, downtown?.group]) if (g) worldBounds.expandByObject(g);
+  for (const g of [...[...lots.values()].map((l) => l.group), commons?.group, civic?.group]) if (g) worldBounds.expandByObject(g);
   if (!worldBounds.isEmpty()) worldBounds.expandByVector(new THREE.Vector3(6, 0, 6));
 }
 
@@ -629,7 +584,7 @@ function lookAt(point, { distance = rig.distanceTarget, duration } = {}) {
   rig.flyTo(camFocus, { distance, duration });
 }
 function focusTownHall() {
-  lookAt(new THREE.Vector3(commons.group.position.x, 0.12, commons.group.position.z - 14), { distance: 25, duration: 1.6 });
+  lookAt(commons.hallFocus(), { distance: 34, duration: 1.6 });
 }
 
 const ui = new UI({
@@ -641,9 +596,11 @@ const ui = new UI({
       body: JSON.stringify({ project: sim.lot.project, slot: sim.character.slot, name }),
     });
   },
+  browserRun: (sim) => (passCard.data?.runs || []).findLast((r) => r.project === sim.lot.project && r.slot === sim.character.slot && ['codex', 'claude'].includes(r.provider || 'codex')),
   onFocus: (key) => focusSim(key),
   onPrompt: (sim) => openAgentChat(sim),
   onFocusLot: (project) => {
+    if (planner?.active) return planner.focusHome(project);
     const lot = lots.get(project);
     if (!lot) return;
     lookAt(lot.toWorld(0, 2), { distance: Math.min(Math.max(rig.distanceTarget, 24), 34) });
@@ -657,10 +614,10 @@ const ui = new UI({
   onOutfit: (sim) => openWardrobe(sim),
   onAction: (name) => {
     if (name === 'build') build.active ? build.exit() : build.enter(selected?.lot);
-    if (name === 'map') mapMode.active ? mapMode.exit() : mapMode.enter();
+    if (name === 'map') planner.active ? planner.exit() : planner.enter();
     if (name === 'wardrobe') openWardrobe(null);
     if (name === 'photo') photo.enter();
-    if (name === 'city') census.open();
+    if (name === 'city') planner.active && planner.tool === 'civic' ? planner.exit() : planner.enter('civic');
     if (name === 'rotate-left') rig.yawTarget -= Math.PI / 4;
     if (name === 'rotate-right') rig.yawTarget += Math.PI / 4;
     if (name === 'sound') sound.toggle();
@@ -674,12 +631,17 @@ function applySettings() {
   if (pipeline.setting !== settings.quality) pipeline.setQuality(settings.quality);
   for (const lot of lots.values()) lot.wallMode = build?.active ? 'down' : settings.walls;
   commons.wallMode = build?.active ? 'down' : settings.walls;
+  civic.wallMode = build?.active ? 'down' : settings.walls;
   document.getElementById('roster').classList.toggle('collapsed', settings.roster === 'collapsed');
   ui.renderDock(settings, sound.enabled, pipeline.level);
 }
 pipeline.onDowngrade = () => ui.renderDock(settings, sound.enabled, pipeline.level);
 
 let followSelected = false;
+/** The home being looked into (followed resident's, else the one in the middle of the screen) and its floor picker. */
+let inspectedLot = null;
+const floorPicker = new FloorPicker({ onPick: (lot, floor) => lot.setViewFloor(floor) });
+
 function select(sim) {
   if (selected) selected.selected = false;
   // Letting go of a Sim leaves the camera where it is.
@@ -689,6 +651,8 @@ function select(sim) {
   document.body.classList.toggle('inspecting', !!sim);
   if (sim) {
     sim.selected = true;
+    // In a multi-floor home, show the floor this resident lives on.
+    sim.lot.setViewFloor(sim.floor);
     ui.open(sim);
 
   }
@@ -703,7 +667,9 @@ function updateViewOffset(dt) {
   let target = 0;
   if (w > 760) {
     const roster = document.getElementById('roster');
-    const left = roster.classList.contains('collapsed') || getComputedStyle(roster).width === '168px' ? 0 : roster.offsetWidth + 16;
+    // While planning, the open Projects drawer takes the roster's place on the left.
+    const ledger = planner?.active && planner.el.classList.contains('ledger-open') ? planner.el.querySelector('.tp-ledger') : null;
+    const left = ledger ? ledger.offsetWidth + 16 : roster.classList.contains('collapsed') || getComputedStyle(roster).width === '168px' || !roster.offsetWidth ? 0 : roster.offsetWidth + 16;
     const right = selected ? document.getElementById('inspect').offsetWidth + 16 : 0;
     target = (right - left) / 2;
   }
@@ -726,11 +692,11 @@ function focusSim(key) {
 const tmpV = new THREE.Vector3();
 /** The Sim nearest the middle of the screen, when zoomed in close enough to mean it. */
 function nearestSim(maxDist) {
-  if (rig.distance > 30 || build.active || mapMode.active) return null;
+  if (rig.distance > 30 || build.active || planner.active) return null;
   let best = null;
   let bestD = maxDist;
   for (const sim of sims.values()) {
-    const d = sim.worldPosition().distanceTo(tmpV.set(rig.target.x, 0, rig.target.z));
+    const d = sim.worldPosition().setY(0).distanceTo(tmpV.set(rig.target.x, 0, rig.target.z));
     if (d < bestD) {
       bestD = d;
       best = sim;
@@ -772,7 +738,8 @@ renderer.domElement.addEventListener('pointerleave', () => {
 });
 function pick() {
   raycaster.setFromCamera(pointer, camera);
-  const hit = raycaster.intersectObjects([...sims.values()].map((s) => s.root), true)[0];
+  // Residents on floors that aren't being inspected are hidden, and the raycaster ignores visibility.
+  const hit = raycaster.intersectObjects([...sims.values()].filter((s) => s.root.visible).map((s) => s.root), true)[0];
   return hit ? sims.get(hit.object.userData.simKey) : null;
 }
 function pickMayor() {
@@ -786,11 +753,9 @@ function pickFind() {
 /** Does a home's building stand between the camera and a point (so its upper floors should open)? */
 function blocksView(lot, from, to) {
   if (!(lot.roofTop > 6)) return false;
-  const p = lot.group.position;
   for (let i = 1; i < 16; i++) {
     const k = i / 16;
-    const x = from.x + (to.x - from.x) * k - p.x;
-    const z = from.z + (to.z - from.z) * k - p.z;
+    const { x, z } = lot.toLocal(from.x + (to.x - from.x) * k, from.z + (to.z - from.z) * k);
     const y = from.y + (to.y - from.y) * k;
     if (Math.abs(x) < 7.8 && Math.abs(z) < 6 && y < lot.roofTop + 0.5) return true;
   }
@@ -800,7 +765,7 @@ function blocksView(lot, from, to) {
 function lotAt(clientX, clientY) {
   const p = rig.groundAt(clientX, clientY);
   if (!p) return null;
-  for (const lot of lots.values()) if (lot.getNav().inBounds(p.x - lot.group.position.x, p.z - lot.group.position.z)) return lot;
+  for (const lot of lots.values()) if (!lot.unplaced && lot.containsWorld(p.x, p.z)) return lot;
   return null;
 }
 function pickDecor() {
@@ -809,7 +774,7 @@ function pickDecor() {
   return raycaster.intersectObjects(build.lot.decor.group.children, true)[0]?.object || null;
 }
 renderer.domElement.addEventListener('click', (e) => {
-  if (rig.suppressClick || mapMode.active) return;
+  if (rig.suppressClick || planner.active) return;
   setPointer(e);
   if (build.active) return build.click(pickDecor());
   if (!photo.active && pickMayor()) { mayor.open(); return; }
@@ -821,7 +786,7 @@ renderer.domElement.addEventListener('click', (e) => {
 });
 // Double-click a home to glide in and look inside (the roof lifts as you get close).
 renderer.domElement.addEventListener('dblclick', (e) => {
-  if (mapMode.active || build.active || photo.active) return;
+  if (planner.active || build.active || photo.active) return;
   setPointer(e);
   const sim = pick();
   if (sim) return focusSim(sim.key);
@@ -834,7 +799,9 @@ renderer.domElement.addEventListener('dblclick', (e) => {
   }
 });
 labels.domElement.addEventListener('click', (e) => {
-  if (e.target.closest('[data-home-detail]')) { document.querySelector('[data-roster-view="projects"]').click(); return; }
+  const street = e.target.closest('[data-street-id]');
+  if (street) { if (planner.active) planner.startRename(street.dataset.streetId); else planner.enter('road'); return; }
+  if (e.target.closest('[data-home-detail]')) { planner.openProjects(); return; }
   if (e.target.closest('[data-mayor-world], [data-townhall-detail]')) { mayor.open(); return; }
   const b = e.target.closest('.bubble');
   if(b){const sim=sims.get(b.dataset.simKey);select(sim);if(e.target.closest('[data-prompt-sim]'))openAgentChat(sim);}
@@ -866,40 +833,44 @@ function frame() {
 
   rig.keyPan(dt);
   // Panning stays over the neighborhood instead of drifting off into empty fields.
-  if (rig.panned && !worldBounds.isEmpty()) for (const v of [camFocus, buildFocus, mapFocus]) {
-    v.x = THREE.MathUtils.clamp(v.x, worldBounds.min.x, worldBounds.max.x);
-    v.z = THREE.MathUtils.clamp(v.z, worldBounds.min.z, worldBounds.max.z);
+  // Plan town can pan over all buildable land (that's where new streets and homes go).
+  const panBounds = planner.active ? planBounds : worldBounds;
+  if (rig.panned && !panBounds.isEmpty()) for (const v of [camFocus, buildFocus, mapFocus]) {
+    v.x = THREE.MathUtils.clamp(v.x, panBounds.min.x, panBounds.max.x);
+    v.z = THREE.MathUtils.clamp(v.z, panBounds.min.z, panBounds.max.z);
   }
   rig.panned = false;
-  const focus = mapMode.active ? mapFocus : build.active ? buildFocus : followSelected && selected ? selected.worldPosition().setY(0.12) : camFocus;
+  const focus = planner.active ? mapFocus : build.active ? buildFocus : followSelected && selected ? selected.worldPosition().setY(0.12) : camFocus;
   // Zoom out far enough to see the tallest home whole; the view rises with it so towers stay in frame.
-  if (!mapMode.active && !build.active) {
+  if (!planner.active && !build.active) {
     const tallest = Math.max(0, ...[...lots.values()].map((l) => l.roofTop || 0));
     rig.maxDistance = Math.max(70, Math.min(110, tallest * 1.6 + 28));
     rig.distanceTarget = Math.min(rig.distanceTarget, rig.maxDistance);
-    rig.lift = THREE.MathUtils.smoothstep(rig.distance, 30, rig.maxDistance) * Math.min(18, tallest * 0.45);
+    // Inspecting an upper floor raises the view to that floor.
+    const open = inspectedLot && inspectedLot.roofK <= 0.3 ? inspectedLot : null;
+    const floorLift = open ? open.floorY(open.viewFloor) : 0;
+    const zoomLift = THREE.MathUtils.smoothstep(rig.distance, 30, rig.maxDistance) * Math.min(18, tallest * 0.45);
+    rig.lift += (Math.max(zoomLift, floorLift) - rig.lift) * (1 - Math.exp(-dt * 6));
   } else rig.lift = 0;
   rig.update(dt, focus);
   build.update();
+  planner.update(dt, t);
   celebrations.update(dt);
-  commons.peek = commons.containsTownHall(rig.target) && !mapMode.active;
-  commons.update(dt, t, env.night, rig.target, camera);
+  commons.peek = commons.containsTownHall(rig.target) && !planner.active;
+  commons.update(dt, t, env.night, rig.target, camera, rig.maxDistance - 16);
   mayorCharacter.update(t, !!mayor?.dialog.open, dt);
-  downtown.update(dt, t, env.night, rig.target);
+  civic.update(dt, t, { night: env.night, camera, target: rig.target, peekOpen: rig.maxDistance - 16 });
   landscape.update(dt, t, env.night, null);
-  streetLife.enabled = settings.streetLife !== 'off' && !mapMode.active && !build.active;
-  streetLife.update(dt, t, sims.values(), city, rig.target);
   if (t - lastRoleCheck > 2) {
     lastRoleCheck = t;
     updateWorldBounds();
     applyRoles(); // helpers learn their type from their first observed step
   }
   seasons.update(dt, t, rig.target);
-  if (!mapMode.active && !build.active) explore.update(dt, t);
-  garden.enabled = !mapMode.active && !build.active && !photo.active;
+  if (!planner.active && !build.active) explore.update(dt, t);
+  garden.enabled = !planner.active && !build.active && !photo.active;
   garden.update(dt, t, rig.target, rig.distance < 34);
   weatherFx.update(dt, t, seasons.current(), rig.target, null);
-  if (mapMode.active) mapMode.place();
   updateViewOffset(dt);
   env.update(rig.target);
   setLightPools(env.night);
@@ -920,8 +891,8 @@ function frame() {
     pointerDirty = false;
     const h = pick();
     // The home under the pointer nudges its roof up (a hint that double-click looks inside).
-    const hoverLot = !photo.active && !mapMode.active && lastClient.x >= 0 ? lotAt(lastClient.x, lastClient.y) : null;
-    commons.hovered = !photo.active && !mapMode.active && lastClient.x >= 0 && commons.containsTownHall(rig.groundAt(lastClient.x, lastClient.y));
+    const hoverLot = !photo.active && !planner.active && lastClient.x >= 0 ? lotAt(lastClient.x, lastClient.y) : null;
+    commons.hovered = !photo.active && !planner.active && lastClient.x >= 0 && commons.containsTownHall(rig.groundAt(lastClient.x, lastClient.y));
     for (const lot of lots.values()) lot.hovered = lot === hoverLot;
     if (h !== hovered) {
       if (hovered) hovered.hovered = false;
@@ -934,7 +905,7 @@ function frame() {
 
   const near = nearestSim(3);
   const camDist = camera.position.distanceTo(rig.target);
-  pipeline.setTiltStrength(photo.active ? (photo.tilt ? 0.85 : 0) : THREE.MathUtils.smoothstep(camDist, 30, 95) * 0.75);
+  pipeline.setTiltStrength(photo.active ? (photo.tilt ? 0.85 : 0) : planner.active ? 0.12 : THREE.MathUtils.smoothstep(camDist, 30, 95) * 0.75); // planning keeps the whole map sharp
   const busyLots = new Set();
   let waitingCount = 0;
   separateSims(sims.values(), dt);
@@ -963,14 +934,19 @@ function frame() {
     }
   }
   // The home you're looking at (middle of the screen) lifts its roof from farther out, so you can peek in.
-  const centerLot = mapMode.active ? null : [...lots.values()].find((l) => l.getNav().inBounds(rig.target.x - l.group.position.x, rig.target.z - l.group.position.z));
+  const centerLot = planner.active ? null : [...lots.values()].find((l) => !l.unplaced && l.containsWorld(rig.target.x, rig.target.z));
+  const nextInspected = build.active || photo.active ? null : followSelected && selected ? selected.lot : centerLot;
+  // Moving on from a home returns it to its ground floor.
+  if (inspectedLot && nextInspected !== inspectedLot && !(photo.active || build.active)) inspectedLot.setViewFloor(0);
+  inspectedLot = nextInspected;
+  floorPicker.update(inspectedLot && inspectedLot.roofK <= 0.3 && !inspectedLot.constructing ? inspectedLot : null, sims.values());
   const petFocus = rig.distance < 26 ? rig.target : null;
-  const sightTarget = mapMode.active ? null : followSelected && selected ? selected.worldPosition().setY(1) : rig.target;
+  const sightTarget = planner.active ? null : followSelected && selected ? selected.worldPosition().add(tmpV.set(0, 1, 0)) : rig.target;
   for (const lot of lots.values()) {
     // Roofs never cover the home you're decorating or inspecting.
     lot.roofAllowed = !build.active && selected?.lot !== lot;
     lot.peek = lot === centerLot;
-    if (build.active || mapMode.active || photo.active) lot.hovered = false;
+    if (build.active || planner.active || photo.active) lot.hovered = false;
     const clearView = !!sightTarget && lot !== centerLot && blocksView(lot, camera.position, sightTarget);
     lot.update(dt, t, { camera, night: env.night, busy: busyLots.has(lot), avatar: petFocus, clearView, peekOpen: rig.maxDistance - 16 });
   }
@@ -1084,24 +1060,35 @@ explore = new Explore({
 
 const mapFocus = new THREE.Vector3();
 let mapReturnYaw = null; // set while map mode is open
-mapMode = new MapMode({
-  lots: () => lots,
-  plots: computePlots,
-  style: () => style,
-  save: saveStyle,
+planner = new TownPlanner({
+  scene,
   camera,
+  dom: renderer.domElement,
+  town: () => town,
+  homeName: (project) => households.get(project)?.name || project.split(/[\\/]/).pop(),
+  homeHeight: (project) => lots.get(project)?.plan?.height || 7,
+  suppressed: () => rig.suppressClick,
+  ledger: ui.projectsPanel.host,
+  onLedgerOpen: () => ui.projectsPanel.load(),
+  save: async (action) => {
+    const res = await fetch('/api/town', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(action) });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || 'Couldn’t save the town plan.');
+    return body.result;
+  },
   onToggle: (active, center, distance) => {
     if (active) {
       if (build.active) build.exit();
       ui.close();
       for (const l of lots.values()) l.wallMode = 'up';
+      select(null);
       mapFocus.copy(center);
       mapReturnYaw ??= rig.yawTarget;
       rig.yawTarget = Math.round(rig.yaw / (Math.PI * 2)) * Math.PI * 2; // north up, shortest turn
       rig.flyTo(center, { distance });
       rig.maxDistance = Math.max(60, distance * 1.3);
       env.fogScale = 0.25;
-      rig.pitch = 1.38;
+      rig.pitch = 1.0; // tilted, so street previews and home holograms read in 3D
     } else {
       for (const l of lots.values()) l.wallMode = settings.walls;
       rig.pitch = 0.85;
@@ -1113,6 +1100,10 @@ mapMode = new MapMode({
     }
   },
 });
+
+ui.projectsPanel.planner = planner;
+ui.onProjectCount = (n) => planner.setProjectCount(n);
+planner.setProjectCount(ui.projectsPanel.homes.length);
 
 progressPanel = new ProgressPanel({
   onPlan: (project) => work.open(project),
@@ -1148,7 +1139,7 @@ photo = new PhotoMode({
   onToggle: (active) => {
     if (active) {
       if (build.active) build.exit();
-      if (mapMode.active) mapMode.exit();
+      if (planner.active) planner.exit();
       ui.closeMenus();
       select(null);
     }
@@ -1162,11 +1153,6 @@ photo = new PhotoMode({
 });
 photo.onError = (message) => cheer(escapeHtml(message), '!');
 
-census = new Census({
-  people: cityPeople,
-  onVisit: () => lookAt(new THREE.Vector3(DOWNTOWN_X - 4, 0.12, 8.6), { distance: 34 }),
-});
-census.setCity(city, demoMode && city.demo);
 refreshProgress();
 
 wardrobe = new Wardrobe({ save: saveStyle });
@@ -1176,7 +1162,7 @@ function openWardrobe(sim) {
   if (sim) {
     const key = charKey(sim.lot.project, sim.character.slot);
     wardrobe.open({ name: sim.name, model: sim, change: { kind: 'resident', key }, saved: style.residents?.[key] || null });
-    rig.yawTarget = sim.facing;
+    rig.yawTarget = sim.facing + (sim.lot.yaw || 0); // the resident's facing is lot-local
     rig.distanceTarget = 7;
   } else {
     ui.close();
@@ -1184,13 +1170,17 @@ function openWardrobe(sim) {
   }
 }
 
-const experience = new Experience({ work, onConversations: () => library.open(), onMayor: () => mayor.open(), leavePlay: () => { if (build.active) build.exit(); if (mapMode.active) mapMode.exit(); if (photo.active) photo.exit(); }, action: name => ui.h.onAction(name), pets: () => { if (!build.active) build.enter(selected?.lot); build.tab = 'pets'; build.render(); } });
+const claudeSignIn=new ClaudeSignIn();
+const codexSignIn=new CodexSignIn();
+const experience = new Experience({ work, onClaude:()=>claudeSignIn.open(), onCodex:()=>codexSignIn.open(), onConversations: () => library.open(), onMayor: () => mayor.open(), leavePlay: () => { if (build.active) build.exit(); if (planner.active) planner.exit(); if (photo.active) photo.exit(); }, action: name => ui.h.onAction(name), pets: () => { if (!build.active) build.enter(selected?.lot); build.tab = 'pets'; build.render(); } });
 mountDevReset();
 mayor = new MayorOnboarding({
   character: mayorCharacter,
+  onClaude:ready=>claudeSignIn.open(ready),
+  onCodex:ready=>codexSignIn.open(ready),
   onConnections: () => experience.open('sources'),
   onFocusTownHall: () => focusTownHall(),
-  onBuildHome: () => { document.querySelector('[data-roster-view="projects"]').click(); },
+  onBuildHome: () => planner.openProjects(),
   onMeetOwner: home => {
     const owner = home?.characters.find(c => c.id === home.ownerAgentId) || home?.characters[0];
     const sim = owner && sims.get(charKey(home.project, owner.slot));
@@ -1201,7 +1191,7 @@ mayor = new MayorOnboarding({
 
 // Debug handle for the console.
 window.agentWorld = {
-  garden, photo, album, weatherFx, get passCard() { return passCard; }, get levels() { return levels; }, applyHousehold, downtown, census, streetLife, landscape, city: () => city, sims, lots, player, rig, worldBounds, lookAt, sound, env, pipeline, focusSim, library, work, build, wardrobe, style: () => style, commons, mayorCharacter, seasons, explore, mapMode };
+  garden, photo, album, weatherFx, get passCard() { return passCard; }, get levels() { return levels; }, applyHousehold, civic, landscape, city: () => city, sims, lots, player, rig, worldBounds, lookAt, sound, env, pipeline, focusSim, library, work, build, wardrobe, style: () => style, commons, mayorCharacter, seasons, explore, planner, town: () => town };
 
 connect();
 frame();

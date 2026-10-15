@@ -13,6 +13,7 @@ const PI = Math.PI;
 export const YAW = { s: 0, e: PI / 2, n: PI, w: -PI / 2 };
 export const PARTITION_T = 0.12;
 export const DOORWAY = 1.4;
+export const spotAt = (x, z, face) => ({ x: +x.toFixed(3), z: +z.toFixed(3), face });
 
 /** Canonical footprints (width along the front, depth front-to-back) with the front facing +z. */
 export const FURNITURE = {
@@ -46,6 +47,7 @@ export const FURNITURE = {
   column: { w: 0.5, d: 0.5 },
   planter: { w: 0.9, d: 0.9 },
   lockers: { w: 2.0, d: 0.45 },
+  stairwell: { w: 1.0, d: 2.6 },
 };
 
 /** Where Sims stand or sit at a station, in the item's local frame (front +z); `toward` = facing the item. */
@@ -111,10 +113,11 @@ export function partitionSegments([x0, z0, x1, z1, doors = []]) {
   return out.map(([a, b]) => (alongX ? [a, z0 - h, b, z0 + h] : [x0 - h, a, x0 + h, b]));
 }
 
-const I = (kind, x, z, facing = 's', opts = {}) => ({ kind, x, z, facing, ...opts });
+export const I = (kind, x, z, facing = 's', opts = {}) => ({ kind, x, z, facing, ...opts });
 /** Places to stroll in the yard: the front path, the side yards and the back garden. */
 const YARD_WANDER = [[0.4, 6.6], [-3.4, 6.8], [4.4, 6.8], [-7.6, 4.0], [7.7, -1.0], [-8.4, -3.2], [-3.0, -6.4], [3.6, -6.3]]; // lot.js drops any the yard leaves unreachable
-const D = (x, z, look = 'n') => [x, z, look];
+/** A desk at (x, z) whose resident faces `look`; `bed` pins it to the plan's n-th bed (default: nearest free). */
+export const D = (x, z, look = 'n', bed = null) => [x, z, look, bed];
 
 /**
  * Plans by tier key. `desks` are in seat order (seat 1 is the owner's); a plan has at least as many desks as its
@@ -145,7 +148,7 @@ export const FLOORPLANS = {
       I('whiteboard', 6.93, 1.2, 'w'),
       I('plant', 6.55, 4.5),
     ],
-    desks: [D(5.0, 0.1), D(1.0, -2.6), D(-1.5, -2.6), D(2.0, 0.2), D(-1.0, 0.2), D(5.0, 2.7), D(2.0, 2.7), D(-1.6, 2.7)],
+    desks: [D(5.0, 0.1), D(5.0, 2.7), D(2.0, 0.2), D(1.0, -2.6), D(-1.5, -2.6), D(-1.0, 0.2), D(2.0, 2.7), D(-1.6, 2.7)],
     wander: [[0.45, 1.5], [-3.0, -0.6], [3.9, -2.0]],
     art: [[-1.3, -4.97, 's'], [5.4, -4.97, 's'], [-6.97, 2.2, 'e']],
     gallery: [-0.3, -4.96],
@@ -191,7 +194,7 @@ export const FLOORPLANS = {
       I('rug', -5.3, 3.6, 's', { w: 1.8, d: 2.2 }),
       I('couch', -3.9, 3.6, 'w'),
       I('plant', -6.6, 1.6),
-      I('plant', -0.4, 4.5),
+      I('stairs', -0.56, 3.6, 's', { len: 2.4 }),
       // East home.
       I('kitchen', 4.9, -4.6, 's', { len: 3.6, coffee: -1.2 }),
       I('fridge', 2.6, -4.58),
@@ -201,7 +204,8 @@ export const FLOORPLANS = {
       I('tv', 6.72, 3.6, 'w'),
       I('rug', 5.3, 3.6, 's', { w: 1.8, d: 2.2 }),
       I('couch', 3.9, 3.6, 'e'),
-      I('globe', 0.9, 2.9),
+      I('stairs', 0.56, 3.6, 's', { len: 2.4 }),
+      I('globe', 2.3, -2.4, 'e'),
       I('plant', 6.6, 1.6),
     ],
     desks: [D(-4.6, 0.0), D(4.6, 0.0), D(-1.9, 0.0), D(1.9, 0.0)],
@@ -363,41 +367,53 @@ export const FLOORPLANS = {
 };
 
 /**
- * Everything the lot needs for one tier's ground floor: items with their footprints, partition segments, desks,
- * station spots, obstacles, rooms and wall decorations.
+ * Lay out one floor's plan: items with footprints, partition segments, desks, station spots and obstacles.
+ * Beds give their nearest desk a `rest` spot (sitting on the end of the bed), so each resident has a living space.
  */
-export function floorplanFor(key, yardRects = [], capacity = 0) {
-  let plan = FLOORPLANS[key] || FLOORPLANS.cottage;
-  // Larger recruited households need distinct screens, never modulo-shared truth displays.
-  // Keep the authored plan until its desks are exhausted, then use an open coworking floor.
-  if (capacity > plan.desks.length) {
-    const desks = [-3.7, -0.8, 2.1].flatMap(z => [-5.6,-2.8,0,2.8,5.6].map(x=>D(x,z))).slice(0,15);
-    plan = {...plan, partitions:[], rooms:[['Coworking','office',-6.95,-4.95,6.95,4.95]], desks,
-      items:[I('bookshelf',-5,-4.7),I('whiteboard',4.1,4.92,'n'),I('globe',-.6,-4.5),I('rack',1.6,-4.5),
-        I('coffeeBar',4.5,-4.5),I('couch',-4.3,4.5)], wander:[[0,4.0]]};
-    key += ':coworking';
-  }
+export function layoutPlan(plan, { yardRects = [], entrance = spot(0, 10.6, PI), yardWander = true } = {}) {
   const items = plan.items.map((it) => ({ ...it, rect: itemRect(it) }));
   const partitions = plan.partitions.flatMap(partitionSegments);
   const desks = plan.desks.map(([x, z, look]) => deskLayout(x, z, look));
   const stations = { bookshelf: [], whiteboard: [], globe: [], rack: [], coffee: [], couch: [] };
+  const beds = [];
   for (const it of items) {
+    const yaw = YAW[it.facing] ?? 0;
+    if (it.kind === 'bed') {
+      const [dx, dz] = rotate(0, 0.75, yaw);
+      beds.push(spot(it.x + dx, it.z + dz, yaw));
+      continue;
+    }
     const def = it.kind === 'kitchen' && it.coffee != null
       ? { station: 'coffee', at: [[it.coffee - 0.3, 0.755], [it.coffee + 0.4, 0.755]], toward: true }
       : SPOTS[it.kind];
     if (!def) continue;
-    const yaw = YAW[it.facing] ?? 0;
     for (const [lx, lz] of def.at) {
       const [dx, dz] = rotate(lx, lz, yaw);
       const face = def.toward ? Math.atan2(-dx, -dz) : yaw;
       stations[def.station].push(spot(it.x + dx, it.z + dz, face));
     }
   }
+  // Each bed belongs to its pinned desk, or else to the closest desk without one.
+  const free = new Set(beds);
+  plan.desks.forEach(([, , , bed], i) => {
+    if (bed != null && beds[bed]) { desks[i].rest = beds[bed]; free.delete(beds[bed]); }
+  });
+  for (const [i, d] of desks.entries()) {
+    if (d.rest || plan.desks[i][3] === false || !free.size) continue;
+    d.rest = [...free].sort((a, b) => Math.hypot(a.x - d.x, a.z - d.z) - Math.hypot(b.x - d.x, b.z - d.z))[0];
+    free.delete(d.rest);
+  }
   // Indoor wander spots, plus the yard spots this tier's landscaping leaves open.
   const clear = ([x, z]) => !yardRects.some((r) => x > r[0] - 0.45 && x < r[2] + 0.45 && z > r[1] - 0.45 && z < r[3] + 0.45);
-  stations.wander = [...plan.wander.map((p) => [...p, false]), ...YARD_WANDER.filter(clear).map((p) => [...p, true])]
+  stations.wander = [...plan.wander.map((p) => [...p, false]), ...(yardWander ? YARD_WANDER.filter(clear) : []).map((p) => [...p, true])]
     .map(([x, z, yard], i) => ({ ...spot(x, z, (i * 0.7) % (2 * PI) - PI), ...(yard ? { yard } : {}) }));
-  stations.entrance = spot(0, 10.6, PI);
+  stations.entrance = entrance;
   const obstacles = [...partitions, ...items.map((it) => it.rect).filter(Boolean), ...desks.map((d) => d.block)];
-  return { key, items, partitions, desks, stations, obstacles, rooms: plan.rooms, art: plan.art, gallery: plan.gallery };
+  return { items, partitions, desks, stations, beds, obstacles, rooms: plan.rooms, art: plan.art || [], gallery: plan.gallery };
+}
+
+/** The tier's ground floor (upper floors and seat order live in home-floors.js). */
+export function floorplanFor(key, yardRects = []) {
+  const plan = FLOORPLANS[key] || FLOORPLANS.cottage;
+  return { key: FLOORPLANS[key] ? key : 'cottage', ...layoutPlan(plan, { yardRects }) };
 }

@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { NavGrid } from '../web/src/nav.js';
 import { TIER_PLANS, YARD_Z, doorsOf, frontWallBlocks, planProblems, tierPlan, yardProps } from '../web/src/home-tier-plans.js';
 import { FLOORPLANS, floorplanFor } from '../web/src/home-floorplans.js';
+import { TIER_CAPACITY, buildingPlanFor, floorBounds, outline } from '../web/src/home-floors.js';
 import { BUILDING_TIERS, BUILDING_UNLOCK_LEVELS, MAX_LEVEL } from '../shared/progression.mjs';
 
 /** The studio shell and fence as lot.js builds them, plus one tier's own obstacles. */
@@ -116,15 +117,58 @@ test('residents can reach every desk and each kind of station from the street', 
   }
 });
 
- test('all fifteen home levels have unique reachable work seats at unlocked capacity',()=>{
- for(let level=1;level<=MAX_LEVEL;level++){
-  const plan=tierPlan(level),fp=floorplanFor(plan.key,[],level);
-  assert.ok(fp.desks.length>=level,`level ${level} seat count`);
-  assert.equal(new Set(fp.desks.map(d=>`${d.x},${d.z}`)).size,fp.desks.length);
-  const nav=new NavGrid({x0:-11,z0:-5,x1:11,z1:11.5},.25,.25);
-  for(const r of [[-7.25,-5.25,-6.95,5.25],[-7.25,-5.25,7.25,-4.95],[6.95,-5.25,7.25,5.25],...frontWallBlocks(plan),...fp.obstacles,...yardProps(plan,[]).blocking.map(([, ...r])=>r)])nav.addRect(r);
-  const from={x:0,z:10.6};
-  for(const [i,d]of fp.desks.entries())for(const k of ['chair','wait','visitorWait'])assert.ok(reachable(nav,from,d[k]),`level ${level} desk ${i+1} ${k}`);
-  for(const [station,spots]of Object.entries(fp.stations))if(station!=='wander'&&station!=='entrance')assert.ok(spots.some(s=>{const c=nav.nearestFree(...nav.toCell(s.x,s.z),station==='couch'?4:2);return c&&nav.reachableFrom(from)[c[1]*nav.w+c[0]];}),`level ${level} ${station} reachable`);
- }
- });
+test('all fifteen home levels have unique reachable seats at unlocked capacity, spread over the floors', () => {
+  for (let level = 1; level <= MAX_LEVEL; level++) {
+    const plan = tierPlan(level);
+    const bp = buildingPlanFor(plan.key, yardProps(plan).blocking.map(([, ...r]) => r));
+    assert.ok(bp.seats.length >= level, `level ${level} (${plan.key}) seat count`);
+    assert.equal(new Set(bp.seats.map((s) => `${s.floor}:${s.desk.x},${s.desk.z}`)).size, bp.seats.length, `level ${level} unique seats`);
+    // A multi-floor home puts residents on more than one floor as soon as it can.
+    const used = new Set(bp.seats.slice(0, level).map((s) => s.floor));
+    assert.equal(used.size, Math.min(level, bp.floors.length), `level ${level} spreads residents over the floors`);
+  }
+});
+
+test('every tier houses its most residents, each with a reachable desk on their floor', () => {
+  for (const plan of TIER_PLANS) {
+    const bp = buildingPlanFor(plan.key, yardProps(plan).blocking.map(([, ...r]) => r));
+    assert.ok(bp.seats.length >= TIER_CAPACITY[plan.key], `${plan.key} seats ${bp.seats.length} ≥ ${TIER_CAPACITY[plan.key]}`);
+    for (const f of bp.floors.slice(1)) {
+      const b = floorBounds(f.rects);
+      const nav = new NavGrid({ x0: b.x0 - 0.25, z0: b.z0 - 0.25, x1: b.x1 + 0.25, z1: b.z1 + 0.25 }, 0.25, 0.25);
+      for (const r of f.obstacles) nav.addRect(r);
+      const inner = f.rects.map((r) => [r[0] + 0.2, r[1] + 0.2, r[2] - 0.2, r[3] - 0.2]);
+      const pieces = [...f.items.filter((it) => it.rect).map((it) => [`${it.kind} at ${it.x},${it.z}`, it.rect]), ...f.desks.map((d, i) => [`desk ${i + 1}`, d.block])];
+      for (const [name, r] of pieces) {
+        const corners = [[r[0], r[1]], [r[2], r[1]], [r[0], r[3]], [r[2], r[3]]];
+        assert.ok(corners.every(([x, z]) => inner.some((q) => x >= q[0] - 0.06 && x <= q[2] + 0.06 && z >= q[1] - 0.06 && z <= q[3] + 0.06)), `${plan.key} ${f.name}: ${name} stays on the floor`);
+        for (const v of f.voids) assert.ok(!ov(r, v), `${plan.key} ${f.name}: ${name} clear of the courtyard`);
+      }
+      for (let i = 0; i < pieces.length; i++) for (let j = i + 1; j < pieces.length; j++) assert.ok(!ov(pieces[i][1], pieces[j][1]), `${plan.key} ${f.name}: ${pieces[i][0]} overlaps ${pieces[j][0]}`);
+      f.desks.forEach((d, i) => {
+        const at = `${plan.key} ${f.name} desk ${i + 1}`;
+        assert.ok(f.landings.includes(d.entrance), `${at} has a landing`);
+        for (const k of ['chair', 'wait', 'visitorWait']) assert.ok(reachable(nav, d.entrance, d[k]), `${at} ${k}`);
+        assert.ok(reachable(nav, d.entrance, d.guests[0]), `${at} visitor spot`);
+        if (d.rest) {
+          const c = nav.nearestFree(...nav.toCell(d.rest.x, d.rest.z), 4);
+          assert.ok(c && nav.reachableFrom(d.entrance)[c[1] * nav.w + c[0]], `${at} bed`);
+        }
+      });
+      // Living spaces: every apartment-style floor gives each desk its own bed.
+      if (f.beds.length >= f.desks.length) assert.ok(f.desks.every((d) => d.rest), `${plan.key} ${f.name}: a bed per resident`);
+      assert.ok(f.y > 0 && f.h > 2, `${plan.key} ${f.name} height`);
+    }
+    // Floors stack upward without overlapping.
+    for (let i = 1; i < bp.floors.length; i++) assert.ok(bp.floors[i].y >= bp.floors[i - 1].y + (i === 1 ? 2.7 : bp.floors[i - 1].h) - 0.01, `${plan.key} floor ${i} above floor ${i - 1}`);
+  }
+});
+
+test('footprint outlines leave shared wing edges open', () => {
+  const wings = [[-7.2, -5.2, -2.8, 5.2], [-2.8, -5.2, 2.8, -1.4], [2.8, -5.2, 7.2, 5.2]];
+  const segs = outline(wings);
+  const length = segs.reduce((n, s) => n + Math.hypot(s.x1 - s.x0, s.z1 - s.z0), 0);
+  // Perimeter of the U: outer box 2*(14.4+10.4) plus the courtyard's two inner sides (6.6 each).
+  assert.ok(Math.abs(length - (2 * (14.4 + 10.4) + 2 * 6.6)) < 1e-6, `U outline length ${length}`);
+  assert.ok(!segs.some((s) => s.nx && Math.abs(s.x0 + 2.8) < 1e-6 && s.z1 <= -1.4 + 1e-6), 'no wall between the west wing and the hall');
+});

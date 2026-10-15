@@ -6,8 +6,9 @@ const timeLeft = ms => `${Math.ceil(ms / 60_000)} min`;
 const escape = text => String(text).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
 
 export class MayorOnboarding {
-  constructor({ character, onConnections, onChange, onFocusTownHall, onBuildHome, onMeetOwner }) {
+  constructor({ character, onClaude, onCodex, onConnections, onChange, onFocusTownHall, onBuildHome, onMeetOwner }) {
     this.character = character;
+    this.onClaude=onClaude;this.onCodex=onCodex;
     this.onConnections = onConnections;
     this.onChange = onChange;
     this.onFocusTownHall = onFocusTownHall;
@@ -86,6 +87,7 @@ export class MayorOnboarding {
       this.onConnections();
       return;
     }
+    if(['claude','codex'].includes(button.dataset.provider)&&button.dataset.action==='claim'&&!button.dataset.authReady){this.dialog.close();(button.dataset.provider==='claude'?this.onClaude:this.onCodex)(()=>{this.open();this.click({target:{closest:()=>({dataset:{action:'claim',provider:button.dataset.provider,authReady:'1'}})}});});return;}
     if (!button.dataset.action) return;
     if (this.pending) return;
     this.pending = true;
@@ -116,8 +118,8 @@ export class MayorOnboarding {
       line = 'Governor! There you are. I’ve been dreaming of the town we can build together.';
       choices = `<button class="mayor-choice primary" data-next>Tell me more ${icon('chevronRight')}</button>`;
     } else if (!connected) {
-      line = `Already signed in to Codex or Claude Code? Link one to this town. I'll welcome your agents and give you ${CONNECTION_GEMS} gems for our Town Hall.`;
-      choices = `<button class="mayor-choice primary" data-action="claim" data-provider="codex">Link Codex to town ${icon('chevronRight')}</button><button class="mayor-choice" data-action="claim" data-provider="claude">Link Claude Code to town ${icon('chevronRight')}</button><button class="mayor-choice subtle" data-connections>How do I sign in? ${icon('chevronRight')}</button>`;
+      line = `Sign in to Codex or Claude Code to begin. I'll welcome your agents and give you ${CONNECTION_GEMS} gems for our Town Hall.`;
+      choices = `<button class="mayor-choice primary" data-action="claim" data-provider="codex">Sign in & link Codex ${icon('chevronRight')}</button><button class="mayor-choice" data-action="claim" data-provider="claude">Sign in & link Claude Code ${icon('chevronRight')}</button><button class="mayor-choice subtle" data-connections>How do I sign in? ${icon('chevronRight')}</button>`;
     } else if (state.status === 'empty') {
       line = `Wonderful! ${this.gameplay.connection.provider === 'claude' ? 'Claude Code' : 'Codex'} is here, and we have ${CONNECTION_GEMS} gems. Shall we lay the first stone of our Town Hall?`;
       detail = `<div class="mayor-detail"><span>${icon('gem')} ${TOWN_HALL.cost} gems</span><span>${icon('clock')} ${timeLeft(TOWN_HALL.durationMs)} to build</span><span>${this.balance} gems in your pocket</span></div>`;

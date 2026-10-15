@@ -1,4 +1,4 @@
-import {spawn} from 'node:child_process';
+import { spawnProvider } from './cli-process.mjs';
 import {randomUUID} from 'node:crypto';
 import os from 'node:os';
 import {codexCommand} from './providers.mjs';
@@ -7,7 +7,7 @@ import {codexCommand} from './providers.mjs';
 // inspection is requested; every approval originates at the provider and requires
 // a human response. Never edit the provider's permission files ourselves.
 export class ComputerUse {
-  constructor({spawnChild=spawn,command=codexCommand(),timeoutMs=180000,startupTimeoutMs=20000,onDiagnostic=()=>{}}={}){Object.assign(this,{spawnChild,command,timeoutMs,startupTimeoutMs,onDiagnostic});this.state={status:'idle'};}
+  constructor({spawnChild=spawnProvider,command=codexCommand(),timeoutMs=180000,startupTimeoutMs=20000,onDiagnostic=()=>{}}={}){Object.assign(this,{spawnChild,command,timeoutMs,startupTimeoutMs,onDiagnostic});this.state={status:'idle'};}
   snapshot(){return {...this.state};}
   start({project,slot,app}){
     if(['connecting','approval'].includes(this.state.status))throw new Error('An app connection is already waiting. Finish or cancel it first.');

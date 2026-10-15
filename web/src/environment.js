@@ -233,6 +233,6 @@ export class Environment {
   label() {
     const h = Math.floor(this.hour);
     const m = Math.floor((this.hour % 1) * 60);
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
   }
 }

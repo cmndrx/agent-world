@@ -1,9 +1,9 @@
+import { spawnProvider } from './cli-process.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import {spawn} from 'node:child_process';
 import {codexCommand} from './providers.mjs';
-export function projectRpc(method,params,{command=codexCommand(),spawnChild=spawn,timeoutMs=15000}={}){
+export function projectRpc(method,params,{command=codexCommand(),spawnChild=spawnProvider,timeoutMs=15000}={}){
  if(!['project/list','project/create'].includes(method))throw Error('Unsupported project method.');
  return new Promise((resolve,reject)=>{let child,buffer='',done=false;const timer=setTimeout(()=>finish(Error('Codex project request timed out. Retry the same request; its project key is preserved.')),timeoutMs);timer.unref?.();
  const finish=(error,result)=>{if(done)return;done=true;clearTimeout(timer);if(child){child.stdin.destroy();child.kill('SIGTERM');const t=setTimeout(()=>child.kill('SIGKILL'),1000);t.unref?.();}error?reject(error):resolve(result);};
@@ -28,7 +28,10 @@ export class LocalProjects{
  const existing=await this.list();const target=path.resolve(folder);let canonical;
  try{canonical=fs.realpathSync(target);if(!fs.statSync(canonical).isDirectory())throw Error('The selected path is not a folder.');}catch(e){if(e.code!=='ENOENT')throw e;if(!createFolder)throw Error('Folder does not exist. Enable Create folder if missing, or choose an existing folder.');const parent=fs.realpathSync(path.dirname(target));fs.mkdirSync(path.join(parent,path.basename(target)));canonical=fs.realpathSync(target);}
  const known=existing.projects.find(p=>p.path===canonical);if(known)return {...known,existing:true};
- let raw;try{raw=await this.rpc('project/create',{name:name.trim(),roots:[{path:canonical}],metadata:{createdBy:'agent-world'},idempotencyKey});}catch(e){throw Error(`${e.message} Folder retained at ${canonical}; no files were removed.`);}
- const p=localProject(raw?.project);if(!p||p.path!==canonical)throw Error('Codex did not confirm the requested project folder. Retry to reconcile the project list.');return {...p,existing:false};
+ // Any failure after this point keeps the folder (never deleted automatically) and says where it is.
+ const kept=`Folder retained at ${canonical}; no files were removed.`;
+ let raw;try{raw=await this.rpc('project/create',{name:name.trim(),roots:[{path:canonical}],metadata:{createdBy:'agent-world'},idempotencyKey});}catch(e){throw Error(`${e.message} ${kept}`);}
+ let p;try{p=localProject(raw?.project);}catch{p=null;}
+ if(!p||p.path!==canonical)throw Error(`Codex did not confirm the requested project folder. Retry to reconcile the project list. ${kept}`);return {...p,existing:false};
  }
 }

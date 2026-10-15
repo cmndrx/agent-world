@@ -1,3 +1,5 @@
+> **Provider accounts:** Mayor Martin offers in-game sign-in for both Codex and Claude Code. Later, open Connections → Codex account or Claude Code account to see the CLI-reported email, authentication method and plan (when available), sign in, or Sign out. Signing out clears that provider’s CLI credentials on this computer, keeps projects/chats and historical town rewards, and is blocked while its approved, queued, running or interrupted game work remains. It does not promise to sign out desktop or browser sessions. Account details appear only in the local no-store account response; credentials, OAuth output and private codes are never returned or saved by Agent World. Codex linking now checks account authentication independently of usage/quota availability.
+
 > **Chat composer:** conversation rows show names only. While a game prompt is active, an empty composer shows a square Stop button; typing switches it to the Send arrow. Sending a follow-up queues that exact message behind current work and continues the same owned conversation. Clearing the draft restores Stop. Queued messages stay visible, and a run must establish its conversation before dependent messages can execute.
 
 > The main overlay no longer shows the yellow **Needs you** tag or the waiting-agent cards beside it. Click a resident in the world to open Watch activity and chat.
@@ -18,6 +20,19 @@
 
 
 # Agent World
+
+**Claude action approvals:** the Claude composer defaults to **Ask for edits & commands**.
+File edits and shell commands pause on an exact-action card with **Allow once / Deny**.
+Choose **Allow edits this run**, **Allow edits & commands this run**, or **Read tools only**
+for the next message. **Full access this run** is a separate explicit choice: Claude uses
+its `bypassPermissions` mode and the private task browser skips per-action click/fill approvals.
+It applies only to the prompt you send; Stop still terminates the run. No global settings are changed.
+The other access choices retain configured Claude deny/ask and sandbox rules. Denial or a three-minute
+expiry blocks subsequent edit/command requests in that run; **Stop** revokes pending actions
+and terminates the process. Denied/stopped runs earn no XP and are not retried automatically.
+A valid same-session failure report stays visible without next passes or handoffs. A successful,
+acknowledged StructuredOutput tool report is also captured when the final CLI event omits it.
+Exact approval arguments are transient and are not added to canonical events or saved chat state.
 
 **Player-led care test (October 11):** Click a resident and scroll to Character.
 Residents receive two persistent interests drawn from Encouragement, Snacks and
@@ -150,15 +165,14 @@ Style is saved in `~/.agent-world/style.json`, separate from observed events and
 - Spend gems in Build mode to unlock nicer decor. Some items also need a higher home level.
 - Work rewards are recomputed from your board. Agents cannot grant gems by doing work or looking busy.
 
-**Downtown: a city that builds itself.** East of the homes, main street grows from the *kinds* of work your agents actually do.
-- Running tests opens a QA lab, git a post office, web research a library, and helper agents a coworking space. There are 8 businesses.
-- Each kind counts once per day: a lot is surveyed on day 1, built on day 2 and opens on day 3.
-- How much your agents do never matters, nothing decays, and fake demo agents don't count.
-- Click a building's sign to see why it's there. The building button in the dock opens the City census.
-- Businesses grow with use: expanded at 7 days of that kind of work, flagship at 14, and their own landmark at 30. Landmarks include a glass testing tower, a clock tower post office and an observatory.
-- Residents get a job (Tester, Designer, Researcher and so on) from the kind of work their sessions do most, and wear an apron in their workplace's color. The wardrobe can hide it.
-- Helper agents start as interns with a lanyard. A helper type that works in a home on 3 different days is hired and gets a name.
-- While their agent is off duty, residents sometimes stroll to their workplace and back, with a dashed "just for fun" tag. The moment their agent starts, they're back at their desk. You can turn this off in the Walls menu.
+**Civic buildings: you build the city.** There is no automatic downtown. As your player level rises, city infrastructure unlocks and you place it yourself in Plan town (the landmark button in the dock, or tool `5`):
+- Fire station (level 2), Police department (3), Library (4), School (5), Hospital (6), City dump (7), Water tower (8) and Power plant (10). One of each.
+- Each has its own size (a 2 × 2 police station or water tower up to a 4 × 4 hospital or power plant; homes are 3 × 3), with its entrance on a street connected to Main Street. Move it with Move or the list, turn it with `R`, and remove it from the list (it can be placed again later).
+- Zoom in and a building opens like a home: the roof lifts off and the near walls drop, showing its interior (engine bays, holding cells, classrooms, a hospital ward, turbines…).
+- The list shows a picture of each building.
+- They're scenery: nothing about them reflects agent work.
+
+**Roles.** Residents get a job title (Tester, Designer, Researcher and so on) from the kind of work their sessions do most, counted once per day. Helper agents start as interns; a helper type that works in a home on 3 different days is hired and gets a name. Off-duty residents stay inside their home.
 
 **Photos and gardens.**
 - **Photo mode** (`P` or the camera in the dock): the interface hides, but alerts stay visible.
@@ -173,11 +187,30 @@ Style is saved in `~/.agent-world/style.json`, separate from observed events and
 **House styles.** Each home has an architecture style: cottage, craftsman, modern or red barn. Roofs show when you zoom out and lift away as you zoom in, so you can always see inside. Change it in Build mode, Paint tab, House style.
 
 **Neighborhood.**
-- **Map mode** (`M` or the map button): click a house, then a plot, to move it. Click a street name to rename it. WASD pans.
+- **Plan town** (`M` or the map button): draw and remove streets, move or turn homes, and rename streets on a grid. See [Town planning and project permits](#town-planning-and-project-permits). Decorating a home's interior stays in Decorate (`B`).
 - **Town square** (west of the first street): build the Town Hall with Mayor Martin. The park, café and plaza fountain open as your homes reach outcomes and you accept tasks with review notes. The Progress panel shows what each one needs.
+- **Town Hall** (`web/src/town-hall.js`): a domed civic hall at the head of the square. Outside: a stone podium with grand steps, a six-column portico under a pediment with the town seal, two wings, a balustraded roof, and a drum and dome with a clock, lantern and gold finial; a forecourt with lamps, hedges, flower beds and flagpoles. Zoom in and the roof and dome lift away, the walls facing you lower and the partitions drop, showing five rooms: the entrance lobby (clerk's counter, benches, notice board), the domed rotunda with a model of the town, the records archive, the council chamber (a curved councillors' bench on a dais, a lectern and public benches), and Mayor Martin's office (his desk under the flags, visitor chairs, a fireside corner and the trophy cabinet with one cup per outcome you've reached). Martin walks up the steps, through the opening front doors and along the lobby to his desk. The hall's lit windows use their own materials, so nothing else in town glows with them. Scenery only: the hall never reflects agent activity.
 - **Pets:** Build mode, Paint tab. Each home can have a cat, a dog or a bunny.
 - **Seasons and weather** (cloud button in the dock): follow the calendar or pick a season, plus clear, rain or snow. Ambience only.
 - **Finds:** a few collectibles sparkle in yards each day. Click one to pick it up. Your first of each kind unlocks a special decor item in the Found catalog. Finds never give gems.
+
+## Town planning and project permits
+
+Agent World borrows SimCity's road-first planning (streets create frontage, homes face a street, the network grows out from the entry street) and SimCity BuildIt's grid placement (snapped, rotatable footprints with a clear valid/invalid preview). The art, buildings and interface stay Agent World's own. A home is a real project and its residents are agents you recruited explicitly: planning never creates agents or projects, never starts provider work, and streets, parked cars and street life are scenery that say nothing about real activity.
+
+**Permits.** Your player level sets how many projects can be active, and every active project has exactly one home: levels 1, 2 and 3 allow 1, 2 and 3 projects, then one more every two levels (level 5 → 4, 7 → 5, 9 → 6, …). Player XP is unchanged (25 per completed game response; going from level *n* to *n* + 1 takes 100 + 50·(*n* − 1) XP). A permit is capacity, not an item or a currency: homes under construction count, and removing a project frees its permit. The Projects drawer in Plan town shows *active / allowed* (the permit card), the next permit's player level and the exact XP remaining. At capacity, Build home and Existing project are locked with that explanation; you can remove a project or **Replace** one (the replaced project leaves only when the new home is confirmed, so the town never exceeds its permits). The bridge enforces this on every create, import and activation request, one at a time behind a lock, so simultaneous requests can't exceed capacity.
+
+**Add project.** In Plan town's Projects drawer, **Build a home** → choose **Import existing project** (a local Codex project) or **Create new project** (name and folder) → Plan town opens in **Place home** with a ghost footprint on the best free plot → move it, press `R` to turn it, and click a plot (green marks show eligible frontage on connected streets) → **Build home here**. Only then is the folder/project created or imported, the project activated and home construction started; the bridge rechecks capacity and the plot first. Escape or Cancel changes nothing and uses no permit. If a new folder was created but a later step fails, the message says where the folder is; it is never deleted.
+
+**Plan town tools** (hotkeys `1` Road, `2` Bulldoze, `3` Move, `4` Place, `5` Civic; `R` rotate/flip, `Enter` confirm, `Esc` cancel, `M` leave; drag or WASD pans anywhere on buildable land). Draw road (click a start tile and an end tile; one 90° turn that follows the longer leg first, `R` flips it; new streets must join an existing one; basic streets are free), Remove road (a straight stretch; Main Street stays and no home may lose its connection; affected homes are outlined red with the reason), Move building (pick a home, choose a plot, `R` to turn, confirm) and Place home (only while adding a project). Every action is a preview until Confirm or Enter; Escape cancels the preview, then leaves. Click a street sign to rename the street. Previews show green new street tiles, blue existing ones (crossing a street makes an intersection), red blocked tiles with the reason, the home's reserved footprint and its entrance arrow.
+
+**Placement rules** (shared/town.mjs, used by the preview and again by the bridge): the whole footprint on buildable land; no overlap with streets, other homes, civic buildings or protected civic land (the town square with the Town Hall, and Main Street itself); the entrance faces a street tile; that street connects to Main Street.
+
+**Inactive projects** stay saved (folder, Codex entry, households, residents, chats, runs, XP and decor) but leave the town: no home, roster, chats, prompts, schedules or delegation through the game, and observed activity never re-activates them or uses a permit. Removing a project pauses its schedules and cancels its queued prompts (recorded as cancelled). If game work, a voice call or an app connection is still running there, the project stays (marked *leaving*, starting nothing new) until that work settles, then leaves on its own; **Keep** cancels the removal.
+
+**Saves over capacity** (more active projects than your level allows) keep every project, home and record. The Projects drawer in Plan town opens and asks you to choose which projects stay active; until you choose, no project starts new work (running work continues). The others then leave as above. Agent World never chooses for you.
+
+**Moving a home** keeps its identity: project, residents, chats, history, XP and test-level adjustments, decor, paint, gardens, construction timer and upper-floor seats all live in lot-local coordinates and move and turn with it.
 
 ## Live provider status
 
@@ -300,7 +333,7 @@ The official Claude Code CLI is installed locally at `~/.agent-world/tools/claud
 
 The bridge discovers this local install or `claude` on PATH. Set `AGENT_WORLD_CLAUDE_COMMAND` before starting the bridge to use another executable. CLI detection confirms installation only, not sign-in. Claude uses its configured model; Claude model switching, quota reads and reasoning summaries are not implemented. Its usage control explicitly shows unavailable.
 
-Claude runs use `dontAsk`: existing approved tool permissions apply, and tools requiring an interactive permission prompt are denied. The game never bypasses permissions. Inspect reported denials and configure required permissions in Claude Code before retrying explicitly. Replies and errors return to the same game chat. Existing Claude hooks supply observed scene activity; absent hooks mean activity is unavailable, not invented. New recommended passes remain unapproved.
+Claude runs use `dontAsk` plus a per-run PreToolUse approval hook for file edits and shell commands. The game supplies exact-action approvals in chat without a terminal prompt. Configured deny/ask rules remain effective and can still block an approved action; unrelated tools needing interactive permission remain denied. Full access explicitly selects the CLI permission bypass for that run only; other choices never bypass configured permission checks. Replies and errors return to the same game chat. Existing Claude hooks supply observed scene activity; absent hooks mean activity is unavailable, not invented. New recommended passes remain unapproved.
 
 ### Codex CLI discovery
 
@@ -322,9 +355,9 @@ Each resident/provider list offers search, archive and restore alongside rename.
 
 ### Fixed execution policy (2026-10-07)
 
-The prompter has no Run settings panel. Every new message uses Prompt workflow, with shell tools available, Codex workspace-write and shell networking enabled, Claude configured permissions (dontAsk), live Codex search and Claude WebSearch/WebFetch enabled where supported. Both providers inherit their CLI's MCP/plugin configuration; Codex supports this, so no off fallback is needed. Claude's existing sandbox/network/tool rules remain authoritative; the game adds no shell/network deny.
+The prompter has no Run settings panel. Every new message uses Prompt workflow, with shell tools available, Codex workspace-write and shell networking enabled, Claude configured permissions (dontAsk), live Codex search and Claude WebSearch/WebFetch enabled where supported. Both providers inherit their CLI's MCP/plugin configuration; Codex supports this, so no off fallback is needed. Claude's existing sandbox/network/tool rules remain authoritative; Claude read-tools-only access disables shell, external MCP/plugins and the task browser for that run; other access choices leave configured provider rules effective.
 
-The policy is enforced at proposal validation, queue claim and runner startup. Per-message overrides are rejected. Previously queued settings cannot restore review mode or different permissions; completed historical run records/findings remain readable. Existing model, provider and attachment controls remain. New prompter chats use the project checkout; existing worktree chats retain their recorded workspace. No running turn changes policy midway.
+The policy is enforced at proposal validation, queue claim and runner startup. Per-message overrides are rejected except the explicit Codex and Claude access selectors described above. Previously queued settings cannot restore review mode or different permissions; completed historical run records/findings remain readable. Existing model, provider and attachment controls remain. New prompter chats use the project checkout; existing worktree chats retain their recorded workspace. No running turn changes policy midway.
 
 Configured services still need provider authentication/trust and permitted tools. These defaults describe requested capabilities, not proof they were used or connected. No global CLI settings, credentials or plugin installations are changed. Real provider/service execution requires separate verification.
 
@@ -350,14 +383,14 @@ Claude's model menu also offers a requested-effort slider: Default, Low, Medium,
 
 ## Local Codex projects and homes
 
-The sidebar switches between Agents and Projects. Opening Projects reads the local Codex registry through the installed CLI's experimental app-server project/list method, then registers its available primary folders as homes. Each folder has one home and at least one persistent off-duty resident. Projects with unavailable folders are reported and skipped; multiple Codex projects sharing a canonical folder reuse its home. Existing observed folders are also listed. This does not import conversation contents or start work.
+The sidebar lists your agents. Projects live in **Plan town** (`M`, or the map button): its **Projects** drawer holds the permit card, **Build a home** (then Import existing project or Create new project), Replace, each home's card (click to fly to it; move; remove) and the over-capacity chooser. Opening it reads the local Codex registry through the installed CLI's experimental app-server project/list method, then registers its available primary folders as homes. Each folder has one home and at least one persistent off-duty resident. Projects with unavailable folders are reported and skipped; multiple Codex projects sharing a canonical folder reuse its home. Existing observed folders are also listed. This does not import conversation contents or start work.
 
 Add project takes a name and an absolute local folder (~/ is supported). Create folder if missing makes one folder under an existing parent; otherwise the folder must exist. The CLI project/create result must confirm the folder before Agent World reports success. Existing files are preserved. Repeated requests reuse an existing project for that canonical folder; retries keep the idempotency key while the form is unchanged. If Codex creation fails after the folder was created, the folder is retained and the error names it. Click a project row to focus its home.
 
 This creates local Codex project records, not synced ChatGPT Projects. Multi-root projects use their first root as the home. Game prompts still route by the resident's folder and session; automatic assignment of game-created chats to the native Codex project's projectId is a separate integration, not verified or claimed here.
 
 ### Explicit project onboarding (2026-10-08)
-Projects start empty with one vacant lot and Add your first project. Opening Projects only lists available Codex roots; Import existing adds a chosen project, while Create new registers a folder/project. selected-projects.json stores the explicit world selection independently from existing households, chats, files and the Codex registry. Existing automatically imported homes remain preserved but hidden until explicitly imported. Demo remains unchanged. No real projects were created/imported during QA.
+Projects start empty with one vacant lot and Add your first project. Opening Projects only lists available Codex roots; Import existing adds a chosen project, while Create new registers a folder/project. (Since October 12, 2026 both first need a plot chosen in Plan town and a free permit; see Town planning and project permits.) selected-projects.json stores the explicit world selection independently from existing households, chats, files and the Codex registry. Existing automatically imported homes remain preserved but hidden until explicitly imported. Demo remains unchanged. No real projects were created/imported during QA.
 
 Project cards include Remove: removes the selected project and its home/residents from Agent World only. Local folders, Codex registry entries, conversations and recorded history are retained for re-import. Running/queued game work and active voice must finish or stop before removal. Removing the last home restores the vacant onboarding lot.
 
@@ -408,6 +441,18 @@ Each home level unlocks one resident slot, up to fifteen at Landmark Residence. 
 - **Residential Tower:** concierge lobby with two elevators, co-working, café lounge, mail room and mechanical room.
 - **Landmark Residence:** grand lobby, two office suites, a fireplace library and a business center.
 
+**Multi-floor homes.** Every storey above the ground floor is walkable and has its own plan (`web/src/home-floors.js`), and residents are spread across the floors as the household grows (the owner starts on the ground floor, then one new resident per floor in turn). Each resident's living space is a desk with their own bed nearby, where they rest while off duty:
+
+- **Family House:** three bedrooms with desks, plus a bath and reading nook upstairs.
+- **Duplex:** two bedroom-offices upstairs in each home.
+- **Townhouse Row:** a bedroom and a two-desk study upstairs in each of the four homes.
+- **Small Apartment Building:** three floors of four apartments around the elevator corridor.
+- **Apartment Block:** five floors with a two-resident apartment in each wing.
+- **Residential Tower:** nine floors of two apartments.
+- **Landmark Residence:** a residents' club, seven floors of two suites and three penthouses.
+
+Each building type seats at least its largest household (3, 5, 7, 9, 11, 13, 14 and 15 residents). Zoom into a multi-floor home and the floor picker on the right lists its floors with how many residents live on each, and a dot where someone needs you. Click a floor or press PgUp/PgDn to inspect it: the camera rises to that floor, its outer walls and partitions lower like the ground floor's, floors below stay closed under their ceilings, and only that floor's residents are shown and clickable. Selecting a resident anywhere opens the floor they live on. Visitors and new residents step out at their floor's stairs or elevator landing.
+
 Residents, their seats and monitors, conversations, paint, floor, decor and pets carry over when a home upgrades; residents reappear at their spots in the new layout. Extra residents beyond a plan's desks get a desk wherever one fits without blocking a doorway or station. Plants, rugs and similar pieces step aside for your decor. Upper floors and roofs lift away together as you zoom in (like a roof); outer walls facing the camera and all interior partitions lower so residents stay easy to see and click. A tall home standing between the camera and the home you're looking at opens too. Zoom out fully and the camera pulls back and rises far enough to show the tallest home whole, including the one you're centered on. Upper floors are not walkable; residents use the ground floor. House style changes the roof treatment (slate gable, craftsman hip, modern flat or red barn) without changing the silhouette; yard landscaping skips any spot where you placed decor. Screenshots: [docs/screenshots/home-tiers](docs/screenshots/home-tiers).
 
 Home overview includes **Home level · Testing**: choose levels 1–15 and Apply, or Use earned XP to remove the home-only adjustment. This changes building tier and recruitment capacity without modifying agent/player XP, recorded work, or existing residents. Future earned XP remains additive. Finish home construction and active work first.
@@ -415,3 +460,23 @@ Home overview includes **Home level · Testing**: choose levels 1–15 and Apply
 **Current home progression (October 11, 2026):** 15 levels and resident slots, eight buildings at levels 1, 4, 6, 8, 10, 12, 14 and 15. Max remains 16,000 pooled XP; early slots unlock at 100 and 350 XP. No residents are added automatically. The testing selector supports all 15 levels. When the authored interior lacks enough seats, an open coworking floor provides 15 distinct work screens; shell designs remain unchanged. This supersedes older eight-level/capacity descriptions.
 
 **Named handoffs:** In a resident chat, type @ to suggest active teammates in the same home. Click a suggestion, or use Up/Down and Enter/Tab; Escape dismisses it. For example: "Draft the plan, then have @Tyler design the mockup, then @Olive implement it." The coordinator returns structured handoffs with dependencies. Mentions identify recipients; they do not launch work on their own. Explicit instructions to handle everything yourself take precedence. Unknown/ambiguous recipients are rejected, and role-only routing requires one matching resident. No unrelated chats are resumed.
+
+### Desktop build and Windows CLI compatibility
+
+`npm run app:build` builds Vite through its JavaScript API and packages the current OS (macOS, Windows or Linux). Windows users can invoke `npm.cmd run app:build` when PowerShell blocks npm.ps1. Standard frontend settings are shared with the desktop build; it does not bundle a temporary Vite configuration in a restricted parent directory.
+
+Codex and Claude discovery supports native executables and npm `.cmd` launchers, including the Windows `Path` environment spelling. Supported npm launchers run their Node entry script directly, with literal argument arrays and no command shell. Custom batch launchers with no Node entry script are rejected; configure a native executable or a `.js`/`.cjs`/`.mjs` CLI entry instead. Windows Stop terminates the provider process tree. Native Windows packaging, signing and real-provider smoke checks still require verification on Windows; cross-platform fixture tests do not establish those results.
+
+### Agent browser feed
+
+Codex and Claude game-run chats show **Watch browser**. In Electron, authorized browser work uses a private task browser that streams its viewport continuously over local MJPEG, capped at 15 rendered updates per second. Static pages may generate no new frames; the displayed rate is measured, not a promised video frame rate. The browser opens only when the agent uses its task-browser tools for a URL or local website. File edits, shell commands and plain web searches may have no browser activity. Hide browser frees the pane for chat; Show browser remains outside the hidden pane. The visibility choice survives ordinary chat updates. Expanding/showing the viewer resumes image transport; collapsing/hiding it pauses viewing without cancelling browser work. Completing/stopping the run closes the browser and expires its control token. Only the latest frame is retained temporarily; there is no recording, audio, invented cursor or personal Chrome-cookie import.
+
+The built-in per-run MCP service permits read-only viewing under the CLI's `writes` approval mode; Electron-owned ordinary Codex turns use the app-server approval transport. Clicks and form entry display **Allow once / Deny** outside the hideable viewport, remaining visible while the browser pane is hidden, with the observed page, target and exact arguments. Approval applies only to that action, expires, and is rejected if the page or target changes. The pointer follows actual task-browser mouse inputs; a click pulse appears only after an actual click. Browser permissions, downloads and popups are denied. Browser tools and web pages do not authorize unrelated work. This continuous path requires the Electron-owned bridge; a reused standalone dev bridge and existing Chrome tools keep the tool-emitted screenshot fallback. Claude uses the same private task browser through a per-run MCP adapter. Its click/fill calls wait for the game’s exact-action approval gate; the CLI allowlist permits only this adapter’s named tools in addition to existing configured permissions, without a global permission bypass. Ordinary linked app chats have no continuous feed. Screenshots/video pixels are separate from canonical activity and saved chat metadata.
+
+### Claude sign-in from the game
+
+Mayor Martin’s **Sign in & link Claude Code** opens account setup, launches the installed CLI’s Claude-subscription browser sign-in when needed, and checks CLI authentication before continuing the first-town tutorial. If Claude requests a code, paste it in the private sign-in field. Already signed-in players skip another login. To add Claude after starting with Codex, use the top-bar **Connections & getting started → Connect Claude Code**; then choose Claude in a resident chat. Later setup does not reset your tutorial or grant another connection reward. Close hides setup; Cancel stops the pending login without logging out. Demo mode does not initiate account sign-in.
+
+### Codex Full access (2026-10-14)
+
+The Codex composer offers **Workspace access** (default) and **Full access this run**. Select before sending. Full uses approvalPolicy never and danger-full-access for app-server thread start/resume and turns, or the equivalent exec CLI settings. File/shell/MCP tools can act without per-tool approval; the private task browser also skips per-action click/fill cards while binding actions to its current page and target. Stop ends the run and expires browser capabilities. This is a run setting, not an OS permission grant or an account sign-in, and it does not alter global configuration or previous/queued work. Read-only roommate inspections retain their restrictions. Voice and app-connection setup retain their own configuration.

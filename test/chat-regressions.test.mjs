@@ -1,15 +1,16 @@
-﻿import test from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import {defaultExecution} from '../shared/execution.mjs';
 import {projectTeam,assignedRole} from '../shared/team.mjs';
 import {mentionSuggestions} from '../shared/mentions.mjs';
 const source=fs.readFileSync(new URL('../web/src/pass-card.js',import.meta.url),'utf8');
 const doc={activeElement:null};
 const Card=vm.runInNewContext(source.replace(/^import .*;\r?\n/gm,'').replace('export class PassCard','class PassCard')+'\nPassCard',{
-  document:doc,projectTeam,assignedRole,mentionSuggestions,esc:s=>String(s),icon:()=>'',
+  document:doc,defaultExecution,projectTeam,assignedRole,mentionSuggestions,esc:s=>String(s),icon:()=>'',
   chatArchived:()=>false,chatThreads:()=>[],chatMessages:()=>[],chatConversation:()=>null,conversationTarget:()=>null,
-  experience:()=>({residents:{}}),residentKey:()=>'',xpMarkup:()=>'',careSummary:()=>'',validThread:()=>false,
+  experience:()=>({residents:{}}),residentKey:()=>'',levelChip:()=>'',validThread:()=>false,
 });
 const home={project:'/fixture',ownerAgentId:'rosa',residentAgentIds:['rosa','olive','tyler'],characters:[
   {id:'rosa',slot:1,name:'Rosa',assignedRole:'personal_assistant'},
@@ -24,7 +25,7 @@ function fixture(){
     set innerHTML(html){this.html=html;field.value=html.match(/<textarea[^>]*>(.*?)<\/textarea>/s)[1];box.innerHTML='';},get innerHTML(){return this.html||''}};
   const card=Object.assign(Object.create(Card.prototype),{dialog,project:'/fixture',slot:1,name:'Rosa',households:[],
     data:{runs:[],proposals:[]},runner:{enabled:false},sessions:[],conversations:[],connected:true,
-    scheduled:{open:false},models:{mount(){},load(){}},voice:{mount(){},active:()=>false},usage:{mount(){}},
+    claudeActions:{stop(){},mount(){}},accessChoices:new Map(),browserFeed:{stop(){},mount(){}},scheduled:{open:false},models:{mount(){},load(){}},voice:{mount(){},active:()=>false},usage:{mount(){}},
     drafts:new Map([['fixture',field.value]]),searchQuery:'',newConversation:true,providerChoice:'codex',
     targetThread:()=>null,draftKey:()=> 'fixture',scheduledPending:()=>false,providerReady:()=>false,
     draftAttachments:()=>[],handoffPanel:()=>'',busy:()=>false,resizeInput(){},updateSend(){},

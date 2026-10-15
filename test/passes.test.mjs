@@ -95,11 +95,13 @@ process.stdin.resume();process.stdin.on('end',()=>{
  console.log(JSON.stringify({type:'item.completed',item:{id:'early',type:'reasoning',text:'Before thread identity'}}));
  console.log(JSON.stringify({type:'thread.started',thread_id:'${thread}'}));
  const events=[{type:'item.updated',item:{id:'r1',type:'reasoning',text:'Checking the',raw_content:'RAW_SECRET'}},{type:'item.completed',item:{id:'r1',type:'reasoning',text:'Checking the public result.'}},{type:'item.completed',item:{id:'raw',type:'reasoning',raw_content:'RAW_SECRET'}},{type:'item.completed',item:{id:'message',type:'agent_message',text:'OTHER_SECRET'}}];
+ events.push({type:'item.completed',item:{type:'mcp_tool_call',server:'cua_repl',tool:'js',arguments:{code:'let awBrowserTab = await cua.createBrowserTab("chrome", "http://localhost:4777/", {sessionName:"Agent World task"});'},result:{content:[]}}},{type:'item.completed',item:{type:'mcp_tool_call',server:'cua_repl',tool:'js',arguments:{code:'await awBrowserTab.getScreenshot();'},result:{content:[{type:'image',mimeType:'image/jpeg',data:'aGVsbG8='}]}}});
  const payload=events.map(e=>JSON.stringify(e)).join('\\n')+'\\n';process.stdout.write(payload.slice(0,20));setTimeout(()=>{process.stdout.write(payload.slice(20));fs.writeFileSync(args[args.indexOf('--output-last-message')+1],JSON.stringify({summary:'Done',checks:[],limitations:[],next:null}));},20);
 });`,{mode:0o700});
  const p=store.propose({project,slot:1,title:'Test',instruction:'Test'},homes);store.decide({id:p.id,version:p.version,action:'approve',confirmed:true},homes);
  const updates=[];const runner=new PassRunner(store,{enabled:true,command:cli,onChange:()=>updates.push(store.snapshot())});runner.start();t.after(()=>runner.stop());while(runner.busy)await new Promise(r=>setTimeout(r,10));
  const run=store.snapshot().runs[0];assert.equal(run.status,'completed');assert.deepEqual(run.reasoningSummaries,[{id:'r1',text:'Checking the public result.'}]);assert.ok(updates.some(s=>s.runs[0]?.status==='running'&&s.runs[0]?.reasoningSummaries?.length));assert.doesNotMatch(fs.readFileSync(store.file,'utf8'),/RAW_SECRET|OTHER_SECRET|Before thread/);
+ assert.equal(runner.browserFeed.frame(run.id).data,'aGVsbG8=');assert.doesNotMatch(fs.readFileSync(store.file,'utf8'),/aGVsbG8/);
  assert.equal(store.reasoning(run.id,{id:'late',type:'reasoning',text:'Late'}),false);
 });
 test('public summary storage is bounded and never belongs to a different run',t=>{
@@ -121,12 +123,23 @@ const fs=require('fs'),a=process.argv.slice(2);fs.writeFileSync('claude-args.jso
  p=store.propose({project,slot:1,version:store.snapshot().proposals.at(-1).version,title:'Default effort',instruction:'Fixture',provider:'claude',model:'sonnet',effort:null,resumeSession:id},homes);store.decide({id:p.id,version:p.version,action:'approve',confirmed:true},homes);await runner.tick();const defaultArgs=JSON.parse(fs.readFileSync(path.join(project,'claude-args.json')));assert.equal(defaultArgs.includes('--effort'),false);assert.equal(defaultArgs[defaultArgs.indexOf('--resume')+1],id);
  assert.throws(()=>store.propose({project,slot:2,title:'x',instruction:'x',provider:'other'},homes),/Choose Codex/);assert.throws(()=>store.propose({project,slot:2,title:'x',instruction:'x',provider:'claude',model:'gpt-test'},homes),/supported Claude|configured default/);
 });
-test('Claude permission denials and mismatched sessions cannot become completed runs',async t=>{
- for(const kind of ['denied','mismatch']){
+test('Claude permission denials preserve the report as failed; mismatched sessions discard it',async t=>{
+ for(const kind of ['denied','denied-exit','mismatch']){
  const {store,homes,project}=fixture(t),cli=path.join(project,'claude-error'),id='12345678-1234-1234-1234-123456789abc';
  fs.writeFileSync(cli,`#!/usr/bin/env node
-process.stdin.resume();process.stdin.on('end',()=>{console.log(JSON.stringify({type:'system',subtype:'init',session_id:'${id}'}));console.log(JSON.stringify({type:'result',session_id:'${kind==='mismatch'?'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee':id}',permission_denials:${kind==='denied'?'[{tool_name:"Bash"}]':'[]'},structured_output:{summary:'Should not succeed',checks:[],limitations:[],next:null}}));});`,{mode:0o700});
- const p=store.propose({project,slot:1,title:'x',instruction:'x',provider:'claude'},homes);store.decide({id:p.id,version:p.version,action:'approve',confirmed:true},homes);const runner=new PassRunner(store,{enabled:true,claude:cli});runner.start();t.after(()=>runner.stop());while(runner.busy)await new Promise(r=>setTimeout(r,10));const run=store.snapshot().runs[0];assert.equal(run.status,'failed');assert.equal(run.result,null);assert.match(run.error,/permissions|different conversation/);
+process.stdin.resume();process.stdin.on('end',()=>{console.log(JSON.stringify({type:'system',subtype:'init',session_id:'${id}'}));console.log(JSON.stringify({type:'result',session_id:'${kind==='mismatch'?'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee':id}',permission_denials:${kind.startsWith('denied')?'[{tool_name:"Bash",tool_input:{command:"PRIVATE_COMMAND"}},{tool_name:"Edit"},{tool_name:"Bash"}]':'[]'},structured_output:{summary:'Edits were blocked',checks:['Read files'],limitations:['No changes made'],next:{title:'Future',instruction:'Do not queue'},handoffs:[{id:'future',role:'assistant',title:'Future',instruction:'Do not delegate',dependsOn:[]}]}}));process.exitCode=${kind==='denied-exit'?1:0};});`,{mode:0o700});
+ const p=store.propose({project,slot:1,title:'x',instruction:'x',provider:'claude'},homes);store.decide({id:p.id,version:p.version,action:'approve',confirmed:true},homes);const runner=new PassRunner(store,{enabled:true,claude:cli});runner.start();t.after(()=>runner.stop());while(runner.busy)await new Promise(r=>setTimeout(r,10));const run=store.snapshot().runs[0];assert.equal(run.status,'failed');assert.match(run.error,/permissions|different conversation/);
+ if(kind.startsWith('denied')){assert.equal(run.result.summary,'Edits were blocked');assert.deepEqual(run.result.checks,['Read files']);assert.equal(run.result.next,null);assert.equal(run.result.handoffs,undefined);assert.match(run.error,/Bash, Edit/);assert.doesNotMatch(fs.readFileSync(store.file,'utf8'),/PRIVATE_COMMAND|Do not queue|Do not delegate/);const {experience}=await import('../shared/experience.mjs');assert.equal(experience([run]).player.xp,0);}else assert.equal(run.result,null);
+ await runner.tick();assert.equal(store.snapshot().runs.length,1);assert.equal(store.snapshot().proposals.length,1);assert.equal(store.snapshot().proposals[0].status,'failed');
+ }
+});
+
+test('Claude denied, invalid and missing reports retain distinct failures without raw output',async t=>{
+ for(const kind of ['denied-missing','denied-invalid','error','missing']){
+  const {store,homes,project}=fixture(t),cli=path.join(project,'claude-report'),id='12345678-1234-1234-1234-123456789abc';
+  const event={type:'result',session_id:id,is_error:kind==='error',permission_denials:kind.startsWith('denied')?[{tool_name:'PRIVATE /path secret',tool_input:{secret:'PRIVATE_INPUT'}}]:[],...(kind==='denied-invalid'?{structured_output:{summary:'invalid'}}:{}),errors:['PRIVATE_OUTPUT']};
+  fs.writeFileSync(cli,`#!/usr/bin/env node\nprocess.stdin.resume();process.stdin.on('end',()=>{console.log(JSON.stringify({type:'system',subtype:'init',session_id:'${id}'}));console.log(${JSON.stringify(JSON.stringify(event))});});`,{mode:0o700});
+  const p=store.propose({project,slot:1,title:'x',instruction:'x',provider:'claude'},homes);store.decide({id:p.id,version:p.version,action:'approve',confirmed:true},homes);const runner=new PassRunner(store,{enabled:true,claude:cli});t.after(()=>runner.stop());await runner.tick();const run=store.snapshot().runs[0];assert.equal(run.status,'failed');assert.equal(run.result,null);assert.match(run.error,kind.startsWith('denied')?/blocked tool use/:kind==='error'?/failed turn/:/no structured response/);assert.doesNotMatch(fs.readFileSync(store.file,'utf8'),/PRIVATE/);
  }
 });
 
@@ -183,4 +196,32 @@ test('selected reasoning effort is validated, pinned to the run and passed to Co
  const p=store.propose({project,slot:1,title:'x',instruction:'x',model:'gpt-6.1-sol',effort:'high'},homes);store.decide({id:p.id,version:p.version,action:'approve',confirmed:true},homes);
  const runner=new PassRunner(store,{enabled:true,command:cli});runner.start();t.after(()=>runner.stop());while(runner.busy)await new Promise(r=>setTimeout(r,10));
  const args=JSON.parse(fs.readFileSync(path.join(project,'args.json')));assert.equal(args[args.indexOf('model_reasoning_effort=high')-1],'-c');assert.equal(store.snapshot().runs[0].effort,'high');
+});
+
+test('Claude Electron run adds only scoped browser MCP tools and retains exact resume',async t=>{
+ const {store,homes,project}=fixture(t),cli=path.join(project,'claude-browser-mock'),id='12345678-1234-1234-1234-123456789abc';
+ fs.writeFileSync(cli,`#!/usr/bin/env node
+ const fs=require('fs'),args=process.argv.slice(2);fs.writeFileSync('browser-args.json',JSON.stringify(args));let prompt='';process.stdin.on('data',c=>prompt+=c);process.stdin.on('end',()=>{fs.writeFileSync('browser-prompt.txt',prompt);console.log(JSON.stringify({type:'system',subtype:'init',session_id:'${id}'}));console.log(JSON.stringify({type:'result',session_id:'${id}',is_error:false,structured_output:{summary:'Fixture report',checks:[],limitations:[],next:null}}));});`,{mode:0o700});
+ const {BrowserVideo}=await import('../bridge/browser-video.mjs');const video=new BrowserVideo({send:()=>{},isActive:()=>true});const runner=new PassRunner(store,{enabled:true,claude:cli,video,browserEndpoint:()=> 'http://127.0.0.1:4999/api/browser-control'});t.after(()=>runner.stop());
+ for(const resumeSession of [null,id]){const p=store.propose({project,slot:1,title:'Browser fixture',instruction:'Inspect the owned page',version:store.snapshot().proposals.at(-1)?.version,provider:'claude',resumeSession},homes);store.decide({id:p.id,version:p.version,action:'approve',confirmed:true},homes);await runner.tick();const run=store.snapshot().runs.at(-1);assert.equal(run.status,'completed',run.error);assert.equal(run.conversationSession,id);assert.equal(video.view(run.id).status,'ended');const args=JSON.parse(fs.readFileSync(path.join(project,'browser-args.json')));const config=JSON.parse(fs.readFileSync(args[args.indexOf('--mcp-config')+1]));assert.match(config.mcpServers.agent_world_browser.args[0],/browser-mcp.mjs$/);assert.doesNotMatch(JSON.stringify(config),/AGENT_WORLD_BROWSER_TOKEN/);assert.equal(args.filter(x=>x==='--allowedTools').length,1);const allowed=args[args.indexOf('--allowedTools')+1];assert.match(allowed,/WebSearch/);assert.match(allowed,/mcp__agent_world_browser__click/);assert.doesNotMatch(allowed,/mcp__\*|Bash/);assert.equal(args.includes('--dangerously-skip-permissions'),false);assert.match(fs.readFileSync(path.join(project,'browser-prompt.txt'),'utf8'),/one-action approval/);if(resumeSession)assert.equal(args[args.indexOf('--resume')+1],id);}
+});
+
+test('Claude structured tool reports require same-session acknowledgement and a successful result',async t=>{
+ for(const kind of ['accepted','unacknowledged','wrong-session','error','replacement']){
+  const {store,homes,project}=fixture(t),cli=path.join(project,'structured-cli'),id='12345678-1234-1234-1234-123456789abc';
+  const result={summary:'Verified fixture report',checks:[],limitations:[],next:null};
+  const events=[{type:'system',subtype:'init',session_id:id},{type:'assistant',session_id:id,message:{content:[{type:'tool_use',name:'StructuredOutput',id:'structured-1',input:result}]}}];
+  if(kind!=='unacknowledged')events.push({type:'user',session_id:kind==='wrong-session'?'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee':id,message:{content:[{type:'tool_result',tool_use_id:'structured-1',is_error:false,content:'Structured output provided successfully'}]}});
+  if(kind==='replacement')events.push({type:'assistant',session_id:id,message:{content:[{type:'tool_use',name:'StructuredOutput',id:'structured-2',input:result}]}});
+  events.push({type:'result',session_id:id,subtype:kind==='error'?'error_during_execution':'success',is_error:kind==='error'});
+  fs.writeFileSync(cli,`#!${process.execPath}\nprocess.stdin.resume();process.stdin.on('end',()=>{for(const e of ${JSON.stringify(events)})console.log(JSON.stringify(e));});`,{mode:0o700});
+  const p=store.propose({project,slot:1,title:'Fixture',instruction:'Fixture',provider:'claude'},homes);store.decide({id:p.id,version:p.version,action:'approve',confirmed:true},homes);const runner=new PassRunner(store,{enabled:true,claude:cli});t.after(()=>runner.stop());await runner.tick();const run=store.snapshot().runs[0];assert.equal(run.status,kind==='accepted'?'completed':'failed');assert.equal(run.result?.summary,kind==='accepted'?'Verified fixture report':undefined);
+ }
+});
+
+test('only explicitly selected full access launches Claude in bypass mode; Stop remains run-owned',async t=>{
+ const {store,homes,project}=fixture(t),cli=path.join(project,'full-claude.cjs'),id='12345678-1234-1234-1234-123456789abc';
+ fs.writeFileSync(cli,`const fs=require('fs');let p='';process.stdin.on('data',c=>p+=c);process.stdin.on('end',()=>{fs.writeFileSync('full-args.json',JSON.stringify({args:process.argv.slice(2),prompt:p}));console.log(JSON.stringify({type:'system',subtype:'init',session_id:'${id}'}));console.log(JSON.stringify({type:'result',session_id:'${id}',subtype:'success',structured_output:{summary:'Fixture only',checks:[],limitations:[],next:null}}));});`,{mode:0o700});
+ const {defaultExecution}=await import('../shared/execution.mjs');const p=store.propose({project,slot:1,provider:'claude',title:'Full fixture',instruction:'Fixture only',execution:{...defaultExecution('claude'),actionAccess:'full'}},homes);store.decide({id:p.id,version:p.version,action:'approve',confirmed:true},homes);
+ const runner=new PassRunner(store,{enabled:true,claude:cli});t.after(()=>runner.stop());await runner.tick();const run=store.snapshot().runs[0],received=JSON.parse(fs.readFileSync(path.join(project,'full-args.json')));assert.equal(run.status,'completed');assert.equal(run.execution.actionAccess,'full');assert.equal(received.args[received.args.indexOf('--permission-mode')+1],'bypassPermissions');assert.throws(()=>runner.cancel(run.id),/not controlled/);
 });

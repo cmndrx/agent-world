@@ -1,9 +1,10 @@
 // Fixed platform execution policy. Recorded settings are configuration, not observed activity.
-export const defaultExecution=provider=>({mode:'prompt',review:{scope:'changes',ref:''},permission:provider==='claude'?'configured':'workspace-write',web:'live',shell:true,network:true,external:'inherit',servers:[],plugins:[],connections:[]});
+export const defaultExecution=provider=>({mode:'prompt',review:{scope:'changes',ref:''},permission:provider==='claude'?'configured':'workspace-write',web:'live',shell:true,network:true,external:'inherit',servers:[],plugins:[],connections:[],actionAccess:provider==='claude'?'ask':'workspace'});
 export function executionOptions(value,provider='codex'){
  if(value==null)return defaultExecution(provider);
  if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('Choose valid execution settings.');
  const d={...defaultExecution(provider),...value};
+ if(!(provider==='claude'?['ask','edits','edits-and-commands','read-only','full']:['workspace','full']).includes(d.actionAccess))throw Error('Choose a valid action access level.');
  if(!['prompt','review'].includes(d.mode)||!['inherit','disabled','cached','live'].includes(d.web)||!['inherit','off','selected'].includes(d.external)||typeof d.shell!=='boolean'||typeof d.network!=='boolean')throw new Error('Choose valid execution settings.');
  if(!(provider==='claude'?['configured','accept-edits','read-only']:['workspace-write','read-only']).includes(d.permission))throw new Error('Unsupported permission profile.');
  if(provider==='claude'&&d.web==='cached')throw new Error('Claude Code does not offer cached search.');
@@ -17,8 +18,8 @@ export function executionOptions(value,provider='codex'){
  if(d.mode==='review'&&review.scope!=='changes'&&!review.ref)throw new Error('Enter the branch or commit to review.');d.review={scope:review.scope,ref:review.ref};
  if(d.mode==='review'){d.permission='read-only';d.external='off';d.connections=[];d.servers=[];d.plugins=[];d.network=false;if(provider==='claude')d.shell=false;}
  if(d.permission==='read-only'){d.network=false;d.external='off';d.connections=[];d.servers=[];d.plugins=[];if(provider==='claude')d.shell=false;}
- return {mode:d.mode,review:d.review,permission:d.permission,web:d.web,shell:d.shell,network:d.network,external:d.external,servers:d.servers,plugins:d.plugins,connections:d.connections};
+ return {mode:d.mode,review:d.review,permission:d.permission,web:d.web,shell:d.shell,network:d.network,external:d.external,servers:d.servers,plugins:d.plugins,connections:d.connections,actionAccess:d.actionAccess};
 }
-export function executionLabel(e,provider='codex'){if(!e)return '';return `${e.mode==='review'?'Code review · '+e.review.scope:'Prompt'} · ${e.permission==='read-only'?(provider==='claude'?'Read tools only':'Read-only sandbox'):provider==='claude'?(e.permission==='accept-edits'?'Approve file edits':'Configured permissions'):'Workspace writes'} · search ${e.web} · tools ${e.external}`;}
+export function executionLabel(e,provider='codex'){if(!e)return '';return `${e.mode==='review'?'Code review · '+e.review.scope:'Prompt'} · ${e.actionAccess==='full'?'Full access this run':e.permission==='read-only'?(provider==='claude'?'Read tools only':'Read-only sandbox'):provider==='claude'?({'full':'Full access this run','ask':'Ask for edits and commands','edits':'Allow edits this run','edits-and-commands':'Allow edits and commands this run','read-only':'Read tools only'}[e.actionAccess]||'Configured permissions'):'Workspace writes'} · search ${e.web} · tools ${e.external}`;}
 
-export function fixedExecution(value,provider='codex'){const policy=defaultExecution(provider);if(value!=null&&JSON.stringify(executionOptions(value,provider))!==JSON.stringify(policy))throw new Error('Execution settings are fixed by Agent World and cannot be changed per message.');return policy;}
+export function fixedExecution(value,provider='codex'){const policy=defaultExecution(provider);if(value?.actionAccess)policy.actionAccess=value.actionAccess;if(value!=null&&JSON.stringify(executionOptions(value,provider))!==JSON.stringify(policy))throw new Error('Execution settings are fixed by Agent World and cannot be changed per message.');return policy;}

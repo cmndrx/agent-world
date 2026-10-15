@@ -12,6 +12,7 @@ function snapshotFixture(linked) {
   const calls = { households: [], sessions: [], ended: [] };
   const context = vm.createContext({
     gameplay: { connection: linked ? { provider: 'codex' } : null }, visibleResidents,
+    observedSessions: new Map(), activityRuns: [], applyLayout() {}, syncRunnerActivity() {},
     selectedProjects: null, emptyLot: {}, replaying: false, firstSnapshot: false,
     sessionToSim: new Map([['old', 'old-key']]), sims: new Map(), REMIND_AFTER_S: 120,
     passCard: { setData: data => { calls.card = data; } },

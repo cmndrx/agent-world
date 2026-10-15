@@ -1,10 +1,13 @@
-﻿import test from 'node:test';
+import { webcrypto } from 'node:crypto';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CarePanel, CareDialog, careDialogFor, careSummary, careMenuPosition } from '../web/src/care.js';
 import { CareFeedback } from '../web/src/care-feedback.js';
 import { assignedRole } from '../shared/team.mjs';
 import { plumbobFor } from '../shared/schema.mjs';
 import fs from 'node:fs';
+// Node 18 does not expose browser Web Crypto globally without a flag.
+if (!globalThis.crypto) globalThis.crypto = webcrypto;
 const source = fs.readFileSync(new URL('../web/src/sim.js', import.meta.url),'utf8');
 const start=source.indexOf('  updateLabel() {')+'  updateLabel() {'.length;
 const end=source.indexOf('\n  }',start);

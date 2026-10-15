@@ -376,8 +376,9 @@ export class BuildMode {
     this.raycaster.setFromCamera(this.pointer, this.camera);
     const hit = new THREE.Vector3();
     if (!this.raycaster.ray.intersectPlane(this.plane, hit)) return null;
-    const x = Math.round((hit.x - this.lot.group.position.x) / SNAP) * SNAP;
-    const z = Math.round((hit.z - this.lot.group.position.z) / SNAP) * SNAP;
+    const local = this.lot.toLocal(hit.x, hit.z);
+    const x = Math.round(local.x / SNAP) * SNAP;
+    const z = Math.round(local.z / SNAP) * SNAP;
     return { x, z };
   }
 

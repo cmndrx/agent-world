@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BUSINESSES, DAYS_TO_OPEN, businessStage, downtown, emptyCity, mergeCity, recordEvent, signalsOf, whyText } from '../shared/city.mjs';
+import { emptyCity, mergeCity, recordEvent, signalsOf } from '../shared/city.mjs';
 
 const ev = (state, target, extra = {}) => ({ kind: 'state', state, detail: target ? { target } : null, ts: '2026-10-05T10:00:00Z', session: 's1', project: '/p', ...extra });
 const at = (day, hour = 10) => new Date(`2026-10-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:00:00`).toISOString();
@@ -24,14 +24,11 @@ test('variety, not volume: each kind counts once per day', () => {
   const city = emptyCity();
   for (let i = 0; i < 500; i++) recordEvent(city, ev('running', 'npm test', { ts: at(5, 9 + (i % 10)) }));
   assert.equal(city.signals.tests.count, 1);
-  assert.equal(businessStage(city, 'qa_lab'), 2); // day 1: under construction
   recordEvent(city, ev('running', 'npm test', { ts: at(6) }));
-  assert.equal(DAYS_TO_OPEN, 2);
-  assert.equal(businessStage(city, 'qa_lab'), 3); // day 2: open
   recordEvent(city, ev('running', 'pytest', { ts: at(9), project: '/q' }));
-  assert.equal(businessStage(city, 'qa_lab'), 3);
+  assert.equal(city.signals.tests.count, 3);
+  assert.deepEqual(city.signals.tests.projects, ['/p', '/q']);
   assert.equal(recordEvent(city, ev('running', 'npm test', { ts: at(9) })), false); // nothing new
-  assert.match(whyText(city, 'qa_lab'), /ran tests on 3 different days .* across 2 projects/);
 });
 
 test('synthetic demo events never count outside demo mode', () => {
@@ -52,16 +49,6 @@ test('saved ledger merges with a rebuilt one without losing anything', () => {
   const merged = mergeCity(saved, rebuilt);
   assert.equal(merged.signals.tests.count, 3);
   assert.equal(merged.signals.search.count, 1);
-  assert.equal(businessStage(merged, 'qa_lab'), 3);
-});
-
-test('downtown order follows when each kind of work first appeared', () => {
-  const city = emptyCity();
-  recordEvent(city, ev('searching', null, { ts: at(2) }));
-  recordEvent(city, ev('running', 'npm test', { ts: at(1) }));
-  recordEvent(city, ev('editing', 'README.md', { ts: at(3) }));
-  assert.deepEqual(downtown(city).map((b) => b.id), ['qa_lab', 'library', 'print_shop']);
-  assert.equal(Object.keys(BUSINESSES).length, 8);
 });
 
 test('residents get a role from their most common kind of work, by days', async () => {
@@ -73,7 +60,7 @@ test('residents get a role from their most common kind of work, by days', async 
   const person = city.people[me.key];
   assert.deepEqual(person.days, ['2026-10-01', '2026-10-02', '2026-10-03']);
   assert.equal(roleOf(person).title, 'Tester');
-  assert.equal(roleOf(person).business, 'qa_lab');
+  assert.equal(roleOf(person).color, 0x5fbf73);
   assert.match(roleWhy(person, "Hazel's sessions"), /Tester because .* testing \(2 days\)/);
   recordEvent(city, ev('searching', null, { ts: at(4) }), { person: me });
   assert.equal(roleOf(person).title, 'Researcher'); // tie on days goes to the most recent
@@ -105,20 +92,4 @@ test('replaying the same events never inflates counts', () => {
   assert.equal(city.signals.tests.count, 3);
   assert.equal(city.people['r:/p#1'].signals.tests.length, 3);
   assert.equal(mergeCity(city, city).signals.tests.count, 3);
-});
-
-test('businesses upgrade with days of use, never volume', async () => {
-  const { businessTier, businessName, businessProgress, TIERS } = await import('../shared/city.mjs');
-  const city = emptyCity();
-  const day = (n) => new Date(Date.UTC(2026, 8, 1 + n, 12)).toISOString();
-  for (let i = 0; i < 1000; i++) recordEvent(city, ev('running', 'npm test', { ts: day(0) })); // a busy day is still one day
-  assert.equal(businessTier(city, 'qa_lab'), 0);
-  for (let n = 1; n < 7; n++) recordEvent(city, ev('running', 'npm test', { ts: day(n) }));
-  assert.equal(businessTier(city, 'qa_lab'), 2);
-  assert.match(whyText(city, 'qa_lab'), /^Expanded because .* Next: flagship at 14 days\./);
-  for (let n = 7; n < 30; n++) recordEvent(city, ev('running', 'npm test', { ts: day(n) }));
-  assert.equal(businessTier(city, 'qa_lab'), TIERS.length);
-  assert.equal(businessName('qa_lab', 4), 'Testing tower');
-  assert.equal(businessProgress(city, 'qa_lab').next, null);
-  assert.match(whyText(city, 'qa_lab'), /^Became a landmark .* Fully grown\./);
 });

@@ -13,6 +13,9 @@ const http = require('node:http');
 const net = require('node:net');
 const path = require('node:path');
 
+const {TaskBrowsers} = require('./task-browser.cjs');
+let taskBrowsers = null;
+
 const ROOT = path.resolve(__dirname, '..');
 const DIST = path.join(ROOT, 'dist');
 const DEFAULT_PORT = Number(process.env.AGENT_WORLD_PORT) || 4777;
@@ -85,7 +88,7 @@ function runNode(name, script, args, env) {
   const child = spawn(process.execPath, [path.join(ROOT, script), ...args], {
     cwd: ROOT,
     env: { ...env, ELECTRON_RUN_AS_NODE: '1' },
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['ignore', 'pipe', 'pipe', ...(name === 'bridge' ? ['ipc'] : [])],
   });
   const pipe = (chunk) => chunk.toString().split('\n').filter(Boolean).forEach((l) => log(`[${name}] ${l}`));
   child.stdout.on('data', pipe);
@@ -97,6 +100,7 @@ function runNode(name, script, args, env) {
       app.quit();
     }
   });
+  if(name === 'bridge'){taskBrowsers = new TaskBrowsers({BrowserWindow,send:(message,callback)=>{if(child.connected)child.send(message,callback);else callback?.();}});child.on('message',m=>taskBrowsers.command(m));child.on('exit',()=>taskBrowsers.shutdown());}
   children.push(child);
   return child;
 }
@@ -219,5 +223,6 @@ app.on('window-all-closed', () => app.quit());
 
 app.on('before-quit', () => {
   quitting = true;
+  taskBrowsers?.shutdown();
   for (const c of children) if (c.exitCode === null) c.kill('SIGTERM');
 });

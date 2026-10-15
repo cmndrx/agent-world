@@ -564,3 +564,23 @@ export function buildPlanter(seed) {
   g.add(ico(0.45 + r() * 0.1, PALETTE.leaf, 0, 1.4, 0));
   return g;
 }
+
+/** The opening where stairs come up through a floor: a dark well with a railing on three sides (open at +z). */
+export function buildStairwell(w = 1.0, d = 2.6) {
+  const g = new THREE.Group();
+  g.add(box(w, 0.02, d, 0x3a332e, 0, 0.01, 0));
+  const n = 6;
+  for (let i = 0; i < n; i++) g.add(box(w - 0.1, 0.03, d / n - 0.04, i % 2 ? PALETTE.woodMid : PALETTE.woodLight, 0, 0.025, -d / 2 + (i + 0.5) * (d / n)));
+  const rail = (len, x, z, along) => {
+    g.add(along === 'z' ? box(0.05, 0.05, len, PALETTE.dark, x, 0.9, z) : box(len, 0.05, 0.05, PALETTE.dark, x, 0.9, z));
+    const posts = Math.max(2, Math.round(len / 0.5));
+    for (let k = 0; k <= posts; k++) {
+      const t = -len / 2 + (k * len) / posts;
+      g.add(along === 'z' ? box(0.04, 0.9, 0.04, PALETTE.dark, x, 0.45, z + t) : box(0.04, 0.9, 0.04, PALETTE.dark, x + t, 0.45, z));
+    }
+  };
+  rail(d, -w / 2, 0, 'z');
+  rail(d, w / 2, 0, 'z');
+  rail(w, 0, -d / 2, 'x');
+  return g;
+}

@@ -40,7 +40,7 @@ test('bridge withholds residents/work until build finishes and persists paid com
   t.after(async()=>{child.kill();if(child.exitCode===null)await once(child,'exit');fs.rmSync(dir,{recursive:true,force:true});});
   const base=await new Promise((resolve,reject)=>{let out='';const timer=setTimeout(()=>reject(Error('Startup timeout')),10000);child.stdout.on('data',c=>{out+=c;const m=out.match(/http:\/\/127\.0\.0\.1:\d+/);if(m){clearTimeout(timer);resolve(m[0]);}});child.on('error',e=>{clearTimeout(timer);reject(e);});});
   const post=(route,data)=>fetch(base+route,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(data)});
-  const imported=await(await post('/api/codex-projects',{action:'import',id:'fixture'})).json();
+  const imported=await(await post('/api/codex-projects',{action:'import',id:'fixture',placement:{i:-1,j:-2,rot:0}})).json();
   const readyAt=imported.result.home.construction.readyAt;
   assert.equal(Date.parse(readyAt)-Date.parse(imported.result.home.construction.startedAt),TOWN_HALL.durationMs);
   const duplicate=await(await post('/api/codex-projects',{action:'import',id:'fixture'})).json();

@@ -1,5 +1,6 @@
-import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {execFile} from 'node:child_process';import {promisify} from 'node:util';import {codexCommand} from './providers.mjs';
-const exec=promisify(execFile),read=file=>{try{return JSON.parse(fs.readFileSync(file,'utf8'));}catch{return {};}};
+import { execProvider } from './cli-process.mjs';
+import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {promisify} from 'node:util';import {codexCommand} from './providers.mjs';
+const exec=promisify(execProvider),read=file=>{try{return JSON.parse(fs.readFileSync(file,'utf8'));}catch{return {};}};
 export function codexPlugins(files){const result=new Map();for(const file of files){let text;try{text=fs.readFileSync(file,'utf8');}catch{continue;}for(const match of text.matchAll(/^\[plugins\."([^"\n]+)"\]\s*\n([^\[]*)/gm)){const enabled=match[2].match(/^enabled\s*=\s*(true|false)\s*(?:#.*)?$/m);if(enabled)result.set(match[1],{name:match[1],enabled:enabled[1]==='true'});}}return [...result.values()];}
 export function claudeConfiguration(project,root=process.env.CLAUDE_CONFIG_DIR||path.join(os.homedir(),'.claude')){
  const user=read(path.join(root,'..','.claude.json')),settings=[read(path.join(root,'settings.json')),read(path.join(project,'.claude','settings.json')),read(path.join(project,'.claude','settings.local.json'))];

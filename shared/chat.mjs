@@ -31,7 +31,7 @@ export function responseText(run){
     return [pending?'Working on your message…':'No response was returned for this message.',run.error].filter(Boolean).join('\n\n');
   }
   const {summary,checks=[],limitations=[],next}=run.result;
-  return [summary,checks.length?`Checks\n${checks.map(c=>`• ${c}`).join('\n')}`:'',limitations.length?`Limitations\n${limitations.map(c=>`• ${c}`).join('\n')}`:'',next?`Next\n${next.title}\n${next.instruction}`:''].filter(Boolean).join('\n\n');
+  return [run.status==='failed'?run.error:'',summary,checks.length?`Checks\n${checks.map(c=>`• ${c}`).join('\n')}`:'',limitations.length?`Limitations\n${limitations.map(c=>`• ${c}`).join('\n')}`:'',next?`Next\n${next.title}\n${next.instruction}`:''].filter(Boolean).join('\n\n');
 }
 export function chatMessages(runs,proposals){
   const messages=runs.flatMap(run=>run.voice ? [...(run.voiceMessages||[]).map(m=>({...m,id:run.id+'-'+m.id,provider:'codex',voice:true})),...(run.status==='failed'?[{id:run.id+'-error',role:'assistant',text:run.error,failed:true,voice:true}]:[])] : [
