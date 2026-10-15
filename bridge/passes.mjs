@@ -49,20 +49,20 @@ export class PassStore {
     else if(input.action==='approve'){
       if(input.confirmed!==true)throw new Error('Confirm this specific instruction before running.');
       const real=fs.realpathSync(p.project);if(!fs.statSync(real).isDirectory())throw new Error('Runner requires a canonical local project directory.');
-      if(data.runs.some(r=>r.project===p.project&&(r.status==='interrupted'||(r.status==='running'&&!p.enqueue))))throw new Error('Resolve the previous active or interrupted run first.');
+      if(data.runs.some(r=>r.project===p.project&&(r.status==='interrupted'||(r.status==='running'&&r.slot===p.slot&&!p.enqueue))))throw new Error('Resolve the previous active or interrupted run first.');
       p.executionProject=real;p.status='approved';p.approvedAt=new Date().toISOString();
     }else throw new Error('Choose approve or pause.');
     p.version++;return p;
   });}
   claim(canRun=()=>true) {return this.change(data=>{
     reconcileTeam(data);
-    if(data.runs.some(r=>['running','interrupted'].includes(r.status)))return null;
+    if(data.runs.some(r=>r.status==='interrupted'))return null;
     for(const q of data.proposals.filter(q=>q.status==='approved'&&q.afterProposal)){
       const prior=data.runs.find(r=>r.proposalId===q.afterProposal);
       if(prior?.conversationSession){q.resumeSession=prior.conversationSession;q.afterProposal=null;}
       else if(prior&& !['running','interrupted'].includes(prior.status)){q.status='paused';q.error='Previous prompt did not establish a conversation. Start a new chat.';}
     }
-    const p=data.proposals.find(p=>p.status==='approved'&&!p.afterProposal&&!p.teamDependencies?.length&&canRun(p));if(!p)return null;
+    const p=data.proposals.find(p=>p.status==='approved'&&!p.afterProposal&&!p.teamDependencies?.length&&!data.runs.some(r=>r.status==='running'&&((r.project===p.project&&r.slot===p.slot)||(p.resumeSession&&r.conversationSession===p.resumeSession&&(r.provider||'codex')===(p.provider||'codex'))))&&canRun(p));if(!p)return null;
     const previous=p.resumeSession?data.runs.find(r=>r.project===p.project&&r.slot===p.slot&&(r.provider||'codex')===(p.provider||'codex')&&r.conversationSession===p.resumeSession&&r.workspace):null;
     const run={kind:p.kind||null,teamFromName:p.teamFromName||null,recordedBy:p.recordedBy||null,team:p.team||null,teamRoot:p.teamRoot||null,teamParent:p.teamParent||null,teamDepth:p.teamDepth||0,teamFinal:!!p.teamFinal,teamContext:p.teamContext||[],teamOriginal:p.teamRoot?data.runs.find(r=>r.id===p.teamRoot)?.instruction:null,scheduleId:p.scheduleId||null,scheduledAt:p.scheduledAt||null,execution:fixedExecution({...defaultExecution(p.provider||'codex'),actionAccess:p.execution?.actionAccess||defaultExecution(p.provider||'codex').actionAccess},p.provider||'codex'),attachments:p.attachments||[],isolate:!!p.isolate,workspace:previous?.workspace||null,model:p.model||null,effort:p.effort||null,resumeSession:p.resumeSession||null,id:randomUUID(),proposalId:p.id,project:p.project,executionProject:p.executionProject,slot:p.slot,title:p.title,instruction:p.instruction,provider:p.provider,status:'running',startedAt:new Date().toISOString(),approvalVersion:p.version};
     run.agentId = p.agentId || this.agentIdFor(run);

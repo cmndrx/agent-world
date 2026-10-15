@@ -1,0 +1,35 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import http from 'node:http';
+import {spawn} from 'node:child_process';
+import {once} from 'node:events';
+import {speechWave} from '../shared/speech-audio.mjs';
+
+test('isolated local speech API enforces origin and resident ownership without creating prompts, runs or audio history',async t=>{
+  const home=await fs.mkdtemp(path.join(os.tmpdir(),'aw-local-speech-api-')),project=path.join(home,'project');await fs.mkdir(project);
+  await fs.writeFile(path.join(home,'households.json'),JSON.stringify({[project]:{project,name:'Voice fixture',ownerAgentId:'owner',residentAgentIds:['owner'],characters:[{id:'owner',slot:1,seed:1,name:'Voice Tester',assignedRole:'personal_assistant'},{id:'inactive',slot:2,seed:2,name:'Inactive'}]}}));
+  await fs.writeFile(path.join(home,'selected-projects.json'),JSON.stringify([project]));
+  const passes=JSON.stringify({runs:[],proposals:[]});await fs.writeFile(path.join(home,'passes.json'),passes);
+  const requests=[];const backend=http.createServer(async(req,res)=>{let size=0;for await(const chunk of req)size+=chunk.length;requests.push({url:req.url,size});res.setHeader('content-type','application/json');res.end(JSON.stringify(req.url==='/health'?{status:'ok'}:{text:'Transcribed fixture words'}));});
+  backend.listen(0,'127.0.0.1');await once(backend,'listening');
+  await fs.writeFile(path.join(home,'speech.json'),JSON.stringify({voicestudioURL:`http://127.0.0.1:${backend.address().port}`}));
+  const child=spawn(process.execPath,['bridge/server.mjs','--port','0'],{env:{...process.env,AGENT_WORLD_HOME:home,CODEX_HOME:path.join(home,'codex'),AGENT_WORLD_RUNNER:'0',AGENT_WORLD_VOICESTUDIO_URL:'',AGENT_WORLD_DEMO:'0'},stdio:['ignore','pipe','pipe']});
+  t.after(async()=>{if(child.exitCode===null){const exit=once(child,'exit');child.kill();await exit;}await new Promise(resolve=>backend.close(resolve));await fs.rm(home,{recursive:true,force:true});});
+  const base=await new Promise((resolve,reject)=>{let out='',err='';const timer=setTimeout(()=>reject(Error('Startup timeout: '+err)),10000);child.stderr.on('data',c=>err+=c);child.stdout.on('data',c=>{out+=c;const found=out.match(/http:\/\/127\.0\.0\.1:\d+/);if(found){clearTimeout(timer);resolve(found[0]);}});child.on('exit',()=>{clearTimeout(timer);reject(Error(err));});});
+  const post=(body,headers={})=>fetch(base+'/api/local-speech',{method:'POST',headers:{'content-type':'application/json',...headers},body:JSON.stringify({project,slot:1,provider:'codex',action:'status',...body})});
+  let response=await post({});assert.equal(response.status,200);assert.equal((await response.json()).result.backend,'voicestudio');
+  assert.equal((await post({}, {origin:'https://foreign.invalid'})).status,403);
+  assert.equal((await post({}, {'sec-fetch-site':'cross-site'})).status,403);
+  assert.equal((await post({slot:2})).status,400);assert.equal((await post({project:'/unknown'})).status,400);
+  assert.equal((await post({thread:'12345678-1234-1234-1234-123456789abc'})).status,400);
+  assert.equal((await post({action:'transcribe',audio:'invalid'})).status,400);
+  const audio=Buffer.from(speechWave(new Float32Array(16000).fill(0.1),16000)).toString('base64');
+  response=await post({action:'transcribe',audio,provider:'claude'});assert.equal(response.status,200);assert.equal((await response.json()).result.text,'Transcribed fixture words');
+  assert.equal((await fetch(base+'/api/local-speech')).status,405);
+  assert.equal(requests.filter(r=>r.url==='/v1/audio/transcriptions').length,1);
+  assert.equal(await fs.readFile(path.join(home,'passes.json'),'utf8'),passes);
+  const state=await (await fetch(base+'/api/state')).json();assert.equal(state.passes.runs.length,0);assert.equal(state.passes.proposals.length,0);
+});

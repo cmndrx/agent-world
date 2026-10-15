@@ -378,6 +378,10 @@ Codex quotas are authenticated account-wide limits, independent of any conversat
 
 Match the supplied ChatGPT references: the model pill belongs inside the bottom composer and opens a rounded, light menu upward. Account usage opens from a circular lower-left button, showing compact window / remaining percentage / reset rows. Neither occupies a panel above the messages. The account button denotes Codex usage, not an imported human profile. Last observed model remains separately labeled inside the picker; selecting a next-message override never implies it has run. Connections keeps its existing usage disclosure.
 
+### Claude public progress in game chat (2026-10-14)
+
+Game-owned Claude runs request `--include-partial-messages` with `--print --output-format stream-json --verbose`. After exact init/session ownership is established, the bridge accepts only root assistant `text` blocks and `text_delta` updates inside started text blocks. Complete public blocks are a fallback when partial frames are absent; streamed blocks are not duplicated by their complete messages. Private/raw thinking, signatures, tool inputs/results, forwarded subagent text and arbitrary stdout are excluded. Wrong-session progress fails the run without importing the foreign text. The bounded existing per-run summary store and pass updates carry public text into each reply’s **Public progress · live** disclosure; recorded text survives completion/failure and reload. Drafts and manual disclosure state survive updates. A waiting/disconnected message reports unavailable output without synthesizing it. The observer privacy layer and Codex summary behavior remain unchanged.
+
 ### Public reasoning summaries in game chat (2026-10-06)
 
 The runner previously discarded reasoning items and the UI said internal reasoning was unavailable. Game-authorized CLI runs now request model_reasoning_summary=auto with raw reasoning display explicitly disabled. Only public CLI item reasoning text is retained, scoped to the exact run after thread identity is recorded; arbitrary stdout, rollout analysis, encrypted/raw content and tool output are never imported. Summaries are bounded, streamed through existing pass SSE updates, and attached to each reply, including completed/failed replies. While waiting, say Waiting for Codex's reasoning summary rather than claiming summaries cannot be shown. Some models emit no summary; never synthesize one. This explicit human request permits summary content for game-launched work, while the targets-only observer remains unchanged.
@@ -425,15 +429,24 @@ Codex chats offer Connect an app. Setup uses a separate ephemeral app-server thr
 
 A finished turn is recorded as `idle` (in `normalizeEvent`, so live events and replayed history agree): no "Done, your turn" status, card, toast, chime or Needs-you entry. The agent returns to its idle routine (couch, coffee, books, globe, wandering). Permission requests and questions still wait for the human. Overhead bubbles show only the name and a short status: Working, Needs your OK / Has a question / Needs you, Error, Idle, Off duty, or Traveling while walking (street-life walkers too). Offline bubbles say "Last seen …".
 
-## Codex voice (experimental, 2026-10-08)
+## Local voice messages (2026-10-15)
 
-The Codex composer has a microphone button for the selected resident and conversation. It starts a thread-scoped app-server realtime session, captures mono PCM audio, plays returned audio, and shows provider-authored live transcripts. Mute and End voice controls are available during a call; closing the drawer ends the call and interrupts associated execution. Conversation/provider switching and text sends are locked during voice. Only one call can run, and approved/queued execution must finish first. Command/file permission requests require a human decision. Raw audio is held in memory, never saved by Agent World; returned transcript text is saved to that resident's chat.
+Codex and Claude resident chats now use local push-to-talk audio: click the mic,
+Finish recording, review the transcript appended to your draft, then Send.
+The ordinary provider conversation, model, permissions and Stop run controls
+remain responsible for execution. Completed replies to messages you send while
+voice is enabled are spoken locally. Existing history and unrelated work are not
+read automatically. Closing/switching chats ends local audio; it does not cancel
+ordinary agent work already sent.
 
-**Current blocker:** the installed Codex CLI 0.160.0 rejected both default and v3 realtime connections with `realtime conversation requires API key auth`. Thread initialization succeeded but zero audio chunks were returned. ChatGPT sign-in alone has not worked for this route. No API-key login, paid fallback, or authentication change was performed. UI/transport wiring is implemented, but two-way audio, speech quality and microphone permission behavior are not verified end to end. This must not be described as working subscription-backed voice.
-
-- **2026-10-08:** Claude chats expose Sonnet/Opus/Haiku CLI aliases and configured default. Model selections belong to one provider/project/conversation and are next-message preferences; actual model identity comes from Claude's init event. Model changes resume the same game-owned session. Alias options do not prove account access.
-
-- **2026-10-08:** Claude's effort slider uses Default or low/medium/high/xhigh/max requests, passed with --effort for the next authorized message. Keep requested effort distinct from effective model behavior; Claude applies model and organization limits. Resetting Claude effort does not reset its model.
+The lightweight macOS provider uses whisper.cpp with a local English model and
+macOS speech. A separate VoiceStudio backend can instead supply transcription
+and TTS through its documented loopback API. No OpenAI audio API key or provider
+login change is required. Speech runs locally; Codex/Claude text processing still
+uses the existing online connection. This is not yet an always-listening,
+interruptible realtime conversation. See [local voice setup and limitations](docs/LOCAL_VOICE.md).
+The earlier Codex realtime experiment remains blocked by its recorded API-key
+requirement and is no longer the composer's default route.
 
 ## Local Codex projects and homes
 

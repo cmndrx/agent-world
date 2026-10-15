@@ -60,7 +60,7 @@
       "icon": "electron/build/icon.icns",
       "identity": "-",
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "Talk to your agents in Agent World using Codex voice."
+        "NSMicrophoneUsageDescription": "Record local voice messages for your agents in Agent World."
       }
     },
     "npmRebuild": false

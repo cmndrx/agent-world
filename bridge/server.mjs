@@ -15,6 +15,7 @@ import { PassStore } from './passes.mjs';
 import { PassRunner } from './pass-runner.mjs';
 import {Attachments} from './attachments.mjs';
 import {VoiceSession} from './voice.mjs';
+import {LocalSpeech} from './local-speech.mjs';
 import {ComputerUse} from './computer-use.mjs';
 import { previewArtifact } from './artifacts.mjs';
 import { TownStore } from './town.mjs';
@@ -370,8 +371,29 @@ const readUsage = usageReader(allowSynthetic ? async () => ({ status:'unavailabl
 
 const claudeLogin=new ClaudeLogin();
 const codexLogin=new CodexLogin();
+const localSpeech=new LocalSpeech({directory:homeDir()});
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
+  if(url.pathname==='/api/local-speech'){
+    res.setHeader('Content-Type','application/json');res.setHeader('Cache-Control','no-store');
+    if(req.method!=='POST'){res.writeHead(405);return res.end(JSON.stringify({error:'POST required.'}));}
+    if(!isLocalOrigin(req)||req.headers['sec-fetch-site']==='cross-site'){res.writeHead(403);return res.end(JSON.stringify({error:'Local origin required.'}));}
+    if(!req.headers['content-type']?.startsWith('application/json')){res.writeHead(415);return res.end(JSON.stringify({error:'JSON required.'}));}
+    const controller=new AbortController();const disconnected=()=>{if(!res.writableEnded)controller.abort();};res.on('close',disconnected);
+    try{
+      let body='';for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>1300000)throw Error('Recording is too large. Record up to 30 seconds.');}
+      const input=JSON.parse(body),slot=Number(input.slot);
+      if(allowSynthetic)throw Error('Local speech is unavailable in demo mode.');
+      if(executionBlock(input.project))throw Error(executionBlock(input.project));
+      if(homeBuildState(gameplay,input.project).status!=='built'||!residentCharacters(world.households[input.project]).some(c=>c.slot===slot))throw Error('Choose an active resident in a completed home.');
+      if(!['codex','claude'].includes(input.provider))throw Error('Choose Codex or Claude for this chat.');
+      if(input.thread&&!ownsThread(passes.snapshot().runs,world.catalog.snapshot().conversations,input.project,slot,input.thread,input.provider))throw Error('Conversation does not belong to this agent.');
+      const result=await localSpeech.perform(input.action,input,{signal:controller.signal});
+      if(!res.destroyed)res.end(JSON.stringify({ok:true,result}));
+    }catch(e){if(!res.destroyed){res.writeHead(400);res.end(JSON.stringify({error:e instanceof SyntaxError?'Invalid speech request.':e.message}));}}
+    finally{res.removeListener('close',disconnected);}
+    return;
+  }
   if(url.pathname==='/api/claude-action'){
     res.setHeader('Content-Type','application/json');res.setHeader('Cache-Control','no-store');
     const token=req.headers.authorization?.replace(/^Bearer /,'');
@@ -877,5 +899,5 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log(`[bridge] http://127.0.0.1:${server.address().port}${STATIC_DIR ? '' : '  (api only)'}`);
 });
 
-process.on('SIGTERM',()=>{claudeLogin.finish();codexLogin.finish();voice.stop();computerUse.cancel();runner.stop();process.exit(0);});
+process.on('SIGTERM',()=>{claudeLogin.finish();codexLogin.finish();voice.stop();localSpeech.stop();computerUse.cancel();runner.stop();process.exit(0);});
 process.on('SIGINT',()=>{claudeLogin.finish();codexLogin.finish();computerUse.cancel();runner.stop();process.exit(0);});

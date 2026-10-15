@@ -70,8 +70,24 @@ Send now resumes the displayed Codex thread by exact UUID. The resident uses its
 
 Chat shows Codex account quota and per-conversation last observed models. Next message model is a user preference, not observed activity; it is pinned into the next authorized run. Do not claim a chosen model has executed before observing it. Model/usage RPCs are read-only and never submit prompts. Restart stale bridges only after checking no approved/running work would be interrupted. Do not select/send real work as part of UI tests.
 
-### Experimental voice
-The Codex composer microphone starts a call in that resident's selected chat. Human controls mute/end and tool permission decisions. Closing the drawer ends voice and interrupts associated work. Raw audio is transient; returned speech transcripts are recorded. Installed CLI testing returned `realtime conversation requires API key auth`; never promise ChatGPT-subscription voice or infer success from realtime/start acceptance. No authentication or paid fallback changes without user authorization.
+### Local voice messages
+The Codex and Claude composer microphone uses local push-to-talk speech, not the
+former Codex realtime route. Human clicks Finish recording, reviews the transcript
+appended to their draft and explicitly sends it through the ordinary runner.
+Only completed replies to human sends while voice is enabled are spoken. Prior
+history, unrelated residents and failed runs are not read automatically. End voice,
+chat/provider changes and closing chat cancel local recording/playback, without
+cancelling ordinary agent work already sent. Use Stop run for execution.
+
+The native macOS provider uses whisper.cpp, a local English model and macOS say;
+a configured loopback VoiceStudio backend can supply ASR/TTS instead. See
+[local voice setup](../../docs/LOCAL_VOICE.md). Speech stays local; the existing
+Codex/Claude text connection remains online. No audio API key, login change,
+automatic model download or hosted fallback is configured. Raw audio is transient
+and is not added to game history. Never report real microphone capture or a full
+provider voice conversation verified from synthetic engine/fixture tests alone.
+The old realtime transport remains in source with its recorded API-key blocker;
+it is no longer the composer default.
 
 ### Claude model selection
 Claude game-owned chats can select Sonnet, Opus, Haiku or configured default for the next message. Selection passes `--model` on the same exact resumed session. Show last reported init-event model separately from requested aliases; the alias list does not establish account entitlement. Do not run real prompts merely to verify the picker.

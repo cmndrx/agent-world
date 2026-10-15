@@ -331,7 +331,7 @@ The official Claude Code CLI is installed locally at `~/.agent-world/tools/claud
 ~/.agent-world/tools/claude-code/node_modules/.bin/claude auth login
 ```
 
-The bridge discovers this local install or `claude` on PATH. Set `AGENT_WORLD_CLAUDE_COMMAND` before starting the bridge to use another executable. CLI detection confirms installation only, not sign-in. Claude uses its configured model; Claude model switching, quota reads and reasoning summaries are not implemented. Its usage control explicitly shows unavailable.
+The bridge discovers this local install or `claude` on PATH. Set `AGENT_WORLD_CLAUDE_COMMAND` before starting the bridge to use another executable. CLI detection confirms installation only, not sign-in. Claude’s next-message model and effort controls apply to authorized sends. Claude quota reads remain unavailable. Each reply’s **Public progress · live** disclosure shows only public assistant text emitted by the CLI, incrementally when partial text is available, and retains recorded text afterward. Thinking blocks, signatures, tool inputs/results and arbitrary stdout are excluded. Missing text is never invented; waiting and disconnected states are explicit. This shares Codex’s per-reply disclosure behavior and bounded run storage, without changing Codex’s public reasoning summaries.
 
 Claude runs use `dontAsk` plus a per-run PreToolUse approval hook for file edits and shell commands. The game supplies exact-action approvals in chat without a terminal prompt. Configured deny/ask rules remain effective and can still block an approved action; unrelated tools needing interactive permission remain denied. Full access explicitly selects the CLI permission bypass for that run only; other choices never bypass configured permission checks. Replies and errors return to the same game chat. Existing Claude hooks supply observed scene activity; absent hooks mean activity is unavailable, not invented. New recommended passes remain unapproved.
 
@@ -369,11 +369,24 @@ The normal prompt runner still uses `codex exec`; it cannot collect first-time a
 
 Current verification (2026-10-07): the real provider request appeared in Electron and the human selected Always allow. A fresh native-tool connection then returned the Agent World interface without another approval. First-use documentation before the window-state block is handled correctly. Local ad-hoc rebuilds can invalidate macOS Documents-folder approval; the human completed the requested consent and a fresh packaged Electron setup displayed “Native app access verified.” for Agent World without another approval. The ordinary game test could not execute because Codex desktop owns its conversation; native access in a normal game prompt remains unverified for that chat. Codex native-app approval and macOS folder access are separate permissions. See `docs/NEXT_PASS.md` for the exact pending test and evidence.
 
-## Codex voice (experimental, 2026-10-08)
+## Local voice messages (2026-10-15)
 
-The Codex composer has a microphone button for the selected resident and conversation. It starts a thread-scoped app-server realtime session, captures mono PCM audio, plays returned audio, and shows provider-authored live transcripts. Mute and End voice controls are available during a call; closing the drawer ends the call and interrupts associated execution. Conversation/provider switching and text sends are locked during voice. Only one call can run, and approved/queued execution must finish first. Command/file permission requests require a human decision. Raw audio is held in memory, never saved by Agent World; returned transcript text is saved to that resident's chat.
+Codex and Claude resident chats now use local push-to-talk audio: click the mic,
+Finish recording, review the transcript appended to your draft, then Send.
+The ordinary provider conversation, model, permissions and Stop run controls
+remain responsible for execution. Completed replies to messages you send while
+voice is enabled are spoken locally. Existing history and unrelated work are not
+read automatically. Closing/switching chats ends local audio; it does not cancel
+ordinary agent work already sent.
 
-**Current blocker:** the installed Codex CLI 0.160.0 rejected both default and v3 realtime connections with `realtime conversation requires API key auth`. Thread initialization succeeded but zero audio chunks were returned. ChatGPT sign-in alone has not worked for this route. No API-key login, paid fallback, or authentication change was performed. UI/transport wiring is implemented, but two-way audio, speech quality and microphone permission behavior are not verified end to end. This must not be described as working subscription-backed voice.
+The lightweight macOS provider uses whisper.cpp with a local English model and
+macOS speech. A separate VoiceStudio backend can instead supply transcription
+and TTS through its documented loopback API. No OpenAI audio API key or provider
+login change is required. Speech runs locally; Codex/Claude text processing still
+uses the existing online connection. This is not yet an always-listening,
+interruptible realtime conversation. See [local voice setup and limitations](docs/LOCAL_VOICE.md).
+The earlier Codex realtime experiment remains blocked by its recorded API-key
+requirement and is no longer the composer's default route.
 
 ### Claude conversation models
 
@@ -410,7 +423,7 @@ Sending a prompt to this team authorizes scoped delegation of that request withi
 
 The first handoff to a recipient starts a separate resident-owned conversation; subsequent handoffs in the same request can reuse an established recipient conversation. Earlier unrelated resident chats are never resumed automatically. Queued handoffs appear in the receiving resident’s list. The original chat shows sender → recipient, status, reported results and Open chat links. Automatic instructions are attributed to a teammate or Team report request, never to the human. After all parts settle, one final pass resumes the original conversation with recorded reports to summarize changes, checks, failures and unfinished work. A returned report does not accept tasks or grant world rewards.
 
-Runs remain sequential to avoid competing workspace edits. The graph is bounded to three handoffs per response, six per human request and two delegation levels, with no further delegation in the final report. Invalid/self/unknown-role handoffs are rejected atomically. Failed prerequisites pause dependent work; no automatic retry. Interrupted work still requires human inspection. Stop in the original or receiving chat cancels the remaining request queue and stops its active game-owned run; existing file changes remain. Publishing/pushing/spending are not included. New schedules in the starter team capture delegation authorization; existing schedules are not retroactively expanded. Isolated-worktree and voice runs do not enable this team workflow in this pass.
+Different residents can run prompts concurrently, using Codex, Claude Code or both, including within the same project. Follow-ups to one resident remain ordered, and explicit handoff dependencies still wait for their prerequisites. Each active run owns its provider process, output, approvals and Stop control. Concurrent residents share project files unless an isolated workspace was selected. Interrupted work still blocks dispatch until inspected. The Codex and Claude desktop apps do not need to be open: Agent World launches the installed, authenticated CLIs directly. Agent World must remain running and the computer awake. The graph is bounded to three handoffs per response, six per human request and two delegation levels, with no further delegation in the final report. Invalid/self/unknown-role handoffs are rejected atomically. Failed prerequisites pause dependent work; no automatic retry. Interrupted work still requires human inspection. Stop in the original or receiving chat cancels the remaining request queue and stops its active game-owned run; existing file changes remain. Publishing/pushing/spending are not included. New schedules in the starter team capture delegation authorization; existing schedules are not retroactively expanded. Isolated-worktree and voice runs do not enable this team workflow in this pass.
 
 Fixture CLIs verify execution/routing for Codex and Claude without provider spending. Intelligent task decomposition by a real model remains to be evaluated with real user prompts.
 
