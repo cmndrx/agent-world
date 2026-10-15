@@ -5,11 +5,12 @@ import vm from 'node:vm';
 import {defaultExecution} from '../shared/execution.mjs';
 import {projectTeam,assignedRole} from '../shared/team.mjs';
 import {mentionSuggestions} from '../shared/mentions.mjs';
+import {chatMessages,runThread} from '../shared/chat.mjs';
 const source=fs.readFileSync(new URL('../web/src/pass-card.js',import.meta.url),'utf8');
 const doc={activeElement:null};
 const Card=vm.runInNewContext(source.replace(/^import .*;\r?\n/gm,'').replace('export class PassCard','class PassCard')+'\nPassCard',{
   document:doc,defaultExecution,projectTeam,assignedRole,mentionSuggestions,esc:s=>String(s),icon:()=>'',
-  chatArchived:()=>false,chatThreads:()=>[],chatMessages:()=>[],chatConversation:()=>null,conversationTarget:()=>null,
+  chatArchived:()=>false,chatThreads:()=>[],chatMessages,runThread,chatConversation:()=>null,conversationTarget:()=>null,
   experience:()=>({residents:{}}),residentKey:()=>'',levelChip:()=>'',validThread:()=>false,
 });
 const home={project:'/fixture',ownerAgentId:'rosa',residentAgentIds:['rosa','olive','tyler'],characters:[
@@ -21,11 +22,11 @@ const home={project:'/fixture',ownerAgentId:'rosa',residentAgentIds:['rosa','oli
 function fixture(){
   const field={value:'Please @',selectionStart:8,selectionEnd:8,readOnly:false,focus(){doc.activeElement=this},setSelectionRange(a,b){this.selectionStart=a;this.selectionEnd=b},setRangeText(text,start,end){this.value=this.value.slice(0,start)+text+this.value.slice(end);this.selectionStart=this.selectionEnd=start+text.length}};
   const box={innerHTML:''},scroller={scrollHeight:500,scrollTop:400,clientHeight:100};
-  const dialog={open:true,classList:{add(){}},querySelectorAll:()=>[],querySelector:q=>q==='[name=instruction]'?field:q==='[data-mentions]'?box:q==='.chat-messages'?scroller:null,
+  const dialog={open:true,classList:{add(){}},querySelectorAll:()=>[],querySelector:q=>q==='[name=instruction]'?field:q==='[data-mentions]'||q==='[data-chat-usage]'?box:q==='.chat-messages'?scroller:null,
     set innerHTML(html){this.html=html;field.value=html.match(/<textarea[^>]*>(.*?)<\/textarea>/s)[1];box.innerHTML='';},get innerHTML(){return this.html||''}};
   const card=Object.assign(Object.create(Card.prototype),{dialog,project:'/fixture',slot:1,name:'Rosa',households:[],
     data:{runs:[],proposals:[]},runner:{enabled:false},sessions:[],conversations:[],connected:true,
-    claudeActions:{stop(){},mount(){}},accessChoices:new Map(),browserFeed:{stop(){},mount(){}},scheduled:{open:false},models:{mount(){},load(){}},voice:{mount(){},active:()=>false},usage:{mount(){}},
+    claudeActions:{stop(){},mount(){}},accessChoices:new Map(),browserFeed:{stop(){},mount(){}},scheduled:{open:false},models:{mount(){},load(){}},voice:{mount(){},active:()=>false},usage:{mount(){},stop(){}},
     drafts:new Map([['fixture',field.value]]),searchQuery:'',newConversation:true,providerChoice:'codex',
     targetThread:()=>null,draftKey:()=> 'fixture',scheduledPending:()=>false,providerReady:()=>false,
     draftAttachments:()=>[],handoffPanel:()=>'',busy:()=>false,resizeInput(){},updateSend(){},
@@ -39,6 +40,24 @@ test('household update supplies only active same-home teammates, and refreshed m
   const before=field.value,caret=field.selectionStart;card.render();assert.equal(field.value,before);assert.equal(field.selectionStart,caret);assert.match(box.innerHTML,/@Tyler/);
   card.insertMention(1);assert.equal(field.value,'Please @Tyler ');assert.equal(card.drafts.get('fixture'),'Please @Tyler ');assert.equal(box.innerHTML,'');
   card.render();assert.equal(box.innerHTML,'');assert.equal(field.value,'Please @Tyler ');
+});
+
+test('Claude reply disclosure renders live/retained text and preserves draft, caret and collapsed choice',()=>{
+ const {card,field,dialog}=fixture();const thread='12345678-1234-1234-1234-123456789abc';
+ card.providerChoice='claude';card.newConversation=false;card.targetThread=()=>thread;
+ const run={id:'public-run',project:'/fixture',slot:1,provider:'claude',conversationSession:thread,status:'running',instruction:'Fixture'};
+ card.data.runs=[run];card.render();assert.match(dialog.innerHTML,/Public progress · live/);assert.match(dialog.innerHTML,/Waiting for Claude’s public progress/);
+ const draft=field.value,caret=field.selectionStart;
+ dialog.querySelectorAll=()=>[{dataset:{reasoning:'public-run-assistant'},open:false}];
+ run.reasoningSummaries=[{id:'text',text:'Checking public files.'}];card.render();
+ assert.match(dialog.innerHTML,/Checking public files/);assert.doesNotMatch(dialog.innerHTML,/data-reasoning="public-run-assistant" open/);
+ assert.equal(field.value,draft);assert.equal(field.selectionStart,caret);
+ card.connected=false;card.render();assert.match(dialog.innerHTML,/Checking public files/);assert.match(dialog.innerHTML,/Live activity unavailable/);
+ run.reasoningSummaries=[];card.render();assert.match(dialog.innerHTML,/Live progress disconnected/);
+ run.reasoningSummaries=[{id:'text',text:'Checking public files.'}];run.status='completed';run.result={summary:'Done',checks:[],limitations:[],next:null};card.render();
+ assert.match(dialog.innerHTML,/>Public progress<\/summary>/);assert.match(dialog.innerHTML,/Checking public files/);assert.doesNotMatch(dialog.innerHTML,/Public progress · live/);
+ run.reasoningSummaries=[];card.render();assert.doesNotMatch(dialog.innerHTML,/data-reasoning=/);
+ card.connected=true;run.status='running';run.provider='codex';card.providerChoice='codex';card.render();assert.match(dialog.innerHTML,/Reasoning · live/);assert.match(dialog.innerHTML,/Waiting for Codex/);
 });
 test('recruitment/rename roster updates refresh suggestions without inventing or sending work',()=>{
   const {card,field,box}=fixture();card.households=[home];card.updateMentions();

@@ -2040,7 +2040,7 @@ body.night .pass-card .composer-model summary em { color: var(--ink-2); }
 
 .voice-message {width:34px;height:34px;border-radius:50%;display:grid;place-items:center;padding:0;flex-shrink:0;}
 .voice-panel:empty {display:none;}
-.voice-call-controls {display:flex;align-items:center;gap:8px;margin-top:10px;}
+.voice-call-controls {display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:10px;}
 .voice-call-controls span {flex:1;color:var(--accent);font-weight:700;}
 .voice-transcript {max-height:140px;overflow:auto;font-size:12px;}
 .voice-transcript p {margin:6px 0;white-space:pre-wrap;}

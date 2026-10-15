@@ -1,3 +1,4 @@
+import {ClaudeProgress} from './claude-progress.mjs';
 import {ClaudeActions,actionHookSettings} from './claude-actions.mjs';
 import {CodexTurn} from './codex-turn.mjs';
 import {videoInstruction} from './browser-video.mjs';
@@ -20,16 +21,54 @@ import {createWorkspace,checkWorkspace} from './workspaces.mjs';
 const signalChild = signalProvider;
 const schema=fileURLToPath(new URL('../shared/pass-result.schema.json',import.meta.url));
 export class PassRunner {
-  constructor(store,{enabled=false,command=codexCommand(),claude=claudeCommand(),onChange=()=>{},timeoutMs=30*60*1000,canRun=()=>true,video=null,browserEndpoint=()=>null}={}){Object.assign(this,{store,enabled,command,claude,onChange,timeoutMs,canRun,video,browserEndpoint});this.actions=new ClaudeActions({isActive:id=>this.currentRun===id&&!this.store.snapshot().runs.find(r=>r.id===id)?.stopRequestedAt,onChange:()=>this.onChange()});this.browserFeed=new BrowserFeed();this.busy=false;this.lock=store.file+'.runner';}
+  constructor(store,{enabled=false,command=codexCommand(),claude=claudeCommand(),onChange=()=>{},timeoutMs=30*60*1000,canRun=()=>true,video=null,browserEndpoint=()=>null}={}){Object.assign(this,{store,enabled,command,claude,onChange,timeoutMs,canRun,video,browserEndpoint});this.actions=new ClaudeActions({isActive:id=>this.executions.has(id)&&!this.store.snapshot().runs.find(r=>r.id===id)?.stopRequestedAt,onChange:()=>this.onChange()});this.browserFeed=new BrowserFeed();this.executions=new Map();this.dispatching=false;this.lock=store.file+'.runner';}
+  get busy(){return this.executions.size>0||this.dispatching;}
   status(){return {enabled:this.enabled,provider:'codex',providers:{codex:{installed:installed(this.command)},claude:{installed:installed(this.claude)}}};}
   start(){if(!this.enabled)return;
     try{this.fd=fs.openSync(this.lock,'wx');fs.writeFileSync(this.fd,String(process.pid));}
     catch(e){if(e.code!=='EEXIST')throw e;const pid=Number(fs.readFileSync(this.lock,'utf8'));try{process.kill(pid,0);this.enabled=false;return;}catch(err){if(err.code!=='ESRCH')throw err;}fs.unlinkSync(this.lock);return this.start();}
     this.store.interrupt();this.interval=setInterval(()=>this.tick(),1500);this.tick();
   }
-  async tick(){if(this.busy||!this.enabled)return;this.busy=true;
-    let run,failedReport=null;
-    try{if(!this.store.snapshot().proposals.some(p=>p.status==='approved'))return;run=this.store.claim(this.canRun);if(!run)return;this.onChange();
+  async tick(){
+    if(this.dispatching||!this.enabled)return;
+    this.dispatching=true;const pending=[];
+    try{
+      let run;
+      while(this.enabled&&(run=this.store.claim(this.canRun))){
+        const execution=new PassExecution(this,run.id),id=run.id;
+        this.executions.set(id,execution);
+        pending.push(execution.execute(run).finally(()=>{this.executions.delete(id);this.onChange();}));
+      }
+    }finally{this.dispatching=false;}
+    await Promise.all(pending);
+  }
+  cancel(id){
+    const before=this.store.snapshot(),target=before.runs.find(r=>r.id===id)||before.proposals.find(p=>p.id===id);
+    const root=target?.teamRoot||id;
+    this.store.stopTeam(id);
+    // Stopping any part of a delegated request stops its active siblings too.
+    for(const run of before.runs)if(run.id!==id&&run.teamRoot===root&&this.executions.has(run.id))this.executions.get(run.id).cancel(run.id);
+    const queuedBefore=before.proposals.find(p=>p.id===id&&p.status==='approved');
+    if(queuedBefore&&this.store.snapshot().proposals.find(p=>p.id===id)?.status==='cancelled'){this.onChange();return {id,status:'cancelled'};}
+    if(queuedBefore){const result=this.store.cancelQueued(id);this.onChange();return result;}
+    const execution=this.executions.get(id);
+    if(!execution)throw new Error('This run is not controlled by the current game runner.');
+    return execution.cancel(id);
+  }
+  stop(){
+    this.enabled=false;clearInterval(this.interval);this.actions.close();this.video?.close();
+    for(const execution of this.executions.values()){execution.turn?.stop();if(execution.child)signalChild(execution.child,'SIGTERM');}
+    if(this.executions.size)this.store.interrupt();
+    if(this.fd!=null){fs.closeSync(this.fd);try{fs.unlinkSync(this.lock);}catch{}this.fd=null;}
+  }
+}
+
+// Mutable provider state belongs to one run; approval and browser registries are keyed by run ID.
+class PassExecution {
+  constructor(runner,id){this.currentRun=id;for(const key of ['store','command','claude','onChange','timeoutMs','video','browserEndpoint','actions','browserFeed'])this[key]=runner[key];}
+  async execute(run){
+    let failedReport=null;
+    try{this.onChange();
       if(run.resumeSession){const owner=threadOwner(this.store.snapshot().runs.filter(r=>r.id!==run.id),[],run.project,run.resumeSession,run.provider||'codex');if(owner!=null&&owner!==run.slot)throw new Error('Conversation does not belong to this agent.');}
       if(fs.realpathSync(run.project)!==(run.executionProject||run.project))throw new Error('Project location changed since approval. Inspect it before retrying.');
       const dir=path.join(path.dirname(this.store.file),'pass-runs',run.id);fs.mkdirSync(dir,{recursive:true,mode:0o700});const output=path.join(dir,'result.json');
@@ -52,7 +91,7 @@ export class PassRunner {
         this.turn=new CodexTurn({command:this.command,args:[...integrationFlags,'-c','features.shell_tool='+execution.shell,'-c','web_search="live"','-c','show_raw_agent_reasoning=false'],cwd,env:{...process.env,AGENT_WORLD_BROWSER_TOKEN:videoToken,AGENT_WORLD_BROWSER_ENDPOINT:this.browserEndpoint()},run,video:this.video,timeoutMs:this.timeoutMs,onChild:child=>{this.child=child;if(child.pid)this.store.child(run.id,child.pid);},onThread:session=>{this.store.conversation(run.id,session);this.onChange();},onModel:model=>this.store.observeModel(run.id,model),onReasoning:item=>{if(this.store.reasoning(run.id,item))this.onChange();}});
         const result=await this.turn.start({prompt,schema:JSON.parse(fs.readFileSync(outputSchema,'utf8')),attachments,model:run.model,effort:run.effort});fs.writeFileSync(output,JSON.stringify(result),{mode:0o600});
       }else await new Promise((resolve,reject)=>{
-        const cliArgs=isClaude?['--print','--output-format','stream-json','--verbose','--permission-mode',execution.actionAccess==='full'?'bypassPermissions':'dontAsk','--json-schema',fs.readFileSync(outputSchema,'utf8'),...(run.resumeSession?['--resume',run.resumeSession]:[]),...(run.model?['--model',run.model]:[]),...(run.effort?['--effort',run.effort]:[])]:['exec','--sandbox',run.kind==='roommate_inspection'?'read-only':execution.actionAccess==='full'?'danger-full-access':execution.permission,...(run.resumeSession?['resume']:[]),'--json','-c','model_reasoning_summary=auto','-c','show_raw_agent_reasoning=false',...(run.model?['--model',run.model]:[]),...(validEffort(run.effort)?['-c',`model_reasoning_effort=${run.effort}`]:[]),...(!run.resumeSession&&process.env.AGENT_WORLD_RUNNER_EPHEMERAL==='1'?['--ephemeral']:[]),'--skip-git-repo-check','--output-schema',outputSchema,'--output-last-message',output,...(run.resumeSession?[run.resumeSession]:[]),'-'];
+        const cliArgs=isClaude?['--print','--output-format','stream-json','--include-partial-messages','--verbose','--permission-mode',execution.actionAccess==='full'?'bypassPermissions':'dontAsk','--json-schema',fs.readFileSync(outputSchema,'utf8'),...(run.resumeSession?['--resume',run.resumeSession]:[]),...(run.model?['--model',run.model]:[]),...(run.effort?['--effort',run.effort]:[])]:['exec','--sandbox',run.kind==='roommate_inspection'?'read-only':execution.actionAccess==='full'?'danger-full-access':execution.permission,...(run.resumeSession?['resume']:[]),'--json','-c','model_reasoning_summary=auto','-c','show_raw_agent_reasoning=false',...(run.model?['--model',run.model]:[]),...(validEffort(run.effort)?['-c',`model_reasoning_effort=${run.effort}`]:[]),...(!run.resumeSession&&process.env.AGENT_WORLD_RUNNER_EPHEMERAL==='1'?['--ephemeral']:[]),'--skip-git-repo-check','--output-schema',outputSchema,'--output-last-message',output,...(run.resumeSession?[run.resumeSession]:[]),'-'];
         const insertion=isClaude?cliArgs.length:cliArgs.length-(run.resumeSession?2:1);
         const controls=[];{if(isClaude){if(execution.permission==='accept-edits'){cliArgs[cliArgs.indexOf('--permission-mode')+1]='acceptEdits';controls.push('--permission-prompts','none');}if(execution.permission==='read-only'||execution.actionAccess==='read-only')controls.push('--tools',execution.web==='live'?'Read,Grep,Glob,WebSearch,WebFetch':'Read,Grep,Glob');else {const denied=[];if(!execution.shell)denied.push('Bash','PowerShell');if(execution.web==='disabled')denied.push('WebSearch','WebFetch');if(denied.length)controls.push('--disallowedTools',denied.join(','));}if(execution.web==='live')controls.push('--allowedTools','WebSearch,WebFetch');}else {controls.push('-c','approval_policy="never"','-c','features.shell_tool='+execution.shell,'-c','sandbox_workspace_write.network_access='+execution.network);if(execution.web!=='inherit')controls.push('-c','web_search='+JSON.stringify(execution.web));}}
         if(isClaude&&run.kind==='roommate_inspection')controls.push('--allowedTools','Read,Grep,Glob');
@@ -63,16 +102,23 @@ export class PassRunner {
         if(child.pid)this.store.child(run.id,child.pid);
         // Consume explicit thread identity and public CLI reasoning summaries; never raw reasoning or arbitrary output.
         let pending='';let diagnostic='';let attachedSession=false;this.threadMismatch=false;
+        const progress=new ClaudeProgress(item=>{if(this.store.reasoning(run.id,item))this.onChange();});
+        if(isClaude)child.stdout.setEncoding('utf8');
         const capture=value=>{diagnostic=(diagnostic+value).slice(-8192);};
         const attach=session=>{try{if(!validThread(session))throw new Error('Invalid identity');this.store.conversation(run.id,session);attachedSession=true;this.onChange();}catch{this.threadMismatch=true;signalChild(child,'SIGTERM');}};
         child.stderr.on('data',chunk=>capture(chunk.toString()));
         child.stdout.on('data',chunk=>{pending+=chunk.toString();let at;while((at=pending.indexOf('\n'))>=0){const line=pending.slice(0,at);pending=pending.slice(at+1);try{const event=JSON.parse(line);if(isClaude){
+          if(this.threadMismatch)continue;
+          const session=this.store.snapshot().runs.find(r=>r.id===run.id)?.conversationSession;
+          if(attachedSession&&['assistant','user','stream_event','result'].includes(event.type)&&event.session_id!==session){this.threadMismatch=true;signalChild(child,'SIGTERM');return;}
+          if(attachedSession&&event.session_id===session)progress.consume(event);
           if(event.type==='system'&&event.subtype==='init'){
-            if(!validThread(event.session_id) || (run.resumeSession&&event.session_id!==run.resumeSession)){this.threadMismatch=true;signalChild(child,'SIGTERM');return;}
+            if(!validThread(event.session_id) || (run.resumeSession&&event.session_id!==run.resumeSession) || (attachedSession&&event.session_id!==session)){this.threadMismatch=true;signalChild(child,'SIGTERM');return;}
             attach(event.session_id);this.store.observeModel(run.id,event.model);this.onChange();
-          }else if(event.type==='assistant'&&event.session_id===this.store.snapshot().runs.find(r=>r.id===run.id)?.conversationSession){for(const b of event.message?.content||[])if(b.type==='tool_use'&&b.name==='StructuredOutput'){try{structuredCandidate=passResult(b.input);structuredId=b.id;structuredAccepted=false;}catch{}}
-          }else if(event.type==='user'&&event.session_id===this.store.snapshot().runs.find(r=>r.id===run.id)?.conversationSession){for(const b of event.message?.content||[])if(b.type==='tool_result'&&b.tool_use_id===structuredId&&!b.is_error)structuredAccepted=true;
+          }else if(attachedSession&&event.parent_tool_use_id==null&&event.type==='assistant'&&event.session_id===this.store.snapshot().runs.find(r=>r.id===run.id)?.conversationSession){for(const b of event.message?.content||[])if(b.type==='tool_use'&&b.name==='StructuredOutput'){try{structuredCandidate=passResult(b.input);structuredId=b.id;structuredAccepted=false;}catch{}}
+          }else if(attachedSession&&event.parent_tool_use_id==null&&event.type==='user'&&event.session_id===this.store.snapshot().runs.find(r=>r.id===run.id)?.conversationSession){for(const b of event.message?.content||[])if(b.type==='tool_result'&&b.tool_use_id===structuredId&&!b.is_error)structuredAccepted=true;
           }else if(event.type==='result'){
+            if(!attachedSession){this.threadMismatch=true;signalChild(child,'SIGTERM');return;}
             if(event.session_id!==this.store.snapshot().runs.find(r=>r.id===run.id)?.conversationSession){this.threadMismatch=true;signalChild(child,'SIGTERM');return;}
             claudeResult=event.structured_output||(event.subtype==='success'&&structuredAccepted?structuredCandidate:null);
             if(event.permission_denials?.length){
@@ -103,16 +149,12 @@ export class PassRunner {
       const stat=fs.statSync(output);if(stat.size>65536)throw new Error('Runner result is too large.');
       const result=passResult(JSON.parse(fs.readFileSync(output,'utf8')));if(run.kind==='roommate_inspection'&&(!result.roommateRoles||result.next!==null||result.handoffs?.length))throw Error('Inspection must return role recommendations without follow-up work.');if(review&&(!result.findings||result.next!==null))throw new Error('Review returned no valid findings report.');this.store.finish(run.id,'completed',result);
     }catch(e){if(this.stopCompletion)await this.stopCompletion;if(run){try{const stopped=this.store.snapshot().runs.find(r=>r.id===run.id)?.stopRequestedAt;this.store.finish(run.id,stopped?'cancelled':'failed',stopped?null:failedReport,stopped?'Stopped by you. Changes already made remain; inspect them before continuing.':e.message);}catch{}}}
-    finally{this.turn=null;if(run){this.actions.end(run.id);this.video?.end(run.id);}this.child=null;this.stopCompletion=null;this.currentRun=null;this.busy=false;if(run)this.onChange();}
+    finally{this.turn=null;if(run){this.actions.end(run.id);this.video?.end(run.id);}this.child=null;this.stopCompletion=null;this.currentRun=null;if(run)this.onChange();}
   }
   cancel(id){
-    const before=this.store.snapshot(),queuedBefore=before.proposals.find(p=>p.id===id&&p.status==='approved');this.store.stopTeam(id);
-    if(queuedBefore&&this.store.snapshot().proposals.find(p=>p.id===id)?.status==='cancelled'){this.onChange();return {id,status:'cancelled'};}
-    const state=this.store.snapshot();const queued=state.proposals.find(p=>p.id===id&&p.status==='approved');if(queued){const r=this.store.cancelQueued(id);this.onChange();return r;}
     if(this.currentRun!==id)throw new Error('This run is not controlled by the current game runner.');
     const r=this.store.requestStop(id);this.actions.end(id);this.video?.end(id);this.turn?.stop();this.onChange();const child=this.child;
     if(child){const kill=signal=>signalChild(child,signal);kill('SIGTERM');this.stopCompletion=new Promise(resolve=>{const timer=setTimeout(()=>{signalChild(child,'SIGKILL',true);resolve();},3000);timer.unref();});}
     return r;
   }
-  stop(){this.actions.close();this.turn?.stop();this.video?.close();clearInterval(this.interval);this.enabled=false;if(this.child){signalChild(this.child,'SIGTERM');this.store.interrupt();}if(this.fd!=null){fs.closeSync(this.fd);try{fs.unlinkSync(this.lock);}catch{}this.fd=null;}}
 }
