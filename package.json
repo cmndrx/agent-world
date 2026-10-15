@@ -18,7 +18,7 @@
     "world": "node skills/agent-world/scripts/platform.mjs",
     "app": "vite build && electron .",
     "app:demo": "vite build && electron . --demo",
-    "app:build": "vite build && electron-builder --mac --dir"
+    "app:build": "node scripts/build-app.mjs"
   },
   "engines": {
     "node": ">=18"
@@ -43,7 +43,7 @@
     },
     "files": [
       "package.json",
-      "electron/main.cjs",
+      "electron/*.cjs",
       "dist/**",
       "bridge/**",
       "shared/**",

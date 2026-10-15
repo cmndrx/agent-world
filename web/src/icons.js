@@ -12,11 +12,20 @@ import clock from 'lucide-static/icons/clock.svg?raw';
 import coffee from 'lucide-static/icons/coffee.svg?raw';
 import cpu from 'lucide-static/icons/cpu.svg?raw';
 import eye from 'lucide-static/icons/eye.svg?raw';
+import monitor from 'lucide-static/icons/monitor.svg?raw';
+import flame from 'lucide-static/icons/flame.svg?raw';
+import droplet from 'lucide-static/icons/droplet.svg?raw';
+import monitorOff from 'lucide-static/icons/monitor-off.svg?raw';
 import gauge from 'lucide-static/icons/gauge.svg?raw';
 import globe from 'lucide-static/icons/globe.svg?raw';
 import hand from 'lucide-static/icons/hand.svg?raw';
 import hourglass from 'lucide-static/icons/hourglass.svg?raw';
 import house from 'lucide-static/icons/house.svg?raw';
+import route from 'lucide-static/icons/route.svg?raw';
+import eraser from 'lucide-static/icons/eraser.svg?raw';
+import move from 'lucide-static/icons/move.svg?raw';
+import cornerDownRight from 'lucide-static/icons/corner-down-right.svg?raw';
+import signpost from 'lucide-static/icons/signpost.svg?raw';
 import keyboard from 'lucide-static/icons/keyboard.svg?raw';
 import layers from 'lucide-static/icons/layers.svg?raw';
 import moon from 'lucide-static/icons/moon.svg?raw';
@@ -119,7 +128,7 @@ import folderPlus from 'lucide-static/icons/folder-plus.svg?raw';
 import folderInput from 'lucide-static/icons/folder-input.svg?raw';
 import chevronRight from 'lucide-static/icons/chevron-right.svg?raw';
 const RAW = {
-  bellOff, bell, blocks, bookOpen, brain, chevronDown, circleCheck, circleHelp, clock, coffee, cpu, eye, gauge,
+  bellOff, bell, blocks, bookOpen, brain, chevronDown, circleCheck, circleHelp, clock, coffee, cpu, eye, gauge, monitor, monitorOff, flame, droplet,
   globe, hand, hourglass, house, keyboard, layers, moon, navigation, panelLeft, pencil, sparkles, sun, sunrise,
   sunset, terminal, triangleAlert, users, wifiOff, x, zap,
   hammer, shirt, paintRoller, trash, rotateCw, armchair, trees, check, palette,
@@ -127,6 +136,7 @@ const RAW = {
   map: mapIcon, cloudSun, cloudRain, cloudSnow, snowflake, leaf, flower, cat, dog, rabbit, gem, sprout, clover, treeDeciduous, landmark,
   camera, images, arrowLeft, shovel, flower2, store, building2, hardHat, info,
   briefcase, inbox, copy, externalLink, messageCircle, gamepad, plug, plus, listChecks, target, arrowRight, circleAlert, flag,
+  route, eraser, move, cornerDownRight, signpost,
   arrowUp, square, mic, archive, archiveRestore, search, rotateCcw, chevronRight, folderPlus, folderInput, code, shield, penTool, chartLine, graduationCap, heartPulse, megaphone, scale, flaskConical, userRoundPlus, clipboardList, lockKeyhole, music, banknote, heartHandshake, bot, squarePen, calendarClock, play, pause, repeat,
 };
 

@@ -1,3 +1,5 @@
+import {BrowserVideo} from './browser-video.mjs';
+import { initializeCare, applyCare, advanceCare } from '../shared/care.mjs';
 import {roommateView,recruitCandidate,inspectionInstruction} from '../shared/roommates.mjs';
 import { readConnections } from './connections.mjs';
 import { resetTown } from './game-reset.mjs';
@@ -15,6 +17,9 @@ import {Attachments} from './attachments.mjs';
 import {VoiceSession} from './voice.mjs';
 import {ComputerUse} from './computer-use.mjs';
 import { previewArtifact } from './artifacts.mjs';
+import { TownStore } from './town.mjs';
+import { addRoad, checkPlacement, emptyTown, permitHint, permitsFor, placeCivic, placeHome, removeCivic, removeRoad, renameStreet, retireHome } from '../shared/town.mjs';
+import { randomUUID } from 'node:crypto';
 // The bridge: watches the event inbox, maintains the truth model, and streams it to clients.
 //
 //   GET  /api/state    full snapshot
@@ -35,6 +40,8 @@ import { progress, HOME_XP_THRESHOLDS, setHomeTestingLevel } from '../shared/pro
 import { experience } from '../shared/experience.mjs';
 import { applyGameplayAction, emptyGameplay, gameplaySpent, townHallState, homeBuildState, startHomeConstruction } from '../shared/gameplay.mjs';
 import { readCodexUsage } from './usage.mjs';
+import {CodexLogin,codexAuth,accountBusy} from './codex-login.mjs';
+import {ClaudeLogin} from './claude-login.mjs';
 import { claudeAuth } from './provider-auth.mjs';
 import { dayKey, spawnsFor } from '../shared/collectibles.mjs';
 import { appProjectID } from '../shared/conversations.mjs';
@@ -60,11 +67,13 @@ try{const saved=JSON.parse(fs.readFileSync(selectedFile,'utf8'));if(Array.isArra
 function selectProject(project){if(!selectedProjects.includes(project)){selectedProjects.push(project);fs.writeFileSync(selectedFile+'.tmp',JSON.stringify(selectedProjects));fs.renameSync(selectedFile+'.tmp',selectedFile);}broadcast({type:'selected-projects',projects:selectedProjects});}
 const attachments=new Attachments(path.join(homeDir(),'attachments'));
 const computerUse=new ComputerUse({onDiagnostic:d=>console.error('[computer-use]',JSON.stringify(d))});
-const runner=new PassRunner(passes,{canRun:p=>homeBuildState(gameplay,p.project).status==='built'&&residentCharacters(world.households[p.project]).some(c=>c.slot===p.slot)&&!threadBusy(world.snapshot().sessions,p.resumeSession)&&!residentBusy(world.snapshot().sessions,p.project,p.slot),enabled:process.env.AGENT_WORLD_RUNNER==='1',onChange:()=>{world.syncResidentOwnership();broadcast({type:'passes',passes:passes.snapshot(),runner:runner.status()});}});
+const browserVideo=new BrowserVideo({send:typeof process.send==='function'?m=>process.send(m):null,isActive:id=>passes.snapshot().runs.some(r=>r.id===id&&r.status==='running'&&!r.stopRequestedAt)});
+process.on('message',m=>browserVideo.receive(m));
+const runner=new PassRunner(passes,{video:browserVideo,browserEndpoint:()=>`http://127.0.0.1:${server.address().port}/api/browser-control`,canRun:p=>!executionBlock(p.project)&&homeBuildState(gameplay,p.project).status==='built'&&residentCharacters(world.households[p.project]).some(c=>c.slot===p.slot)&&!threadBusy(world.snapshot().sessions,p.resumeSession)&&!residentBusy(world.snapshot().sessions,p.project,p.slot),enabled:process.env.AGENT_WORLD_RUNNER==='1',onChange:()=>{world.syncResidentOwnership();broadcast({type:'passes',passes:passes.snapshot(),runner:runner.status()});}});
 
 const schedules=new Schedules(passes,{teamFor:project=>projectTeam(world.households[project]),allowed:(s,data)=>{
  if(!runner.enabled)return 'Runner unavailable.';
- if(!selectedProjects.includes(s.project))return 'Project is not in your world.';
+ const block=executionBlock(s.project);if(block)return block;
  if(homeBuildState(gameplay,s.project).status!=='built')return 'Home is under construction.';
  if(!runner.status().providers[s.provider]?.installed)return 'Provider CLI unavailable.';
  if(!residentCharacters(world.households[s.project]).some(c=>c.slot===s.slot))return 'Resident unavailable.';
@@ -73,6 +82,7 @@ const schedules=new Schedules(passes,{teamFor:project=>projectTeam(world.househo
  return null;
 },onChange:()=>broadcast({type:'passes',passes:passes.snapshot(),runner:runner.status()})});
 function authorizeSchedule(s){
+ const block=executionBlock(s.project);if(block)throw Error(block);
  if(homeBuildState(gameplay,s.project).status!=='built')throw Error('Finish building this home first.');
  if(!selectedProjects.includes(s.project)||!residentCharacters(world.households[s.project]).some(c=>c.slot===Number(s.slot)))throw Error('Choose a resident in an added project.');
  if(!runner.enabled||!runner.status().providers[s.provider]?.installed)throw Error('This provider runner is unavailable.');
@@ -101,6 +111,7 @@ function loadHouseholds() {
 let saveTimer = null;
 function persistHouseholds() {
   clearTimeout(saveTimer);
+  for (const project of selectedProjects) for (const c of residentCharacters(world.households[project])) initializeCare(c);
   for (const [file, data] of [[householdsFile(), world.households], [catalogFile(), world.catalog.snapshot()]]) {
     fs.writeFileSync(file + '.tmp', JSON.stringify(data, null, 2));
     fs.renameSync(file + '.tmp', file);
@@ -120,6 +131,7 @@ const world = new World({
 });
 
 for (const project of selectedProjects) world.ensureHomeOwner(project);
+for (const home of Object.values(world.households)) for (const c of home.characters) advanceCare(c, { restart: true });
 persistHouseholds();
 
 const productivity = new Productivity(loadProductivity());
@@ -152,7 +164,7 @@ setInterval(() => {
   }
 }, 1000).unref();
 async function providerReady(provider) {
-  if (provider === 'codex') return (await readCodexUsage()).status === 'available';
+  if (provider === 'codex') return (await codexAuth()).ready;
   if (provider === 'claude') {
     const auth = await claudeAuth();
     if (!auth.ready) throw Object.assign(new Error(auth.message), { auth });
@@ -198,8 +210,88 @@ function noteCity(e) {
   }, 500);
   return true;
 }
+// Town planning (shared/town.mjs): streets and plots on the grid. Activation, removal and layout changes run
+// one at a time behind the town lock, so capacity and placement checks can't race.
+const townStore = new TownStore(homeDir());
+const activeHomes = () => allowSynthetic ? Object.keys(world.households) : selectedProjects;
+townStore.load({ style, active: Object.keys(world.households).filter(p => selectedProjects.includes(p)).concat(selectedProjects.filter(p => !world.households[p])) });
+townStore.reconcile(activeHomes(), { autoPlace: allowSynthetic });
+const pendingRemoval = () => townStore.town.pendingRemoval || {};
+/** Player-level permits: one active project (and home) per permit. Projects being removed still hold theirs. */
+function permits() { return permitsFor(passes.snapshot().runs, selectedProjects.length); }
+function overCapacity() { return !allowSynthetic && selectedProjects.filter(p => !pendingRemoval()[p]).length > permits().allowed; }
+/** Why a project can't start new work right now (null when it can). Running work is never interrupted. */
+function executionBlock(project) {
+  if(claudeLogin.signingOut||codexLogin.signingOut)return 'Wait for account sign-out to finish.';
+  if (allowSynthetic) return null;
+  if (!selectedProjects.includes(project)) return 'This project isn’t active in your town. Add it again from Projects to work with it.';
+  if (pendingRemoval()[project]) return 'This project is being removed from your town, so no new work starts here.';
+  if (overCapacity()) { const p = permits(); return `Your town has more active projects than permits (${selectedProjects.length} for ${p.allowed}). Choose which projects stay active in Projects.`; }
+  return null;
+}
+/** Game-owned work in a project that must finish before it can leave the town. */
+function runningWork(project) {
+  const out = [];
+  for (const r of passes.snapshot().runs) if (r.project === project && r.status === 'running') out.push({ kind: r.voice ? 'voice' : 'prompt', title: r.title || 'Prompt', slot: r.slot, id: r.id });
+  const call = voice.snapshot();
+  if (call.project === project && !['idle', 'ended', 'error'].includes(call.status) && !out.some(w => w.kind === 'voice')) out.push({ kind: 'voice', title: 'Voice call', slot: call.slot });
+  const app = computerUse.snapshot();
+  if (app.project === project && ['connecting', 'approval'].includes(app.status)) out.push({ kind: 'app', title: `App connection${app.app ? ` · ${app.app}` : ''}`, slot: app.slot });
+  return out;
+}
+function townView() {
+  const p = permits();
+  return { ...townStore.town, permits: { ...p, counted: selectedProjects.filter(x => !pendingRemoval()[x]).length, overCapacity: overCapacity(), hint: permitHint(p) },
+    waitingFor: Object.fromEntries(Object.keys(pendingRemoval()).map(x => [x, runningWork(x)])), problems: townStore.problems || [], loadError: townStore.loadError || null };
+}
+let permitKey = '';
+function broadcastTown() { const view = townView(); permitKey = JSON.stringify(view.permits); broadcast({ type: 'town', town: view }); }
+function capacityError(p) {
+  return Object.assign(Error(`All ${p.allowed} project permit${p.allowed === 1 ? ' is' : 's are'} in use (${p.active} of ${p.allowed} active). ${permitHint(p)}. Remove a project, or replace one, to add another.`), { permits: p });
+}
+/** Stop anything that hasn't started for a project leaving town: pause its schedules and cancel queued prompts. */
+function stopFutureWork(project, message) {
+  passes.change(data => {
+    for (const s of data.schedules || []) if (s.project === project && s.status === 'active') { s.status = 'paused'; s.message = message; s.version++; }
+    const at = new Date().toISOString();
+    for (const p of data.proposals) if (p.project === project && p.status === 'approved') {
+      p.status = 'cancelled'; p.version++;
+      data.runs.push({ ...p, id: randomUUID(), proposalId: p.id, status: 'cancelled', startedAt: at, finishedAt: at, result: null, error: message });
+    }
+  });
+}
+/** Take a project out of the town: history, files, residents and chats stay saved for re-adding. */
+function deactivate(project, message) {
+  stopFutureWork(project, message);
+  for (const c of residentCharacters(world.households[project])) advanceCare(c, { unavailable: true });
+  persistHouseholds();
+  const next = selectedProjects.filter(p => p !== project);
+  fs.writeFileSync(selectedFile + '.tmp', JSON.stringify(next)); fs.renameSync(selectedFile + '.tmp', selectedFile);
+  selectedProjects = next;
+  const pending = { ...pendingRemoval() }; delete pending[project];
+  townStore.save(retireHome({ ...townStore.town, pendingRemoval: pending }, project));
+  broadcast({ type: 'selected-projects', projects: selectedProjects });
+  broadcast({ type: 'passes', passes: passes.snapshot(), runner: runner.status() });
+  broadcastTown();
+}
+/** Removal waits for running work; nothing new starts in the meantime. */
+function requestRemoval(project, message) {
+  const busy = runningWork(project);
+  if (!busy.length) { deactivate(project, message); return { project, removed: true }; }
+  stopFutureWork(project, 'Project is being removed from your town.');
+  townStore.save({ ...townStore.town, pendingRemoval: { ...pendingRemoval(), [project]: { requestedAt: new Date().toISOString(), message } }, revision: townStore.town.revision + 1 });
+  broadcast({ type: 'passes', passes: passes.snapshot(), runner: runner.status() });
+  broadcastTown();
+  return { project, pending: true, waitingFor: busy };
+}
+setInterval(() => {
+  for (const project of Object.keys(pendingRemoval())) {
+    if (!selectedProjects.includes(project)) { const pending = { ...pendingRemoval() }; delete pending[project]; townStore.save({ ...townStore.town, pendingRemoval: pending }); broadcastTown(); continue; }
+    if (!runningWork(project).length) townStore.exclusive(() => { if (pendingRemoval()[project] && !runningWork(project).length) deactivate(project, pendingRemoval()[project].message || 'Project removed from town.'); }).catch(e => console.warn('[town]', e.message));
+  }
+}, 2000).unref();
 const connectionSnapshot = () => readConnections(path.join(homeDir(), 'connections'));
-const snapshot = () => ({ foundation: foundationSnapshot(Object.values(world.households).map(presentedHome), gameplay), connections: connectionSnapshot(), selectedProjects:allowSynthetic?null:selectedProjects, ...world.snapshot(), households: Object.values(world.households).map(presentedHome), ...productivity.snapshot(), style, gameplay, photos: listPhotos(), city, passes:passes.snapshot(), runner:runner.status(), computerUse:computerUse.snapshot() });
+const snapshot = () => ({ town: townView(), foundation: foundationSnapshot(Object.values(world.households).map(presentedHome), gameplay), connections: connectionSnapshot(), selectedProjects:allowSynthetic?null:selectedProjects, ...world.snapshot(), households: Object.values(world.households).map(presentedHome), ...productivity.snapshot(), style, gameplay, photos: listPhotos(), city, passes:passes.snapshot(), runner:runner.status(), computerUse:computerUse.snapshot() });
 const inbox = new Inbox(eventsDir(), { onError: (err) => console.warn('[inbox]', err.message) });
 for (const e of inbox.readAll()) {
   world.apply(e);
@@ -210,15 +302,41 @@ saveHouseholds();
 
 const clients = new Set();
 function broadcast(msg) {
+  if (msg.type === 'household' && selectedProjects.includes(msg.household.project)) {
+    for (const c of residentCharacters(msg.household)) initializeCare(c);
+  }
   if (msg.type === 'household') msg = { ...msg, household: presentedHome(msg.household) };
   const data = `data: ${JSON.stringify(msg)}\n\n`;
   for (const res of clients) res.write(data);
+  if (msg.type === 'passes' && typeof townStore !== 'undefined' && JSON.stringify(townView().permits) !== permitKey) broadcastTown();
 }
 
 world.on('change', (change) => {
+  if (change.type === 'session') tickCare();
+  // Demo households appear from synthetic events; give each a plot so it shows in town.
+  if (allowSynthetic && change.type === 'household' && !townStore.home(change.household.project)) {
+    townStore.exclusive(() => { if (townStore.reconcile(activeHomes(), { autoPlace: true })) broadcastTown(); }).catch(e => console.warn('[town]', e.message));
+  }
   if (change.type === 'household' || change.type === 'catalog') saveHouseholds();
   broadcast(change);
 });
+
+function careBusy(project, character) {
+  const call = voice.snapshot();
+  return call.project === project && Number(call.slot) === character.slot && !['idle','ended','error'].includes(call.status)
+    || passes.snapshot().runs.some(r => r.project === project && r.slot === character.slot && r.status === 'running')
+    || passes.snapshot().proposals.some(r => r.project === project && r.slot === character.slot && r.status === 'approved')
+    || [...world.sessions.values()].some(s => s.project === project && s.slot === character.slot && world.isLive(s) && !['idle','done'].includes(s.state));
+}
+function tickCare() {
+  for (const project of selectedProjects) {
+    const home = world.households[project];
+    let changed = false;
+    for (const c of residentCharacters(home)) changed = advanceCare(c, { busy: careBusy(project, c) }) || changed;
+    if (changed) { persistHouseholds(); broadcast({ type: 'household', household: home }); }
+  }
+}
+setInterval(tickCare, 500).unref();
 
 inbox.watch((e) => {
   world.apply(e);
@@ -250,8 +368,52 @@ function writeStyle() {
 
 const readUsage = usageReader(allowSynthetic ? async () => ({ status:'unavailable', capturedAt:null, buckets:[] }) : undefined);
 
+const claudeLogin=new ClaudeLogin();
+const codexLogin=new CodexLogin();
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
+  if(url.pathname==='/api/claude-action'){
+    res.setHeader('Content-Type','application/json');res.setHeader('Cache-Control','no-store');
+    const token=req.headers.authorization?.replace(/^Bearer /,'');
+    if(req.method!=='POST'||req.headers.origin||!token||!runner.actions.authorized(token)){res.writeHead(403);return res.end(JSON.stringify({error:'Claude action authorization expired.'}));}
+    try{let body='';for await(const c of req){body+=c;if(Buffer.byteLength(body)>300*1024)throw Error('Action too large.');}const allow=await runner.actions.request(token,JSON.parse(body));res.end(JSON.stringify({allow}));}catch{res.writeHead(400);res.end(JSON.stringify({allow:false,error:'Invalid or expired Claude action.'}));}return;
+  }
+  if(url.pathname==='/api/claude-approvals'){
+    res.setHeader('Content-Type','application/json');res.setHeader('Cache-Control','no-store');
+    if(!isLocalOrigin(req)||req.headers['sec-fetch-site']==='cross-site'||req.method==='POST'&&!req.headers.origin){res.writeHead(403);return res.end(JSON.stringify({error:'Origin not allowed.'}));}
+    try{let input=Object.fromEntries(url.searchParams);if(req.method==='POST'){let body='';for await(const c of req){body+=c;if(body.length>4096)throw Error('Request too large.');}input=JSON.parse(body);}else if(req.method!=='GET')throw Error('Unsupported approval request.');
+      const run=passes.snapshot().runs.find(r=>r.id===input.run&&r.project===input.project&&r.slot===Number(input.slot)&&r.provider==='claude');if(!run)throw Error('This action belongs to another conversation.');
+      res.end(JSON.stringify(req.method==='GET'?{approvals:runner.actions.view(run.id)}:runner.actions.decide(run.id,input.approval,input.allow)));
+    }catch(e){res.writeHead(400);res.end(JSON.stringify({error:e instanceof SyntaxError?'Invalid approval request.':e.message}));}return;
+  }
+  if(['/api/claude-login','/api/codex-login'].includes(url.pathname)){
+    const provider=url.pathname.includes('claude')?'claude':'codex';const login=provider==='claude'?claudeLogin:codexLogin;
+    res.setHeader('Content-Type','application/json');res.setHeader('Cache-Control','no-store');
+    if(!req.headers.origin&&req.method==='POST'||!isLocalOrigin(req)||req.headers['sec-fetch-site']==='cross-site'){res.writeHead(403);return res.end(JSON.stringify({error:'Origin not allowed.'}));}
+    try{if(allowSynthetic)throw Error('Provider sign-in is unavailable in demo mode.');if(req.method==='GET')return res.end(JSON.stringify(await login.read()));if(req.method!=='POST'){res.writeHead(405);return res.end();}let body='';for await(const c of req){body+=c;if(body.length>4096)throw Error('Request too large.');}const input=JSON.parse(body);if(input.action==='logout'&&accountBusy(provider,passes.snapshot(),voice.snapshot(),computerUse.snapshot()))throw Error('Finish or stop this provider’s approved, queued or running work before signing out.');const state=input.action==='logout'?await login.signOut():input.action==='start'?await login.start():input.action==='cancel'?login.cancel():input.action==='code'?login.code(input.code):null;if(!state)throw Error('Choose a sign-in action.');res.end(JSON.stringify(state));}catch(e){res.writeHead(400);res.end(JSON.stringify({error:e instanceof SyntaxError?'Invalid sign-in request.':e.message}));}return;
+  }
+  if(req.method==='POST'&&url.pathname==='/api/browser-approval'){
+    res.setHeader('Content-Type','application/json');res.setHeader('Cache-Control','no-store');
+    if(!req.headers.origin||!isLocalOrigin(req)){res.writeHead(403);return res.end(JSON.stringify({error:'Origin not allowed.'}));}
+    try{let body='';for await(const c of req){body+=c;if(body.length>4096)throw Error('Request too large.');}const input=JSON.parse(body);const run=passes.snapshot().runs.find(r=>r.id===input.run&&r.project===input.project&&r.slot===Number(input.slot));if(!run||typeof input.allow!=='boolean')throw Error('Invalid browser approval.');res.end(JSON.stringify(await browserVideo.decide(run.id,input.approval,input.allow)));}catch(e){res.writeHead(400);res.end(JSON.stringify({error:e.message}));}return;
+  }
+  if(req.method==='POST'&&url.pathname==='/api/browser-control'){
+    res.setHeader('Cache-Control','no-store');res.setHeader('Content-Type','application/json');
+    const token=req.headers.authorization?.replace(/^Bearer /,'');
+    if(req.headers.origin||!token||!browserVideo.authorized(token)){res.writeHead(403);return res.end(JSON.stringify({error:'Task browser authorization expired.'}));}
+    try{let body='';for await(const chunk of req){body+=chunk.toString();if(body.length>16384)throw Error('Browser request too large.');}const input=JSON.parse(body);const result=await browserVideo.control(token,input.operation,input.args);res.end(JSON.stringify(result));}catch(e){res.writeHead(400);res.end(JSON.stringify({error:e.message}));}return;
+  }
+  if(req.method==='GET'&&['/api/browser-feed','/api/browser-frame','/api/browser-video','/api/browser-pointer'].includes(url.pathname)){
+    res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');
+    const run=passes.snapshot().runs.find(r=>r.id===url.searchParams.get('run')&&r.project===url.searchParams.get('project')&&r.slot===Number(url.searchParams.get('slot'))&&['codex','claude'].includes(r.provider||'codex'));
+    if(!run){res.writeHead(404);return res.end();}
+    if(url.pathname==='/api/browser-feed'){res.setHeader('Content-Type','application/json');return res.end(JSON.stringify({...runner.browserFeed.view(run),video:browserVideo.view(run.id)}));}
+    if(url.pathname==='/api/browser-pointer'){if(!browserVideo.pointerStream(run.id,res)){res.writeHead(404);res.end();}return;}
+    if(url.pathname==='/api/browser-video'){if(!browserVideo.stream(run.id,res)){res.writeHead(404);res.end();}return;}
+    const frame=browserVideo.frame(run.id)||runner.browserFeed.frame(run.id);if(!frame){res.writeHead(404);return res.end();}
+    res.setHeader('Content-Type',frame.mimeType);return res.end(Buffer.from(frame.data,'base64'));
+  }
+
 
   if(url.pathname==='/api/roommates'&&req.method==='GET') {
     if(!isLocalOrigin(req)){res.writeHead(403);return res.end();}
@@ -340,7 +502,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (['/api/home-level','/api/roommates','/api/schedules','/api/codex-projects','/api/voice','/api/computer-use','/api/pass-attachment','/api/gameplay','/api/pass-cancel','/api/pass-chat','/api/pass-proposal', '/api/pass-decision', '/api/pass-resolve', '/api/projects', '/api/conversations', '/api/conversation-title', '/api/plan', '/api/task', '/api/briefing-seen', '/api/style', '/api/milestone', '/api/photo-delete', '/api/review', '/api/artifact-preview'].includes(url.pathname) && req.method === 'POST') {
+  if (['/api/town','/api/care','/api/home-level','/api/roommates','/api/schedules','/api/codex-projects','/api/voice','/api/computer-use','/api/pass-attachment','/api/gameplay','/api/pass-cancel','/api/pass-chat','/api/pass-proposal', '/api/pass-decision', '/api/pass-resolve', '/api/projects', '/api/conversations', '/api/conversation-title', '/api/plan', '/api/task', '/api/briefing-seen', '/api/style', '/api/milestone', '/api/photo-delete', '/api/review', '/api/artifact-preview'].includes(url.pathname) && req.method === 'POST') {
     res.setHeader('content-type', 'application/json');
     // Browser forms from other websites must not alter the local catalog.
     if (!req.headers['content-type']?.startsWith('application/json')) {
@@ -358,6 +520,10 @@ const server = http.createServer(async (req, res) => {
       const input = JSON.parse(body);
       if (['/api/pass-proposal','/api/pass-chat','/api/pass-attachment','/api/voice','/api/computer-use','/api/schedules'].includes(url.pathname)
         && input.project && homeBuildState(gameplay, input.project).status !== 'built') throw Error('Finish building this home before its resident can work.');
+      // Inactive projects (and, while over capacity, every project) start no new work; stopping is always allowed.
+      if ((['/api/pass-proposal','/api/pass-attachment'].includes(url.pathname) || (['/api/voice','/api/computer-use'].includes(url.pathname) && input.action === 'start')
+        || (url.pathname === '/api/schedules' && ['create','resume','update'].includes(input.action)) || (url.pathname === '/api/roommates' && input.action === 'suggest')) && executionBlock(input.project)) throw Error(executionBlock(input.project));
+      if (['/api/pass-chat','/api/roommates','/api/home-level','/api/care','/api/schedules'].includes(url.pathname) && !allowSynthetic && !selectedProjects.includes(input.project)) throw Error('This project isn’t active in your town.');
       if (['/api/pass-proposal','/api/pass-attachment','/api/voice','/api/computer-use'].includes(url.pathname)
         && !residentCharacters(world.households[input.project]).some(c => c.slot === Number(input.slot))) {
         throw Error('Choose an active resident in this home.');
@@ -365,25 +531,121 @@ const server = http.createServer(async (req, res) => {
       if (url.pathname === '/api/pass-decision' && input.action === 'approve') {
         const proposal = passes.snapshot().proposals.find(p => p.id === input.id);
         if (proposal && homeBuildState(gameplay, proposal.project).status !== 'built') throw Error('Finish building this home before its resident can work.');
+        if (proposal && executionBlock(proposal.project)) throw Error(executionBlock(proposal.project));
         if (!residentCharacters(world.households[proposal?.project]).some(c => c.slot === proposal?.slot)) throw Error('Resident is not active in this home.');
       }
       let result;
+      if (url.pathname === '/api/town') {
+        // Town planning: the bridge validates every change against the same rules the preview used.
+        result = await townStore.exclusive(async () => {
+          const town = townStore.town;
+          const tile = (t) => ({ i: Math.round(Number(t?.i)), j: Math.round(Number(t?.j)) });
+          const fresh = () => { if (input.revision !== town.revision) throw Error('The town changed since this preview. Check it again.'); };
+          let next;
+          if (input.action === 'add-road') { fresh(); next = addRoad(town, tile(input.from), tile(input.to), { bend: input.bend === 'z' ? 'z' : 'x', name: input.name }); }
+          else if (input.action === 'remove-road') { fresh(); next = removeRoad(town, tile(input.from), tile(input.to)); }
+          else if (input.action === 'move-home') {
+            fresh();
+            if (!selectedProjects.includes(input.project) && !allowSynthetic) throw Error('Choose a home in your town.');
+            if (!town.homes.some(h => h.project === input.project)) throw Error('Choose a home in your town.');
+            next = placeHome(town, input.project, { i: Math.round(Number(input.i)), j: Math.round(Number(input.j)), rot: Number(input.rot) || 0 });
+          }
+          else if (input.action === 'rename-street') next = renameStreet(town, String(input.streetId || ''), input.name);
+          else if (input.action === 'place-civic') { fresh(); next = placeCivic(town, String(input.kind || ''), { i: Math.round(Number(input.i)), j: Math.round(Number(input.j)), rot: Number(input.rot) || 0 }, { level: permits().level }); }
+          else if (input.action === 'remove-civic') { fresh(); next = removeCivic(town, String(input.kind || '')); }
+          else if (input.action === 'choose-active') {
+            // An over-capacity save: the player chooses who stays; the others leave once their running work settles.
+            if (!overCapacity()) throw Error('Your town is within its permits.');
+            const keep = [...new Set(Array.isArray(input.projects) ? input.projects : [])];
+            const allowed = permits().allowed;
+            if (keep.some(p => !selectedProjects.includes(p) || pendingRemoval()[p])) throw Error('Choose from your active projects.');
+            if (keep.length > allowed) throw Error(`Choose up to ${allowed} project${allowed === 1 ? '' : 's'}.`);
+            if (!keep.length) throw Error('Choose at least one project to keep.');
+            const leaving = selectedProjects.filter(p => !keep.includes(p) && !pendingRemoval()[p]);
+            const outcome = leaving.map(p => requestRemoval(p, 'Not chosen to stay active (over capacity).'));
+            townStore.save({ ...townStore.town, activeChoice: { at: new Date().toISOString(), kept: keep, allowed, leaving }, revision: townStore.town.revision + 1 });
+            broadcastTown();
+            return { kept: keep, leaving: outcome };
+          }
+          else throw Error('Choose a town planning action.');
+          townStore.save(next);
+          broadcastTown();
+          return { revision: next.revision };
+        });
+        res.writeHead(200); return res.end(JSON.stringify({ ok: true, result }));
+      }
+      if (url.pathname === '/api/care') {
+        const home = world.households[input.project];
+        if (!home || !selectedProjects.includes(input.project)) throw Error('Choose a home in this town.');
+        if (homeBuildState(gameplay, input.project).status !== 'built') throw Error('Finish building this home first.');
+        const character = residentCharacters(home).find(c => c.id === input.agentId);
+        if (!character) throw Error('Choose an active resident in this home.');
+        const changed = applyCare(character, input, { busy: careBusy(input.project, character) });
+        if (!changed.duplicate) {
+          home.characters[home.characters.indexOf(character)] = changed.character;
+          persistHouseholds();
+          broadcast({ type: 'household', household: home });
+        }
+        res.writeHead(200); return res.end(JSON.stringify({ ok: true, ...changed }));
+      }
       if(url.pathname==='/api/schedules'){if(allowSynthetic)throw Error('Scheduling is unavailable in the demo.');result=schedules.mutate(input,authorizeSchedule);res.writeHead(200,{'content-type':'application/json'});return res.end(JSON.stringify({ok:true,result}));}
       if(url.pathname==='/api/codex-projects'){
         if(allowSynthetic)throw new Error('Local Codex projects are unavailable in the demo.');
         if (['import', 'create'].includes(input.action) && townHallState(gameplay).status !== 'built') throw new Error('Build the Town Hall with Mayor Martin before building a home.');
         const register=p=>{if(!selectedProjects.includes(p.path)){gameplay=startHomeConstruction(gameplay,p.path);saveGameplay();constructionStates.set(p.path,homeBuildState(gameplay,p.path).status);}selectProject(p.path);const h=world.ensureHomeOwner(p.path);if(!h.codexProjectId||h.codexProjectId===p.id){h.name=p.name;h.codexProjectId=p.id;}h.codexProjectIds=[...new Set([...(h.codexProjectIds||[]),p.id])];h.codexRootCount=p.rootCount;broadcast({type:'household',household:h});return presentedHome(h);};
-        if(input.action==='list'){result=await localProjects.list();result.homes=selectedProjects.map(p=>world.households[p]).filter(Boolean).map(presentedHome);}
+        if(input.action==='list'){result=await localProjects.list();result.homes=selectedProjects.map(p=>world.households[p]).filter(Boolean).map(presentedHome);result.town=townView();}
         else if(input.action==='remove'){
-          if(typeof input.project!=='string'||!selectedProjects.includes(input.project))throw new Error('Choose a project in your world.');
-          const state=passes.snapshot();
-          if(state.runs.some(r=>r.project===input.project&&r.status==='running')||state.proposals.some(p=>p.project===input.project&&p.status==='approved')||voice.snapshot().project===input.project&& !['ended','idle','error'].includes(voice.snapshot().status))throw new Error('Finish or stop this project’s active work before removing its home.');
-          passes.change(data=>{for(const s of data.schedules||[])if(s.project===input.project&&s.status==='active'){s.status='paused';s.message='Project removed from world.';s.version++;}});
-          const next=selectedProjects.filter(p=>p!==input.project);fs.writeFileSync(selectedFile+'.tmp',JSON.stringify(next));fs.renameSync(selectedFile+'.tmp',selectedFile);selectedProjects=next;
-          broadcast({type:'selected-projects',projects:selectedProjects});result={project:input.project,removed:true};
+          result=await townStore.exclusive(async()=>{
+            if(typeof input.project!=='string'||!selectedProjects.includes(input.project))throw new Error('Choose a project in your world.');
+            return requestRemoval(input.project,'Project removed from town.');
+          });
         }
-        else if(input.action==='import'){const list=await localProjects.list();const project=list.projects.find(p=>p.id===input.id);if(!project)throw new Error('Project unavailable. Refresh the import list.');result={project,home:register(project)};}
-        else if(input.action==='create'){const project=await localProjects.create(input);result={project,home:register(project)};}
+        else if(input.action==='keep'){
+          result=await townStore.exclusive(async()=>{
+            if(!pendingRemoval()[input.project]||!selectedProjects.includes(input.project))throw new Error('That project isn’t waiting to be removed.');
+            if(selectedProjects.filter(p=>!pendingRemoval()[p]).length+1>permits().allowed)throw capacityError(permits());
+            const pending={...pendingRemoval()};delete pending[input.project];townStore.save({...townStore.town,pendingRemoval:pending,revision:townStore.town.revision+1});broadcastTown();
+            return {project:input.project,kept:true};
+          });
+        }
+        else if(input.action==='import'||input.action==='create'){
+          // Add project: capacity and plot are checked before anything is created, and again (under the same lock)
+          // before the project becomes active. Cancelling earlier changes nothing.
+          result=await townStore.exclusive(async()=>{
+            let project=null;
+            if(input.action==='import'){
+              const list=await localProjects.list();project=list.projects.find(p=>p.id===input.id);
+              if(!project)throw new Error('Project unavailable. Refresh the import list.');
+              if(selectedProjects.includes(project.path))return {project,home:register(project),existing:true};
+            }
+            if(overCapacity())throw Object.assign(Error(`Choose which projects stay active first (${permits().allowed} permit${permits().allowed===1?'':'s'} for ${selectedProjects.length} projects).`),{permits:permits()});
+            const replace=typeof input.replace==='string'?input.replace:null;
+            if(replace){
+              if(!selectedProjects.includes(replace)||pendingRemoval()[replace])throw new Error('Choose an active project to replace.');
+              const busy=runningWork(replace);if(busy.length)throw new Error(`Finish or stop ${busy.map(w=>w.title).join(', ')} in the project you're replacing first.`);
+            }
+            const free=()=>replace?retireHome(townStore.town,replace):townStore.town;
+            if(!replace&&selectedProjects.length>=permits().allowed)throw capacityError(permits());
+            if(input.revision!=null&&input.revision!==townStore.town.revision)throw new Error('The town changed since you chose this plot. Check the plot again.');
+            const placement=input.placement;
+            if(!placement||!Number.isInteger(placement.i)||!Number.isInteger(placement.j))throw new Error('Choose a plot for the new home first.');
+            const first=checkPlacement(free(),placement,{project:project?.path||'\0new'});if(!first.ok)throw new Error(first.reason);
+            if(input.action==='create'){
+              project=await localProjects.create(input);
+              if(selectedProjects.includes(project.path))return {project,home:register(project),existing:true};
+            }
+            const kept=input.action==='create'&&!project.existing?` The new project folder ${project.path} was kept; add it from Existing project when ready.`:'';
+            // Revalidate at confirmation: nothing is activated unless both still hold.
+            if(!replace&&selectedProjects.length>=permits().allowed)throw Object.assign(Error(capacityError(permits()).message+kept),{permits:permits()});
+            const again=checkPlacement(free(),placement,{project:project.path});if(!again.ok)throw new Error(again.reason+kept);
+            if(replace)deactivate(replace,'Replaced by another project.');
+            try{
+              townStore.save(placeHome(townStore.town,project.path,placement));
+              const home=register(project);broadcastTown();
+              return {project,home};
+            }catch(e){townStore.reconcile(selectedProjects);broadcastTown();throw new Error(e.message+kept);}
+          });
+        }
         else throw new Error('Choose list, import, create or remove.');
         persistHouseholds();res.writeHead(200,{'content-type':'application/json'});return res.end(JSON.stringify({ok:true,result}));
       }
@@ -492,6 +754,7 @@ const server = http.createServer(async (req, res) => {
           gameplay = reset.gameplay;
           style = reset.style;
           selectedProjects = [];
+          townStore.save(emptyTown());
           res.writeHead(200); res.end(JSON.stringify({ ok: true, backup: reset.backup }));
           broadcast({ type: 'game-reset' });
           return;
@@ -507,6 +770,7 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(200); return res.end(JSON.stringify({ ok: true, gameplay }));
       }
       if (url.pathname === '/api/style') {
+        if (['layout', 'street'].includes(input.kind)) throw Error('Streets and plots are planned in town planning now (Plan town).');
         // Bricks and levels are derived from the human's board every time (docs/GAMEPLAY.md).
         const earnedNow = progress({...productivity.snapshot(), households:Object.values(world.households), runs:passes.snapshot().runs}, style, gameplay);
         const known = {
@@ -572,7 +836,7 @@ const server = http.createServer(async (req, res) => {
       broadcast({ type: 'catalog', ...world.catalog.snapshot() });
       res.writeHead(200); return res.end(JSON.stringify({ ok: true, result }));
     } catch (err) {
-      res.writeHead(400); return res.end(JSON.stringify({ error: err.message, ...(err.auth ? { auth: err.auth } : {}) }));
+      res.writeHead(400); return res.end(JSON.stringify({ error: err.message, ...(err.auth ? { auth: err.auth } : {}), ...(err.permits ? { permits: err.permits } : {}) }));
     }
   }
 
@@ -613,5 +877,5 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log(`[bridge] http://127.0.0.1:${server.address().port}${STATIC_DIR ? '' : '  (api only)'}`);
 });
 
-process.on('SIGTERM',()=>{voice.stop();computerUse.cancel();runner.stop();process.exit(0);});
-process.on('SIGINT',()=>{computerUse.cancel();runner.stop();process.exit(0);});
+process.on('SIGTERM',()=>{claudeLogin.finish();codexLogin.finish();voice.stop();computerUse.cancel();runner.stop();process.exit(0);});
+process.on('SIGINT',()=>{claudeLogin.finish();codexLogin.finish();computerUse.cancel();runner.stop();process.exit(0);});

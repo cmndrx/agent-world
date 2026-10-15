@@ -15,6 +15,11 @@ test('failed continuations retain the target and their own error without borrowi
  assert.equal(runThread(failed),one);const msgs=chatMessages([failed]);assert.equal(msgs[1].failed,true);assert.match(msgs[1].text,/Thread owned by desktop/);assert.doesNotMatch(msgs[1].text,/Answer/);
  assert.equal(runThread({...failed,resumeSession:'invalid'}),null);
 });
+
+test('a failed Claude report shows both its permission error and returned explanation',()=>{
+ const failed=run('blocked',one,{provider:'claude',status:'failed',error:'Claude Code blocked Edit under configured permissions.'});
+ const message=chatMessages([failed])[1];assert.equal(message.failed,true);assert.match(message.text,/blocked Edit.*Answer blocked.*Reported test.*Unknown/s);assert.doesNotMatch(message.text,/No response was returned/);
+});
 test('queued human message appears once and running/completed states retain recorded content',()=>{
  const p={id:'p',status:'approved',instruction:'Human message'};
  assert.deepEqual(chatMessages([],p).map(m=>m.text),['Human message','Your message is queued.']);

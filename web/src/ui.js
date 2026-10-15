@@ -1,3 +1,5 @@
+import { assignedRole } from '../../shared/team.mjs';
+import { careDialogFor, careSummary } from './care.js';
 import { connectionView } from '../../shared/connections.mjs';
 import {ProjectsPanel} from './projects.js';
 import {canPromptFromStatus} from '../../shared/agent-view.mjs';
@@ -11,6 +13,7 @@ import { appName, resolveActivity } from './activity.js';
 import { SEASONS, WEATHERS } from './seasons.js';
 import { icon, STATE_ICON } from './icons.js';
 import { AvatarPortrait } from './avatar-portrait.js';
+import { BrowserFeedPanel } from './browser-feed.js';
 import { xpMarkup } from './levels.js';
 import { PROVIDER_COLORS } from './models.js';
 import { escapeHtml, formatDuration } from './sim.js';
@@ -109,6 +112,7 @@ function whoLine(sim) {
 export class UI {
   constructor(handlers) {
     this.h = handlers;
+    this.browserFeed = new BrowserFeedPanel();
     this.roster = $('#roster');
     this.rosterBody = $('#roster-body');
     this.panel = $('#inspect');
@@ -122,8 +126,9 @@ export class UI {
     this.html = {};
 
     this.rosterView='agents';
-    this.projectsPanel=new ProjectsPanel($('#project-body'),{focus:project=>this.h.onFocusLot(project),onCount:count=>{if(this.rosterView==='projects')$('#roster-count').textContent=`${count} project${count===1?"":"s"}`;}});
-    document.querySelectorAll('[data-roster-view]').forEach(b=>b.addEventListener('click',()=>{this.rosterView=b.dataset.rosterView;this.roster.classList.toggle('project-onboarding',this.rosterView==='projects');this.roster.classList.remove('collapsed');$('#roster-title').textContent=this.rosterView==='agents'?'Your agents':'Your projects';this.rosterBody.hidden=this.rosterView!=='agents';$('#project-body').hidden=this.rosterView!=='projects';document.querySelectorAll('[data-roster-view]').forEach(t=>t.setAttribute('aria-selected',String(t.dataset.rosterView===this.rosterView)));if(this.rosterView==='projects')this.projectsPanel.load();}));
+    // Projects live in Plan town now (town-planner.js mounts this panel in its Projects drawer).
+    const projectHost=document.createElement('div');projectHost.id='project-body';
+    this.projectsPanel=new ProjectsPanel(projectHost,{focus:project=>this.h.onFocusLot(project),onCount:count=>this.onProjectCount?.(count)});
     // Roster
     $('#roster-toggle').innerHTML = icon('panelLeft');
     $('#roster-toggle').addEventListener('click', () => {
@@ -150,6 +155,7 @@ export class UI {
       if(e.target.closest('[data-prompt-agent]')&&this.sim)this.h.onPrompt?.(this.sim);
       if (e.target.closest('[data-close]')) this.close();
       if (e.target.closest('[data-outfit]') && this.sim) this.h.onOutfit?.(this.sim);
+      if (e.target.closest('[data-open-care]') && this.sim) this.careDialog?.open(this.connectionState === 'live', () => this.panel.querySelector('[data-open-care]'));
     });
     this.panel.addEventListener('change', (e) => {
       if (e.target.name === 'name' && this.sim?.character) this.h.onRename(this.sim, e.target.value);
@@ -229,7 +235,7 @@ export class UI {
     set('[data-action="wardrobe"]', 'shirt');
     set('[data-action="photo"]', 'camera');
     document.getElementById('sources-open').innerHTML = icon('plug');
-    set('[data-action="city"]', 'building2');
+    set('[data-action="city"]', 'landmark');
     set('[data-menu="walls"]', 'layers');
     set('[data-menu="quality"]', 'sparkles');
     set('[data-menu="help"]', 'circleHelp');
@@ -294,9 +300,6 @@ export class UI {
         })
         .join('');
     }
-    dock.querySelector('.menu[data-for="walls"]').innerHTML +=
-      `<h3>Street life</h3>${opt('streetLife', 'on', 'users', 'Walk to work when off duty')}${opt('streetLife', 'off', 'house', 'Stay home')}` +
-      `<p class="menu-note">Made up: only while their agent is off duty.</p>`;
   }
 
   // ---- Toasts ---------------------------------------------------------------------------
@@ -338,21 +341,21 @@ export class UI {
           ${sim.character
             ? `<input name="name" value="${escapeHtml(sim.name)}" maxlength="40" aria-label="Name (click to rename)" title="Click to rename" />`
             : `<h2>${escapeHtml(sim.name)}</h2>`}
-          <div class="where" data-slot="where"></div>
-          <div class="where"><span style="width:9px;height:9px;border-radius:3px;flex:none;background:${lotColor}"></span>
-            ${icon('house')} ${escapeHtml(sim.lot.name)}${sim.character ? ` · desk ${sim.character.slot}` : ''}</div>
         </div>
         ${sim.character ? `<button class="icon-btn" data-outfit aria-label="Change outfit" title="Change outfit (just for fun)">${icon('shirt')}</button>` : ''}
         <button class="icon-btn close" data-close aria-label="Close">${icon('x')}</button>
+        <div class="assigned-profession" data-slot="profession"></div>
+      </div>
+      <div class="resident-header-strip">
+        <button type="button" data-prompt-agent>Talk to ${sim.character ? escapeHtml(sim.name) : 'Agent'}</button>
+        <div class="resident-metadata"><div><span style="color:${lotColor}">${icon('house')}</span> ${escapeHtml(sim.lot.name)}${sim.character ? ` · desk ${sim.character.slot}` : ''}</div><div data-slot="where"></div></div>
       </div>
       <div class="scroll">
+        <section class="resident-stats"><div data-slot="xp"></div><div data-slot="care-summary"></div>${sim.character ? '<button type="button" data-open-care>Care</button>' : ''}</section>
         <h2 class="activity-view-title">Watch activity</h2>
-        <button data-prompt-agent>Talk to ${sim.character
-            ?  `${escapeHtml(sim.name)}`
-            : 'Agent'
-          }</button><div data-slot="xp"></div><div data-slot="role"></div>
         <button type="button" data-slot="hero" data-prompt-agent></button>
         <figure class="screen-wrap">
+          <div data-browser-feed></div>
           <button type="button" class="screen-chat" data-prompt-agent aria-label="Open chat from activity screen"><canvas class="screen-preview" width="512" height="320"></canvas></button>
           <figcaption title="Names, files and commands are real; the code drawn on screen is illustrative">Live screen</figcaption>
         </figure>
@@ -365,12 +368,15 @@ export class UI {
     // A live 3D bust of this agent (same model as in the world), idling while the panel is open.
     this.panel.querySelector('.avatar-3d-wrap').prepend(new AvatarPortrait({ look: () => sim.look, role: () => sim.roleInfo, mode: 'bust' }).canvas);
     this.html.panel = {};
+    this.careDialog = sim.character ? careDialogFor(sim) : null;
+    this.browserFeed.stop();
     this.renderPanel();
   }
 
   close() {
     if (!this.sim) return;
     this.panel.hidden = true;
+    this.browserFeed.stop();
     this.sim = null;
     this.h.onClose();
   }
@@ -385,13 +391,21 @@ export class UI {
   renderPanel() {
     const sim = this.sim;
     if (!sim) return;
+    this.careDialog?.update(this.connectionState === 'live');
+    // The agent's real task browser, when its latest run has one.
+    const browserRun = sim.character ? this.h.browserRun?.(sim) : null;
+    if ((browserRun?.id ?? null) !== this.browserFeed.runId) {
+      if (browserRun) this.browserFeed.mount(this.panel.querySelector('.screen-wrap > [data-browser-feed]'), browserRun);
+      else this.browserFeed.stop();
+    }
     const s = sim.truth;
     const state = sim.state;
     const role = sim.roleInfo;
     // Role: one line; the reason is a tooltip (it describes observed activity, not skill).
     const xp = this.h.xpFor?.(sim);
     this.slot('xp', xp ? `<div class="agent-xp">${xpMarkup(xp)}</div>` : '');
-    this.slot('role', role?.title ? `<div class="role-card" style="--role:#${role.color.toString(16).padStart(6, '0')}" title="${escapeHtml(role.why)}"><b>${icon(role.intern ? 'hardHat' : 'store')} ${escapeHtml(role.title)}</b>${role.workplace ? `<small>${escapeHtml(role.workplace)}</small>` : ''}</div>` : '');
+    this.slot('profession', escapeHtml(assignedRole(sim.character?.assignedRole)?.title || ''));
+    this.slot('care-summary', sim.character ? careSummary(sim.character) : '');
     const cls = plumbobFor(state);
 
     const input = this.panel.querySelector('input[name=name]');
@@ -401,7 +415,7 @@ export class UI {
 
     const dot = s ? `<span style="width:9px;height:9px;border-radius:50%;flex:none;background:${hex(PROVIDER_COLORS[s.provider] ?? 0x98a1b2)}"></span>` : '';
     this.slot('where', `${dot}<span>${escapeHtml(whoLine(sim))}</span>`);
-    this.slot('truth-src', s ? `straight from ${escapeHtml(appName(s))}` : '');
+    this.slot('truth-src', s?.activityEvidence === 'game-runner' ? 'Confirmed by the game runner' : s ? `straight from ${escapeHtml(appName(s))}` : '');
 
     let sub;
     if (!s) {
@@ -448,7 +462,7 @@ export class UI {
       .join(''));
 
     const flavor = sim.activity?.flavor ? sim.activity.label : null;
-    this.slot('sim', s && this.connectionState !== 'live' ? 'Last received observation · screen paused. Current activity unavailable.' : flavor ? `${icon('sparkles')} <b>${escapeHtml(flavor)}</b> is made up — the agent is idle.` : `${icon('check')} Everything shown is the real agent.`);
+    this.slot('sim', s && this.connectionState !== 'live' ? 'Last received observation · screen paused. Current activity unavailable.' : sim.activity?.careId ? 'Reading is a player-directed simulated activity, separate from real agent work.' : flavor ? `${icon('sparkles')} <b>${escapeHtml(flavor)}</b> is made up — the agent is idle.` : `${icon('check')} Activity details reflect the real agent. Character happiness is simulated.`);
   }
 
   /** Mirror the inspected Sim's screen into the drawer every frame. */
@@ -488,7 +502,7 @@ export class UI {
     $('#roster-count').textContent = sims.length ? `${sims.length} agent${sims.length === 1 ? '' : 's'} · ${live} ${stale ? 'last known sessions' : 'attached'}` : '';
     if (!sims.length) {
       const html = this.gameLinked
-        ? `<div class="empty">Mayor Martin will help you build the Town Hall, then your first home.<br><br><button type="button" onclick="document.querySelector('[data-roster-view=projects]').click()">Build a home</button></div>`
+        ? `<div class="empty">Mayor Martin will help you build the Town Hall, then your first home.<br><br><button type="button" onclick="document.querySelector('#dock [data-action=map]')?.click()">Build a home</button></div>`
         : `<div class="empty">Your town is waiting for its first agents.<br>Talk to Mayor Martin to link Codex or Claude Code.</div>`;
       if (this.html.roster !== html) this.rosterBody.innerHTML = this.html.roster = html;
       return;
@@ -520,7 +534,9 @@ export class UI {
     let html = '';
     const placed = [];
     for (const s of waiting) {
-      v.copy(s.worldPosition()).setY(1.5).project(camera);
+      v.copy(s.worldPosition());
+      v.y += 1.5;
+      v.project(camera);
       const behind = v.z > 1;
       let x = (v.x * 0.5 + 0.5) * width;
       let y = (-v.y * 0.5 + 0.5) * height;

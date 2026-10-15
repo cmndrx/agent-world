@@ -14,7 +14,7 @@ export function resetTown(directory, { confirmed, passes, voice, computerUse }) 
   }
   const backup = path.join(directory, 'backups', `game-reset-${Date.now()}-${randomUUID()}`);
   fs.mkdirSync(backup, { recursive: true });
-  for (const file of ['gameplay.json', 'selected-projects.json', 'style.json', 'households.json', 'conversations.json', 'passes.json']) {
+  for (const file of ['gameplay.json', 'selected-projects.json', 'style.json', 'town.json', 'households.json', 'conversations.json', 'passes.json']) {
     const source = path.join(directory, file);
     if (fs.existsSync(source)) fs.copyFileSync(source, path.join(backup, file));
   }

@@ -11,7 +11,7 @@ let lastPlaced = []; // agent bubble rectangles from the latest pass; signs give
 const MAX_LIFT = 120;
 const v = new THREE.Vector3();
 
-const priority = (sim) => (sim.selected ? 6 : sim.state === 'waiting_for_user' ? 5 : sim.state === 'error' ? 4 : sim.hovered ? 3 : sim.expanded ? 2 : 1);
+const priority = (sim) => (sim.state === 'waiting_for_user' ? 6 : sim.state === 'error' ? 5 : sim.selected ? 4 : sim.hovered ? 3 : sim.expanded ? 2 : 1);
 
 /**
  * @param {Iterable<import('./sim.js').Sim>} sims
@@ -65,7 +65,7 @@ function setOffset(sim, target, crowded) {
   if (sim.bubbleEl.style.getPropertyValue('--dy') !== px) sim.bubbleEl.style.setProperty('--dy', px);
 }
 
-const SIGNS = '.biz-sign, .lot-sign, .commons-sign, .commons-title, .street-sign, .conversation-shelf, .downtown-title, .street-tag, .garden-chip';
+const SIGNS = '.civic-sign, .lot-sign, .commons-sign, .commons-title, .street-sign, .conversation-shelf, .garden-chip';
 
 /**
  * World signs (homes, businesses, streets, shelves): never cover an agent's bubble, and where two signs

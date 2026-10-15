@@ -7,9 +7,10 @@ import {
   buildArmchair, buildBath, buildBed, buildBench, buildBookshelf, buildChair, buildCoffeeBar, buildColumn, buildCouch,
   buildDesk, buildDining, buildElevator, buildFireplace, buildFloorLamp, buildFridge, buildGlobe, buildKitchen,
   buildLaundry, buildLockers, buildLoveseat, buildMailboxes, buildPlanter, buildRack, buildReception, buildRug,
-  buildSideTable, buildStairs, buildTV, buildWallArt, buildWardrobe, buildWhiteboard,
+  buildSideTable, buildStairs, buildStairwell, buildTV, buildWallArt, buildWardrobe, buildWhiteboard,
 } from './furniture.js';
-import { YAW, deskLayout, floorplanFor, rotate } from './home-floorplans.js';
+import { YAW, deskLayout, rotate } from './home-floorplans.js';
+import { buildingPlanFor, floorBounds, outline } from './home-floors.js';
 import { EXTERIORS, INTERIORS, PALETTE, box, buildPlant, cyl, glassTexture, ico, mat, mergeStatic, rng, softBox, buildLightPool } from './models.js';
 import { GROUND_H, YARD_Z, doorsOf, frontWallBlocks, leafRect, tierPlan, yardProps } from './home-tier-plans.js';
 import { buildUpper, buildYard, facadeExtras } from './home-tiers.js';
@@ -70,6 +71,9 @@ export class Lot {
     const col = index % 3;
     const row = Math.floor(index / 3);
     this.group.position.set(col * LOT_W, 0, row * LOT_D);
+    this.yaw = 0;
+    this.cosYaw = 1;
+    this.sinYaw = 0;
     this.exterior = this.baseExterior = EXTERIORS[seed % EXTERIORS.length];
     this.arch = this.baseArch = Object.keys(ARCHES)[(Math.imul(seed ^ (seed >>> 13), 0x5bd1e995) >>> 0) % 4];
     this.roofAllowed = true; // main turns roofs off in build mode and for the inspected home
@@ -104,6 +108,14 @@ export class Lot {
     this.rackLights = [];
     this.steams = [];
     this.layoutVersion = 0; // bumped when the floor plan changes, so residents re-place themselves
+    // Multi-floor tiers: the floor being inspected while the building is open (0 = ground), upper floors built
+    // on demand, and a ceiling over the ground floor while an upper floor is inspected.
+    this.viewFloor = 0;
+    this.upperBuilt = new Map();
+    this.floorNavs = [];
+    this.floorStationCache = new Map();
+    this.seatVersion = 0;
+    this.idleScreen = new Screen();
     this.globeSpin = 0;
     this.coffeeBusy = 0;
     this.obstacles = [];
@@ -133,6 +145,11 @@ export class Lot {
     this.lamp = new THREE.PointLight(0xffc98a, 0, 16, 1.6);
     this.lamp.position.set(0, 2.6, 0.5);
     this.group.add(this.lamp);
+
+    this.groundCap = box(14.6, 0.12, 10.6, 0xd9d4ca, 0, GROUND_H + 0.02, 0);
+    this.groundCap.userData.dynamic = true;
+    this.groundCap.visible = false;
+    this.group.add(this.groundCap);
   }
 
   add(obj) {
@@ -173,11 +190,17 @@ export class Lot {
     this.constructing = active;
   }
 
-  /** Move the whole house to another plot (map mode). Residents and pets are lot-local, so they come along. */
-  setIndex(index) {
-    if (index === this.index) return;
-    this.index = index;
-    this.group.position.set((index % 3) * LOT_W, 0, Math.floor(index / 3) * LOT_D);
+  /**
+   * Put the whole house on its town plot (shared/town.mjs homeTransform): position plus a quarter-turn yaw.
+   * Residents, pets, decor, labels and upper floors are lot-local, so they move and turn with it.
+   */
+  setPlacement({ x, z, yaw }) {
+    this.group.position.set(x, 0, z);
+    this.group.rotation.y = yaw;
+    this.yaw = yaw;
+    this.cosYaw = Math.cos(yaw);
+    this.sinYaw = Math.sin(yaw);
+    this.group.updateMatrixWorld(true);
   }
 
   /** A home's pet (flavor only). */
@@ -192,8 +215,18 @@ export class Lot {
     this.nav = null;
   }
 
-  /** Navigation grid over the lot, rebuilt lazily when furniture or decor changes. */
-  getNav() {
+  /** Navigation grid over the lot (or an upper floor), rebuilt lazily when furniture or decor changes. */
+  getNav(floor = 0) {
+    if (floor > 0) {
+      if (!this.floorNavs[floor]) {
+        const f = this.building.floors[floor];
+        const b = floorBounds(f.rects);
+        const nav = new NavGrid({ x0: b.x0 - 0.25, z0: b.z0 - 0.25, x1: b.x1 + 0.25, z1: b.z1 + 0.25 }, 0.25, 0.25);
+        for (const r of f.obstacles) nav.addRect(r);
+        this.floorNavs[floor] = nav;
+      }
+      return this.floorNavs[floor];
+    }
     if (!this.nav) {
       this.nav = this.makeNav(this.decor.obstacles);
       // Strolling spots in the yard only count when this tier's landscaping leaves them reachable.
@@ -206,6 +239,45 @@ export class Lot {
       this.stations.wander.splice(0, this.stations.wander.length, ...(wander.length ? wander : this.allWander));
     }
     return this.nav;
+  }
+
+  /** Height of a floor's walking surface base (0 for the ground floor). */
+  floorY(floor = 0) {
+    return this.building?.floors[floor]?.y ?? 0;
+  }
+
+  get floorCount() {
+    return this.building?.floors.length || 1;
+  }
+
+  /** Whether residents on a floor are on show: all of them while the building is closed, else the inspected floor. */
+  showsFloor(floor = 0) {
+    return this.roofK > 0.3 || floor === this.viewFloor;
+  }
+
+  setViewFloor(floor) {
+    this.viewFloor = Math.max(0, Math.min(this.floorCount - 1, Math.round(floor) || 0));
+  }
+
+  /** Stations on a floor that a resident arriving at `entrance` can reach (homes on one floor stay separate). */
+  stationsFor(floor, entrance) {
+    if (!floor) return this.stations;
+    const key = `${floor}|${entrance.x},${entrance.z}`;
+    let st = this.floorStationCache.get(key);
+    if (!st) {
+      const f = this.building.floors[floor];
+      const nav = this.getNav(floor);
+      const seen = nav.reachableFrom(entrance);
+      const ok = (s, r) => {
+        const c = nav.nearestFree(...nav.toCell(s.x, s.z), r);
+        return !!c && !!seen[c[1] * nav.w + c[0]];
+      };
+      st = { entrance };
+      for (const [k, list] of Object.entries(f.stations)) if (k !== 'entrance') st[k] = list.filter((s) => ok(s, k === 'couch' ? 4 : 2));
+      if (!st.wander.length) st.wander = [entrance];
+      this.floorStationCache.set(key, st);
+    }
+    return st;
   }
 
   makeNav(decorRects) {
@@ -264,7 +336,8 @@ export class Lot {
    * monitors; they re-place themselves when the plan changes (layoutVersion).
    */
   buildInterior() {
-    const fp = floorplanFor(this.plan.key, this.yardBlocks || [], this.level);
+    const bp = buildingPlanFor(this.plan.key, this.yardBlocks || []);
+    const fp = bp.floors[0];
     const decorRects = this.decor.items.map((it) => this.footprint(it.item, it.x, it.z, it.rot));
     const items = fp.items.filter((it) => !(OPTIONAL.has(it.kind) && it.rect && decorRects.some((d) => overlaps(it.rect, d))));
     const key = `${fp.key}|${this.interior}|${items.length}`;
@@ -272,8 +345,14 @@ export class Lot {
     const planChanged = fp.key !== this.floorplan?.key;
     this.interiorKey = key;
     this.floorplan = fp;
+    this.building = bp;
     this.disposeObject(this.interiorGroup);
     this.disposeObject(this.partitionGroup);
+    for (const built of this.upperBuilt.values()) this.disposeObject(built.group);
+    this.upperBuilt = new Map();
+    this.floorNavs = [];
+    this.floorStationCache = new Map();
+    this.setViewFloor(this.viewFloor);
     this.nightGlows = [];
     this.globes = [];
     this.rackLights = [];
@@ -283,59 +362,10 @@ export class Lot {
     const dyn = new THREE.Group(); // live parts (globes, steam, glowing lamps) stay out of the static merge
     dyn.userData.dynamic = true;
     // Tiled and carpeted rooms on top of the main floor.
-    for (const [, kind, x0, z0, x1, z1] of fp.rooms) {
-      const colors = ROOM_FLOORS[kind];
-      if (!colors) continue;
-      const [base, grout] = colors;
-      const w = x1 - x0;
-      const d = z1 - z0;
-      const tint = kind === 'carpet' ? new THREE.Color(this.interior).lerp(new THREE.Color(base), 0.7).getHex() : base;
-      g.add(Object.assign(box(w, 0.012, d, tint, (x0 + x1) / 2, 0.126, (z0 + z1) / 2), { castShadow: false }));
-      if (grout) {
-        for (let x = x0 + 0.5; x < x1 - 0.05; x += 0.5) g.add(Object.assign(box(0.02, 0.014, d, grout, x, 0.127, (z0 + z1) / 2), { castShadow: false }));
-        for (let z = z0 + 0.5; z < z1 - 0.05; z += 0.5) g.add(Object.assign(box(w, 0.014, 0.02, grout, (x0 + x1) / 2, 0.127, z), { castShadow: false }));
-      }
-    }
+    this.addRoomFloors(g, fp.rooms);
     items.forEach((it, i) => {
-      const seed = this.seed + 31 + i * 7;
-      let obj;
-      let rot = 0;
-      let live = false;
-      switch (it.kind) {
-        case 'bookshelf': obj = buildBookshelf(seed); rot = -Math.PI / 2; break;
-        case 'whiteboard': obj = buildWhiteboard(); rot = -Math.PI / 2; break;
-        case 'globe': { const b = buildGlobe(); obj = mergeStatic(b.group); this.globes.push(b.spinner); live = true; break; }
-        case 'rack': { const b = buildRack(); obj = mergeStatic(b.group); this.rackLights.push(...b.lights); live = true; break; }
-        case 'coffeeBar': { const b = buildCoffeeBar(); obj = mergeStatic(b.group); this.steams.push(b.steam); rot = Math.PI / 2; live = true; break; }
-        case 'kitchen': { const b = buildKitchen(it.len ?? 3, it.coffee ?? null); obj = b.group; if (b.steam) { mergeStatic(obj); this.steams.push(b.steam); live = true; } break; }
-        case 'couch': obj = buildCouch(seed); break;
-        case 'loveseat': obj = buildLoveseat(seed); break;
-        case 'armchair': obj = buildArmchair(seed); break;
-        case 'sideTable': obj = buildSideTable(); break;
-        case 'floorLamp': { const b = buildFloorLamp(); obj = mergeStatic(b.group); this.nightGlows.push(b.shade); live = true; break; }
-        case 'plant': obj = buildPlant(0, 0, seed); break;
-        case 'rug': obj = buildRug(it.w ?? 2, it.d ?? 2, PALETTE.rug, 0, 0); break;
-        case 'bed': obj = buildBed(seed); break;
-        case 'fridge': obj = buildFridge(); break;
-        case 'dining': obj = buildDining(seed); break;
-        case 'fireplace': { const b = buildFireplace(); obj = mergeStatic(b.group); this.nightGlows.push(b.glow); live = true; break; }
-        case 'tv': obj = buildTV(); break;
-        case 'reception': obj = buildReception(it.w ?? 2.6); break;
-        case 'mailboxes': obj = buildMailboxes(); break;
-        case 'elevator': { const b = buildElevator(it.w ?? 2.2); obj = mergeStatic(b.group); this.nightGlows.push(b.glow); live = true; break; }
-        case 'stairs': obj = buildStairs(it.len ?? 2.6, it.w ?? 1.0); break;
-        case 'bath': obj = buildBath(); break;
-        case 'wardrobe': obj = buildWardrobe(); break;
-        case 'laundry': obj = buildLaundry(); break;
-        case 'lockers': obj = buildLockers(); break;
-        case 'bench': obj = buildBench(); break;
-        case 'column': obj = buildColumn(); break;
-        case 'planter': obj = buildPlanter(seed); break;
-        default: return;
-      }
-      obj.position.set(it.x, 0, it.z);
-      obj.rotation.y = (YAW[it.facing] ?? 0) + rot;
-      (live ? dyn : g).add(obj);
+      const made = this.makeItem(it, this.seed + 31 + i * 7);
+      if (made) (made.live ? dyn : g).add(made.obj);
     });
     // Wall art on the outer walls.
     fp.art.forEach(([x, z, facing], i) => {
@@ -350,20 +380,8 @@ export class Lot {
     this.group.add(g);
 
     // Interior partitions, lowered with the cutaway walls so residents stay in view.
-    const pg = new THREE.Group();
-    pg.userData.dynamic = true;
-    const trimColor = new THREE.Color(this.interior).multiplyScalar(0.55).getHex();
-    for (const [x0, z0, x1, z1] of fp.partitions) {
-      const w = x1 - x0;
-      const d = z1 - z0;
-      pg.add(box(w, WALL_H - 0.05, d, this.interior, (x0 + x1) / 2, (WALL_H - 0.05) / 2, (z0 + z1) / 2));
-      pg.add(box(w + 0.02, 0.12, d + 0.02, trimColor, (x0 + x1) / 2, 0.06, (z0 + z1) / 2));
-      pg.add(box(w + 0.04, 0.06, d + 0.04, PALETTE.trim, (x0 + x1) / 2, WALL_H - 0.04, (z0 + z1) / 2));
-    }
-    mergeStatic(pg);
-    pg.userData.scale = 1;
-    this.partitionGroup = pg;
-    this.group.add(pg);
+    this.partitionGroup = this.makePartitions(fp.partitions, WALL_H);
+    this.group.add(this.partitionGroup);
 
     // Stations, obstacles and the conversation shelf by the first bookshelf.
     this.stations = fp.stations;
@@ -384,6 +402,184 @@ export class Lot {
     }
     this.refreshLevelObstacles(); // before the desks: extra residents' desks are fitted around this plan
     this.rebuildDesks();
+  }
+
+  /** Tiled and carpeted room floors laid on a floor's surface. */
+  addRoomFloors(g, rooms, y = 0.126) {
+    for (const [, kind, x0, z0, x1, z1] of rooms) {
+      const colors = ROOM_FLOORS[kind];
+      if (!colors) continue;
+      const [base, grout] = colors;
+      const w = x1 - x0;
+      const d = z1 - z0;
+      const tint = kind === 'carpet' ? new THREE.Color(this.interior).lerp(new THREE.Color(base), 0.7).getHex() : base;
+      g.add(Object.assign(box(w, 0.012, d, tint, (x0 + x1) / 2, y, (z0 + z1) / 2), { castShadow: false }));
+      if (grout) {
+        for (let x = x0 + 0.5; x < x1 - 0.05; x += 0.5) g.add(Object.assign(box(0.02, 0.014, d, grout, x, y + 0.001, (z0 + z1) / 2), { castShadow: false }));
+        for (let z = z0 + 0.5; z < z1 - 0.05; z += 0.5) g.add(Object.assign(box(w, 0.014, 0.02, grout, (x0 + x1) / 2, y + 0.001, z), { castShadow: false }));
+      }
+    }
+  }
+
+  /** One floor-plan item as an object (home-floorplans.js FURNITURE), registering its live parts. */
+  makeItem(it, seed) {
+    let obj;
+    let rot = 0;
+    let live = false;
+    switch (it.kind) {
+      case 'bookshelf': obj = buildBookshelf(seed); rot = -Math.PI / 2; break;
+      case 'whiteboard': obj = buildWhiteboard(); rot = -Math.PI / 2; break;
+      case 'globe': { const b = buildGlobe(); obj = mergeStatic(b.group); this.globes.push(b.spinner); live = true; break; }
+      case 'rack': { const b = buildRack(); obj = mergeStatic(b.group); this.rackLights.push(...b.lights); live = true; break; }
+      case 'coffeeBar': { const b = buildCoffeeBar(); obj = mergeStatic(b.group); this.steams.push(b.steam); rot = Math.PI / 2; live = true; break; }
+      case 'kitchen': { const b = buildKitchen(it.len ?? 3, it.coffee ?? null); obj = b.group; if (b.steam) { mergeStatic(obj); this.steams.push(b.steam); live = true; } break; }
+      case 'couch': obj = buildCouch(seed); break;
+      case 'loveseat': obj = buildLoveseat(seed); break;
+      case 'armchair': obj = buildArmchair(seed); break;
+      case 'sideTable': obj = buildSideTable(); break;
+      case 'floorLamp': { const b = buildFloorLamp(); obj = mergeStatic(b.group); this.nightGlows.push(b.shade); live = true; break; }
+      case 'plant': obj = buildPlant(0, 0, seed); break;
+      case 'rug': obj = buildRug(it.w ?? 2, it.d ?? 2, PALETTE.rug, 0, 0); break;
+      case 'bed': obj = buildBed(seed); break;
+      case 'fridge': obj = buildFridge(); break;
+      case 'dining': obj = buildDining(seed); break;
+      case 'fireplace': { const b = buildFireplace(); obj = mergeStatic(b.group); this.nightGlows.push(b.glow); live = true; break; }
+      case 'tv': obj = buildTV(); break;
+      case 'reception': obj = buildReception(it.w ?? 2.6); break;
+      case 'mailboxes': obj = buildMailboxes(); break;
+      case 'elevator': { const b = buildElevator(it.w ?? 2.2); obj = mergeStatic(b.group); this.nightGlows.push(b.glow); live = true; break; }
+      case 'stairs': obj = buildStairs(it.len ?? 2.6, it.w ?? 1.0); break;
+      case 'stairwell': obj = buildStairwell(it.w ?? 1.0, it.d ?? 2.6); break;
+      case 'bath': obj = buildBath(); break;
+      case 'wardrobe': obj = buildWardrobe(); break;
+      case 'laundry': obj = buildLaundry(); break;
+      case 'lockers': obj = buildLockers(); break;
+      case 'bench': obj = buildBench(); break;
+      case 'column': obj = buildColumn(); break;
+      case 'planter': obj = buildPlanter(seed); break;
+      default: return null;
+    }
+    obj.position.set(it.x, 0, it.z);
+    obj.rotation.y = (YAW[it.facing] ?? 0) + rot;
+    return { obj, live };
+  }
+
+  /** Interior partitions as one group that the cutaway lowers to a stub. */
+  makePartitions(partitions, height) {
+    const pg = new THREE.Group();
+    pg.userData.dynamic = true;
+    const trimColor = new THREE.Color(this.interior).multiplyScalar(0.55).getHex();
+    for (const [x0, z0, x1, z1] of partitions) {
+      const w = x1 - x0;
+      const d = z1 - z0;
+      pg.add(box(w, height - 0.05, d, this.interior, (x0 + x1) / 2, (height - 0.05) / 2, (z0 + z1) / 2));
+      pg.add(box(w + 0.02, 0.12, d + 0.02, trimColor, (x0 + x1) / 2, 0.06, (z0 + z1) / 2));
+      pg.add(box(w + 0.04, 0.06, d + 0.04, PALETTE.trim, (x0 + x1) / 2, height - 0.04, (z0 + z1) / 2));
+    }
+    mergeStatic(pg);
+    pg.userData.scale = 1;
+    return pg;
+  }
+
+  /**
+   * Build an upper floor of the building (home-floors.js) the first time it is needed: its slab, outer walls with
+   * windows (which lower with the cutaway), partitions, furniture, every apartment desk, and a ceiling cap shown
+   * while a floor above it is inspected.
+   */
+  buildUpperFloor(index) {
+    const f = this.building.floors[index];
+    const root = new THREE.Group();
+    root.position.y = f.y;
+    root.userData.dynamic = true;
+    const slab = new THREE.Group();
+    for (const r of f.rects) slab.add(box(r[2] - r[0], 0.22, r[3] - r[1], 0, (r[0] + r[2]) / 2, 0.01, (r[1] + r[3]) / 2, { material: floorMaterial(this.floorStyle) }));
+    mergeStatic(slab);
+    root.add(slab);
+    const inner = new THREE.Group();
+    inner.userData.dynamic = true;
+    const g = new THREE.Group();
+    const dyn = new THREE.Group();
+    dyn.userData.dynamic = true;
+    this.addRoomFloors(g, f.rooms);
+    f.items.forEach((it, i) => {
+      const made = this.makeItem(it, this.seed + 97 * index + i * 7);
+      if (made) (made.live ? dyn : g).add(made.obj);
+    });
+    mergeStatic(g);
+    g.add(dyn);
+    inner.add(g);
+    root.add(inner);
+    const partitions = this.makePartitions(f.partitions, f.h - 0.04);
+    inner.add(partitions);
+    // Outer walls along the footprint's exterior edges, windows every couple of metres.
+    const siding = mat(this.exterior, { roughness: 0.83 });
+    const walls = outline(f.rects).map((sg) => {
+      const along = sg.nz ? 'x' : 'z';
+      const len = along === 'x' ? sg.x1 - sg.x0 : sg.z1 - sg.z0;
+      const w = new THREE.Group();
+      w.userData.dynamic = true;
+      const h = f.h - 0.02;
+      const piece = (offset, color, opts) => (along === 'x' ? box(len, h, 0.1, color, 0, h / 2, offset, opts) : box(0.1, h, len, color, offset, h / 2, 0, opts));
+      w.add(piece(-0.15, this.interior), piece(-0.05, this.exterior, { material: siding }));
+      w.add(along === 'x' ? box(len + 0.04, 0.08, 0.24, PALETTE.trim, 0, h, -0.1) : box(0.24, 0.08, len + 0.04, PALETTE.trim, -0.1, h, 0));
+      mergeStatic(w);
+      w.userData.windows = [];
+      const n = Math.max(0, Math.floor((len - 0.6) / 2.3));
+      for (let k = 0; k < n; k++) {
+        const t = -len / 2 + (len - (n - 1) * 2.3) / 2 + k * 2.3;
+        const win = new THREE.Group();
+        win.userData.dynamic = true;
+        for (const off of [0.02, -0.22]) {
+          const pane = new THREE.Mesh(along === 'x' ? new THREE.BoxGeometry(1.2, 1.0, 0.03) : new THREE.BoxGeometry(0.03, 1.0, 1.2), this.glass);
+          pane.position.set(along === 'x' ? t : off, 1.5, along === 'x' ? off : t);
+          win.add(pane);
+        }
+        win.add(along === 'x' ? box(1.3, 0.07, 0.3, PALETTE.trim, t, 0.97, -0.1) : box(0.3, 0.07, 1.3, PALETTE.trim, -0.1, 0.97, t));
+        w.add(win);
+        w.userData.windows.push(win);
+      }
+      // The group sits on the edge; its pieces are offset inward (−normal), so flip for −x/−z faces.
+      w.position.set((sg.x0 + sg.x1) / 2, 0, (sg.z0 + sg.z1) / 2);
+      w.rotation.y = along === 'x' ? (sg.nz > 0 ? 0 : Math.PI) : (sg.nx > 0 ? 0 : Math.PI);
+      w.userData.normal = new THREE.Vector3(sg.nx, 0, sg.nz);
+      w.userData.scale = 1;
+      root.add(w);
+      return w;
+    });
+    const cap = new THREE.Group();
+    cap.userData.dynamic = true;
+    for (const r of f.rects) cap.add(box(r[2] - r[0] + 0.1, 0.12, r[3] - r[1] + 0.1, 0xd9d4ca, (r[0] + r[2]) / 2, f.h + 0.04, (r[1] + r[3]) / 2));
+    mergeStatic(cap);
+    root.add(cap);
+    root.visible = false;
+    this.group.add(root);
+    const built = { group: root, inner, partitions, walls, cap, desks: null, deskGlows: [], seatVersion: -1 };
+    this.upperBuilt.set(index, built);
+    return built;
+  }
+
+  /** Every desk on an upper floor, each with its resident's monitor (vacant apartments get a blank one). */
+  buildUpperDesks(index, built) {
+    this.disposeObject(built.desks);
+    const g = new THREE.Group();
+    built.deskGlows = [];
+    const f = this.building.floors[index];
+    f.desks.forEach((layout, k) => {
+      const seat = this.desks.findIndex((d) => d.layout === layout);
+      const desk = buildDesk(k + index, seat >= 0 ? this.screens[seat] : this.idleScreen);
+      desk.group.position.set(layout.x, 0, layout.z);
+      desk.group.rotation.y = layout.yaw;
+      g.add(mergeStatic(desk.group));
+      built.deskGlows.push(desk.lamp);
+      const chair = mergeStatic(buildChair());
+      const [cx, cz] = rotate(0, 0.82, layout.yaw);
+      chair.position.set(layout.x + cx, 0, layout.z + cz);
+      chair.rotation.y = layout.yaw + Math.PI;
+      g.add(chair);
+    });
+    built.inner.add(g);
+    built.desks = g;
+    built.seatVersion = this.seatVersion;
   }
 
   /** The tier's yard: fence, paths, beds and trees. Props that would sit on the player's decor are left out. */
@@ -545,7 +741,7 @@ export class Lot {
   keySpots() {
     const st = this.stations;
     return [
-      ...this.desks.flatMap((d) => [d.chair, d.wait, d.visitorWait, d.guests[0]]),
+      ...this.desks.filter((d) => !d.floor).flatMap((d) => [d.chair, d.wait, d.visitorWait, d.guests[0]]),
       ...st.coffee, ...st.couch, ...st.bookshelf.slice(0, 1), ...st.whiteboard.slice(0, 1), ...st.globe.slice(0, 1), ...st.rack.slice(0, 1),
     ].filter(Boolean);
   }
@@ -771,6 +967,7 @@ export class Lot {
   }
 
   rebuildDesks() {
+    this.seatVersion++;
     this.disposeObject(this.deskGroup);
     this.deskGroup = new THREE.Group();
     this.group.add(this.deskGroup);
@@ -780,11 +977,23 @@ export class Lot {
     this.ensureDesks(this.deskCount);
   }
 
-  /** Seat i: the floor plan's desk, or the first free spot that fits a desk and its chair. */
+  /**
+   * Seat i: the building's i-th seat (home-floors.js spreads them over the floors), or for a household larger
+   * than the building, the first free ground-floor spot that fits a desk and its chair.
+   */
   addDesk(i) {
-    const layout = this.floorplan.desks[i] || this.overflowDesk();
+    const seat = this.building.seats[i];
+    const layout = seat ? seat.desk : this.overflowDesk();
     if (!layout) return false;
     const screen = (this.screens[i] ||= new Screen());
+    const floor = seat ? seat.floor : 0;
+    const entry = { screen, chair: layout.chair, guests: layout.guests, wait: layout.wait, visitorWait: layout.visitorWait, floor, rest: layout.rest || null, entrance: layout.entrance || this.stations.entrance, layout };
+    if (floor > 0) {
+      // Upper-floor desks are drawn with their floor (buildUpperDesks); the seat change redraws them.
+      this.desks.push(entry);
+      this.seatVersion++;
+      return true;
+    }
     const desk = buildDesk(i, screen);
     desk.group.position.set(layout.x, 0, layout.z);
     desk.group.rotation.y = layout.yaw;
@@ -798,7 +1007,7 @@ export class Lot {
     this.deskGroup.add(chair);
     this.deskBlocks.push(layout.block);
     // Visiting helpers stand at the user's right with a laptop, facing the desk.
-    this.desks.push({ screen, chair: layout.chair, guests: layout.guests, wait: layout.wait, visitorWait: layout.visitorWait });
+    this.desks.push(entry);
     this.nav = null;
     this.reachCache = null;
     return true;
@@ -975,10 +1184,14 @@ export class Lot {
       this.roof.scale.setScalar(0.55 + 0.45 * k);
     }
     // Cutaway walls: lower the walls between the camera and the room (all up while the roof is on).
-    const toCam = new THREE.Vector3(camera.position.x - center.x, 0, camera.position.z - center.z).normalize();
+    // Wall normals are lot-local; turn the direction to the camera into the lot's frame.
+    const cx = camera.position.x - center.x, cz = camera.position.z - center.z;
+    const toCam = new THREE.Vector3(cx * this.cosYaw - cz * this.sinYaw, 0, cx * this.sinYaw + cz * this.cosYaw).normalize();
+    const open = this.roofK <= 0.3;
+    const view = open ? this.viewFloor : 0;
     for (const w of this.walls) {
       let target = 1;
-      if (this.roofK > 0.3) target = 1;
+      if (this.roofK > 0.3 || view > 0) target = 1; // inspecting an upper floor closes the ground floor below it
       else if (this.wallMode === 'down') target = CUT_SCALE;
       else if (this.wallMode === 'cutaway' && w.userData.normal.dot(toCam) > 0.15) target = CUT_SCALE;
       w.userData.scale += (target - w.userData.scale) * (1 - Math.exp(-dt * 7));
@@ -986,17 +1199,53 @@ export class Lot {
       for (const win of w.userData.windows) win.visible = w.userData.scale > 0.75;
     }
     // Interior partitions drop to a low stub whenever the room is open (cutaway or walls down).
-    if (this.partitionGroup) {
-      const pg = this.partitionGroup;
-      const target = this.roofK > 0.3 || this.wallMode === 'up' ? 1 : 0.16;
-      pg.userData.scale += (target - pg.userData.scale) * (1 - Math.exp(-dt * 7));
-      pg.scale.y = pg.userData.scale;
+    const ease = 1 - Math.exp(-dt * 7);
+    const settle = (g, target) => {
+      g.userData.scale += (target - g.userData.scale) * ease;
+      g.scale.y = g.userData.scale;
+    };
+    if (this.partitionGroup) settle(this.partitionGroup, this.roofK > 0.3 || this.wallMode === 'up' || view > 0 ? 1 : 0.16);
+    // Upper floors: the inspected one is open like the ground floor; those below are closed under their ceiling;
+    // those above aren't drawn (the exterior upper stack covers everything while the building is closed).
+    this.groundCap.visible = open && view > 0;
+    for (let i = 1; i <= view; i++) if (!this.upperBuilt.has(i)) this.buildUpperFloor(i);
+    for (const [i, b] of this.upperBuilt) {
+      b.group.visible = open && i <= view;
+      if (!b.group.visible) continue;
+      const current = i === view;
+      b.inner.visible = current;
+      b.cap.visible = !current;
+      if (current && b.seatVersion !== this.seatVersion) this.buildUpperDesks(i, b);
+      for (const w of b.walls) {
+        let target = 1;
+        if (current && this.wallMode === 'down') target = CUT_SCALE;
+        else if (current && this.wallMode === 'cutaway' && w.userData.normal.dot(toCam) > 0.15) target = CUT_SCALE;
+        settle(w, target);
+        for (const win of w.userData.windows) win.visible = w.userData.scale > 0.75;
+      }
+      settle(b.partitions, current && this.wallMode !== 'up' ? 0.16 : 1);
+      for (const glow of b.deskGlows) glow.material.emissiveIntensity = lit * (glow.userData.nightGlow ?? 1);
     }
+    this.lamp.position.y = this.floorY(view) + 2.5;
   }
 
-  /** Lot-local → world. */
+  /** Lot-local → world (the lot may be turned a quarter or half turn on its plot). */
   toWorld(x, z) {
-    return new THREE.Vector3(x + this.group.position.x, 0, z + this.group.position.z);
+    const p = this.group.position;
+    return new THREE.Vector3(p.x + x * this.cosYaw + z * this.sinYaw, 0, p.z - x * this.sinYaw + z * this.cosYaw);
+  }
+
+  /** World → lot-local, as { x, z }. */
+  toLocal(x, z) {
+    const p = this.group.position;
+    const dx = x - p.x, dz = z - p.z;
+    return { x: dx * this.cosYaw - dz * this.sinYaw, z: dx * this.sinYaw + dz * this.cosYaw };
+  }
+
+  /** Whether a world point lies on this lot (its navigation area). */
+  containsWorld(x, z) {
+    const l = this.toLocal(x, z);
+    return this.getNav().inBounds(l.x, l.z);
   }
 }
 

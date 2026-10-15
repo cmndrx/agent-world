@@ -1,11 +1,11 @@
+import { spawnProvider } from './cli-process.mjs';
 import {codexCommand} from './providers.mjs';
-import { spawn } from 'node:child_process';
 import { usageSnapshot } from '../shared/usage.mjs';
 
 // Only initialization and the documented read RPC. Never start a thread/turn,
 // refresh/login/logout, consume a reset credit, or expose raw diagnostics/auth.
-export function readCodexRpc(method, params, normalize, { spawnChild = spawn, timeoutMs = 10000 } = {}) {
-  if(!['account/rateLimits/read','model/list'].includes(method))throw new Error('Unsupported read method.');
+export function readCodexRpc(method, params, normalize, { spawnChild = spawnProvider, timeoutMs = 10000 } = {}) {
+  if(!['account/rateLimits/read','model/list','account/read'].includes(method))throw new Error('Unsupported read method.');
   return new Promise(resolve => {
     let child, timer, forceTimer, finished = false, buffer = '';
     const finish = value => {

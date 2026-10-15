@@ -1,3 +1,5 @@
+import { assignedRole } from '../../shared/team.mjs';
+import { CareFeedback } from './care-feedback.js';
 import {canPromptFromStatus} from '../../shared/agent-view.mjs';
 import { observedLabel } from '../../shared/freshness.mjs';
 // A Sim: one persistent character (or a visiting sub-agent) in a lot.
@@ -18,6 +20,8 @@ import { conversationLabel } from '../../shared/conversations.mjs';
 import { Screen } from './screens.js';
 
 const SPEED = 2.5;
+/** Inside the house walls (lot-local metres; the same room bounds decor placement uses), not the yard. */
+const indoors = (x, z) => Math.abs(x) < 6.7 && Math.abs(z) < 4.7;
 const FLOOR_Y = 0.12;
 const SIT_Y = -0.42;
 // The couch cushions sit higher than a desk chair seat; sitting there uses this so Sims rest on top of them.
@@ -111,6 +115,7 @@ export class Sim {
     this.key = key;
     this.lot = lot;
     this.character = character;
+    this.careFeedback = new CareFeedback(character);
     this.parent = parent;
     this.isVisitor = !!parent;
     this.hash = hashStr(key);
@@ -180,7 +185,8 @@ export class Sim {
     this.pos = new THREE.Vector2();
     // Visitors and newly recruited residents walk in through the front door; everyone else appears in place.
     this.arriving = arriving;
-    const start = this.isVisitor || arriving ? lot.stations.entrance : null;
+    // On an upper floor, arrivals step out at that floor's stairs or elevator landing.
+    const start = this.isVisitor || arriving ? (this.isVisitor ? this.parent.desk() : lot.desk(character.slot)).entrance || lot.stations.entrance : null;
     if (start) this.pos.set(start.x, start.z);
     this.placed = !!start;
     this.layoutVersion = lot.layoutVersion;
@@ -223,6 +229,10 @@ export class Sim {
     const prevState = this.state;
     const prevAt = this.act.at;
     this.truth = session;
+    if (session && !['idle','done'].includes(session.state) && this.careCheerUntil > performance.now() / 1000) {
+      this.careCheerUntil = 0;
+      this.popT = undefined; // observed work interrupts the care animation
+    }
     if (this.isVisitor && !this.roleName && session?.detail?.target) this.roleName = session.detail.target;
 
     const color = PLUMBOB_COLORS[plumbobFor(this.state)];
@@ -251,7 +261,7 @@ export class Sim {
     this.release();
     this.leaving = true;
     this.activity = { pose: 'laptop_walk', flavor: false };
-    this.goTo(this.lot.stations.entrance);
+    this.goTo(this.stations.entrance);
     this.parent.visitors = this.parent.visitors.filter((v) => v !== this);
   }
 
@@ -260,6 +270,17 @@ export class Sim {
   desk() {
     const slot = this.isVisitor ? this.parent.character.slot : this.character.slot;
     return this.lot.desk(slot);
+  }
+
+  /** The floor this resident lives and works on (their desk's), 0 = ground. */
+  get floor() {
+    return this.desk()?.floor || 0;
+  }
+
+  /** Stations this resident can use: their floor's, reachable from their own landing. */
+  get stations() {
+    const d = this.desk();
+    return d?.floor ? this.lot.stationsFor(d.floor, d.entrance) : this.lot.stations;
   }
 
   truthTarget() {
@@ -271,9 +292,14 @@ export class Sim {
     }
     if (a.at === 'wait') return { spot: this.isVisitor ? desk.visitorWait : desk.wait, pose: a.pose };
     if (this.state === 'off_duty') {
+      // Off duty: on their own bed when their living space has one, else the couch or a quiet spot.
+      if (desk.rest) return { spot: desk.rest, pose: 'doze' };
+      // Never the yard: off-duty residents stay inside their home.
       const slot = this.character.slot;
-      if (slot <= 3) return { spot: this.lot.stations.couch[slot - 1], pose: 'doze' };
-      return { spot: this.lot.stations.wander[slot % this.lot.stations.wander.length], pose: 'doze_stand' };
+      const st = this.stations;
+      if (slot <= 3 && st.couch[slot - 1]) return { spot: st.couch[slot - 1], pose: 'doze' };
+      const inside = this.indoorWander();
+      return { spot: inside.length ? inside[slot % inside.length] : this.standingSpot(desk.chair, true), pose: 'doze_stand' };
     }
     return null; // idle: room for flavor
   }
@@ -304,19 +330,24 @@ export class Sim {
     return pick === 'random' ? free[Math.floor(Math.random() * free.length)] : free[0];
   }
 
+  /** Wander spots inside the house (the yard's strolling spots left out). */
+  indoorWander() {
+    return this.stations.wander.filter((s) => !s.yard && indoors(s.x, s.z));
+  }
+
   /**
    * Somewhere to just stand when every station is taken: the nearest free nav cell around a point,
    * kept a body-width away from everyone else in the lot.
    */
-  standingSpot(near) {
-    const nav = this.lot.getNav();
+  standingSpot(near, inside = false) {
+    const nav = this.lot.getNav(this.floor);
     const others = [...(this.lot.claims?.entries() || [])].filter(([, h]) => h !== this && !h.gone).map(([s]) => s);
     for (let r = 0; r < 8; r++) {
       for (let k = 0; k < 8; k++) {
         const a = (k / 8) * Math.PI * 2 + r;
         const x = near.x + Math.cos(a) * (0.9 + r * 0.45);
         const z = near.z + Math.sin(a) * (0.9 + r * 0.45);
-        if (!nav.walkable(x, z)) continue;
+        if (!nav.walkable(x, z) || (inside && !indoors(x, z))) continue;
         if (others.some((o) => Math.hypot(o.x - x, o.z - z) < 0.85)) continue;
         return { x, z, face: near.face ?? 0, adHoc: true };
       }
@@ -326,7 +357,10 @@ export class Sim {
 
   decide() {
     if (this.leaving) return;
-    const target = this.truthTarget();
+    const care = this.character?.care?.pending;
+    const canCare = care && (!this.truth || ['idle','done'].includes(this.state));
+    const careSpot = canCare && (this.freeSpot(this.stations.bookshelf) || this.standingSpot(this.desk().chair));
+    const target = careSpot ? { spot: careSpot, pose: 'browse', careId: care.id } : this.truthTarget();
     if (target) {
       // Real work and off-duty spots take priority: an idle Sim relaxing there moves on.
       const holder = this.holder(target.spot);
@@ -336,7 +370,8 @@ export class Sim {
         holder.decide();
       } else if (holder) {
         // Two truth targets on one spot (e.g. off-duty Sims sharing a wander point): find another.
-        const alt = this.freeSpot(this.lot.stations.wander) || this.standingSpot(target.spot);
+        const offDuty = this.state === 'off_duty';
+        const alt = this.freeSpot(offDuty ? this.indoorWander() : this.stations.wander) || this.standingSpot(target.spot, offDuty);
         target.spot = alt;
         if (target.pose === 'doze') target.pose = 'doze_stand';
       }
@@ -352,16 +387,16 @@ export class Sim {
       if (this.needs.energy < 0.5 && r < 0.6) kind = 'coffee';
       else if (this.needs.fun < 0.5 && r < 0.6) kind = 'couch';
       else kind = ['wander', 'books', 'doodle', 'globe', 'coffee'][Math.floor(Math.random() * 5)];
-      let spot = this.freeSpot(this.lot.stations[FLAVOR[kind].station]);
+      let spot = this.freeSpot(this.stations[FLAVOR[kind].station]);
       if (!spot) {
         // Everything for that is taken: try the other activities, then just stand somewhere free.
         for (const k of ['wander', 'books', 'globe', 'doodle', 'coffee', 'couch'].sort(() => Math.random() - 0.5)) {
-          spot = this.freeSpot(this.lot.stations[FLAVOR[k].station]);
+          spot = this.freeSpot(this.stations[FLAVOR[k].station]);
           if (spot) { kind = k; break; }
         }
       }
       const f = FLAVOR[spot ? kind : 'wander'];
-      if (!spot) spot = this.standingSpot(this.lot.stations.wander[0]);
+      if (!spot) spot = this.standingSpot(this.stations.wander[0]);
       this.activity = { spot, pose: spot.adHoc ? 'look' : f.pose, flavor: true, label: f.label, kind: spot.adHoc ? 'wander' : kind };
       this.flavorUntil = performance.now() / 1000 + f.min + Math.random() * (f.max - f.min);
     }
@@ -380,7 +415,7 @@ export class Sim {
   }
 
   goTo(spot) {
-    const path = this.lot.getNav().findPath({ x: this.pos.x, z: this.pos.y }, spot);
+    const path = this.lot.getNav(this.floor).findPath({ x: this.pos.x, z: this.pos.y }, spot);
     path[path.length - 1].face = spot.face;
     this.path = path;
     this.arrived = false;
@@ -399,6 +434,8 @@ export class Sim {
       this.placed = false;
     }
     if (!this.activity) this.decide();
+    const careId = this.character?.care?.pending?.id;
+    if ((this.activity?.careId || null) !== (careId && (!this.truth || ['idle','done'].includes(this.state)) ? careId : null)) this.decide();
     const now = performance.now() / 1000;
     this.needs.energy = Math.max(0, this.needs.energy - dt * 0.012);
     this.needs.fun = Math.max(0, this.needs.fun - dt * 0.009);
@@ -446,7 +483,11 @@ export class Sim {
     d = Math.atan2(Math.sin(d), Math.cos(d));
     this.facing += d * (1 - Math.exp(-dt * 10));
 
-    this.root.position.set(this.pos.x, FLOOR_Y, this.pos.y);
+    this.root.position.set(this.pos.x, FLOOR_Y + this.lot.floorY(this.floor), this.pos.y);
+    // Only the inspected floor's residents show while a building is open (the others are behind walls and ceilings).
+    const shown = this.lot.showsFloor(this.floor);
+    this.root.visible = shown;
+    this.label.visible = shown;
     this.root.rotation.y = this.facing;
     // Selecting a Sim gives it a quick squash-and-stretch hop (pure feedback; says nothing about the agent).
     if (this.selected && !this.wasSelected) this.popT = 0;
@@ -479,9 +520,20 @@ export class Sim {
     this.updateLabel();
   }
 
+  receiveCare(character, replay = false) {
+    if (!this.careFeedback.receive(character, replay)) return;
+    const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.careReceivedUntil = performance.now() / 1000 + 1.8;
+    if (!reducedMotion && (!this.truth || ['idle', 'done'].includes(this.state))) {
+      this.careCheerUntil = this.careReceivedUntil;
+      this.popT = 0;
+    }
+  }
+
   /** Which pose to play right now: walking, a truth-driven desk pose (with lead-in), or flavor. */
   currentPose(walking, now) {
     if (walking) return this.isVisitor ? 'laptop_walk' : 'walk';
+    if (now < this.careCheerUntil && (!this.truth || ['idle','done'].includes(this.state))) return 'cheer';
     if (now < this.cheerUntil) return 'cheer';
     const a = this.activity;
     if (!a) return 'stand';
@@ -783,10 +835,12 @@ export class Sim {
     // Every bubble is just the name and a short status (icons only when zoomed far out).
     const chip = this.observationConnected !== false && this.labelMode === 'chip' && !compact;
     const stateIcon = icon(this.walking && !stale ? 'navigation' : STATE_ICON[state]);
+    const careReceived = performance.now() / 1000 < this.careReceivedUntil && !stale && !['waiting_for_user','error'].includes(state);
+    const detail = this.selected && !this.detailSuppressed && !stale && this.labelMode === 'full' && !['waiting_for_user','error'].includes(state) ? `<span class="b-resident-detail">${escapeHtml(assignedRole(this.character?.assignedRole)?.title || '')}${this.character?.care ? `<small>Lv ${this.residentLevel || 1} &middot; Happiness ${this.character.happiness}/100 (simulated)</small>` : ''}</span>` : '';
     const html = compact
       ? `<span class="b-icon">${stateIcon}</span>`
       : `<span class="b-icon">${stateIcon}</span>` +
-        `<span class="b-text"><b>${escapeHtml(this.name)}</b>${canPromptFromStatus(this.truth)?`<button type="button" class="b-state" data-prompt-sim aria-label="${escapeHtml(text)} · Open chat">${escapeHtml(text)}</button>`:`<span class="b-state">${escapeHtml(text)}</span>`}</span>`;
+        `<span class="b-text"><b>${escapeHtml(this.name)}</b>${detail}${canPromptFromStatus(this.truth)?`<button type="button" class="b-state" data-prompt-sim aria-label="${escapeHtml(text)} · Open chat">${escapeHtml(text)}</button>`:`<span class="b-state">${escapeHtml(text)}</span>`}${careReceived ? '<small class="b-care-feedback">Care received &middot; simulated</small>' : ''}</span>`;
     if (html !== this.labelHtml) {
       this.bubbleEl.innerHTML = html;
       this.labelHtml = html;
@@ -807,7 +861,7 @@ export class Sim {
   }
 
   worldPosition() {
-    return this.lot.toWorld(this.pos.x, this.pos.y);
+    return this.lot.toWorld(this.pos.x, this.pos.y).setY(this.lot.floorY(this.floor));
   }
 
   /** Provider badge on the chest (cosmetic): shown while a session is attached. */
@@ -875,7 +929,7 @@ export function separateSims(sims, dt) {
   for (let i = 0; i < list.length; i++) {
     for (let j = i + 1; j < list.length; j++) {
       const a = list[i], b = list[j];
-      if (a.lot !== b.lot) continue;
+      if (a.lot !== b.lot || a.floor !== b.floor) continue;
       const dx = b.pos.x - a.pos.x, dz = b.pos.y - a.pos.y;
       const d = Math.hypot(dx, dz);
       if (d >= MIN) continue;
@@ -883,7 +937,7 @@ export function separateSims(sims, dt) {
       if (aFixed && bFixed) continue;
       const nx = d > 1e-4 ? dx / d : Math.cos(i + j), nz = d > 1e-4 ? dz / d : Math.sin(i + j);
       const push = Math.min(MIN - d, dt * 2.5);
-      const nav = a.lot.getNav();
+      const nav = a.lot.getNav(a.floor);
       const move = (s, sx, sz) => { const x = s.pos.x + sx, z = s.pos.y + sz; if (nav.walkable(x, z)) s.pos.set(x, z); };
       if (aFixed) move(b, nx * push, nz * push);
       else if (bFixed) move(a, -nx * push, -nz * push);

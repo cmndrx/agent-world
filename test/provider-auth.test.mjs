@@ -1,3 +1,4 @@
+import os from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { claudeAuth } from '../bridge/provider-auth.mjs';
@@ -5,6 +6,7 @@ import { claudeAuth } from '../bridge/provider-auth.mjs';
 const probe = (error, stdout) => claudeAuth({ command: '/fixture/Claude Code/claude', execute(command, args, options, done) {
   assert.deepEqual(args, ['auth', 'status', '--json']);
   assert.equal(options.timeout, 15000);
+  assert.equal(options.cwd,os.homedir());
   done(error, stdout);
 } });
 test('Claude sign-in probe handles signed-out exit 1 and directs the player to open Claude Code', async () => {
