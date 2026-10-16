@@ -25,6 +25,8 @@ export const DECOR = {
   side_table: { label: 'Side table', cat: 'Furniture', where: 'indoor', w: 0.6, d: 0.6 },
   low_shelf: { label: 'Low bookshelf', cat: 'Furniture', where: 'indoor', w: 1.3, d: 0.45, price: 15 },
   aquarium: { label: 'Aquarium', cat: 'Fun', where: 'indoor', w: 1.2, d: 0.5, price: 40, level: 2 },
+  television: { label: 'Television', cat: 'Fun', where: 'indoor', w: 1.6, d: 0.45 },
+  fireplace_tv: { label: 'TV above fireplace', cat: 'Fun', where: 'indoor', w: 1.12, d: 0.08, walkable: true, mount: 'fireplace' },
   arcade: { label: 'Arcade cabinet', cat: 'Fun', where: 'indoor', w: 0.8, d: 0.75, price: 60, level: 3 },
   record_player: { label: 'Record player', cat: 'Fun', where: 'indoor', w: 0.8, d: 0.5, price: 30, level: 2 },
   guitar: { label: 'Guitar on a stand', cat: 'Fun', where: 'indoor', w: 0.5, d: 0.5, price: 25 },
@@ -124,7 +126,8 @@ export function sanitizeHome(value) {
     const z = num(d.z, LOT_BOUNDS.z0, LOT_BOUNDS.z1);
     if (x == null || z == null) throw new Error('Decoration position is invalid.');
     const rot = Number.isInteger(d.rot) ? ((d.rot % 4) + 4) % 4 : 0;
-    out.decor.push({ id, item: d.item, x, z, rot });
+    if (d.item==='fireplace_tv' && (typeof d.anchor!=='string' || !/^fireplace:[-\d.]+:[-\d.]+:[snwe]$/.test(d.anchor))) throw Error('Choose an authored fireplace TV mount.');
+    out.decor.push({ id, item: d.item, x, z, rot, ...(d.item==='fireplace_tv'?{anchor:d.anchor}:{}) });
   }
   return out;
 }

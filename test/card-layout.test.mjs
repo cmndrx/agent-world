@@ -1,3 +1,4 @@
+import { CARE_ACTIONS } from '../shared/care.mjs';
 import { webcrypto } from 'node:crypto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -16,7 +17,7 @@ function panel() {
   const nodes = new Map();
   const root = { querySelector(selector) { if (!nodes.has(selector)) nodes.set(selector, { textContent:'', disabled:false }); return nodes.get(selector); }, set innerHTML(_) { throw Error('Mounted form must survive updates'); } };
   const c = { happiness:50, interestIds:['snacks','reading'], care:{ revision:1, cooldowns:{}, pending:null, history:[] } };
-  const p = Object.assign(Object.create(CarePanel.prototype), { root, sim:{ character:c, state:'idle', truth:null }, revision:1, orderedInterests:c.interestIds.join(','), sending:false });
+  const p = Object.assign(Object.create(CarePanel.prototype), { root, sim:{ character:c, state:'idle', truth:null, lot:{project:'fixture'} }, options:{}, optionsAt:Infinity, revision:1, orderedInterests:c.interestIds.join(','), sending:false });
   return {p,c,node:s=>root.querySelector(s)};
 }
 test('summary keeps missing care unknown, simulation explicit, bullet interests and bounded semantic meter', () => {
@@ -26,16 +27,16 @@ test('summary keeps missing care unknown, simulation explicit, bullet interests 
 });
 test('care rows show matching gains, disabled reasons, cap and stable mounted editor', () => {
   const {p,c,node}=panel(); p.render(true);
-  assert.equal(node('[data-care-gain="snack"]').textContent,'+8 happiness');
-  assert.equal(node('[data-care-reason="snack"]').textContent,'Matches Snacks');
+  assert.equal(node('[data-care-gain="snack"]').textContent,'+5 happiness');
+  assert.equal(node('[data-care-reason="snack"]').textContent,'Matches Snacks \u00b7 10 seconds');
   c.happiness=100; c.care.revision++; p.render(true);
-  assert.equal(node('[data-care-gain="snack"]').textContent,'Up to +8 happiness');
+  assert.equal(node('[data-care-gain="snack"]').textContent,'Up to +5 happiness');
   assert.equal(node('[data-care-reason="snack"]').textContent,'Already at 100/100');
   c.care.cooldowns.snack=Date.now()+24000; p.render(true);
   assert.match(node('[data-care-reason="snack"]').textContent,/Ready in/);
   assert.equal(node('[data-care-action="snack"]').disabled,true);
   c.interestIds=['snacks']; p.orderedInterests=c.interestIds.join(','); p.render(true);
-  assert.equal(node('[data-care-reason="read"]').textContent,'Requires Reading interest');
+  assert.equal(node('[data-care-reason="read"]').textContent,'Requires matching interest');
   c.interestIds=['reading']; p.orderedInterests=c.interestIds.join(','); p.sim.truth={}; p.sim.state='running'; p.render(true);
   assert.equal(node('[data-care-reason="read"]').textContent,'Available when agent is idle');
   p.render(false); assert.equal(node('[data-care-reason="read"]').textContent,'Care unavailable while disconnected');
@@ -46,7 +47,7 @@ test('pending reading disables care, permits cancellation and announces completi
   assert.equal(node('[data-care-action=cancel]').hidden,false);
   assert.equal(node('[data-care-action=cancel]').disabled,false);
   assert.match(node('.care-pending').textContent,/remaining/);
-  c.care.pending=null; c.care.history=[{delta:5}]; p.render(true);
+  c.care.pending=null; c.care.history=[{action:'read',delta:5}]; p.render(true);
   assert.match(node('.care-message').textContent,/completed/);
   node('.care-message').textContent='retained'; p.render(true); assert.equal(node('.care-message').textContent,'retained');
   p.sending=true;p.render(true);assert.equal(node('[data-care-reason="praise"]').textContent,'Request underway');
@@ -62,16 +63,24 @@ test('selected label details yield to urgent observed state, far zoom and explic
 
 test('row ordering favors available matches and freezes through cooldown ticks', () => {
   const {p,c}=panel(); const order=[];
-  const rows=new Map(['snack','read','praise'].map(id=>[id,{id}]));
-  const area={querySelector:selector=>rows.get(selector.match(/"(.*?)"/)[1]),append:row=>order.push(row.id)};
+  const rows=new Map(Object.keys(CARE_ACTIONS).map(id=>[id,{id}]));
+  const area={querySelector:selector=>rows.get(selector.match(/"(.*?)"/)[1]),querySelectorAll:()=>[],append:row=>order.push(row.id)};
   p.root.querySelector=()=>area;
-  p.orderRows(c);assert.deepEqual(order,['snack','read','praise']);
-  order.length=0;c.care.cooldowns.snack=Date.now()+30000;p.orderRows(c);assert.deepEqual(order,['read','praise','snack']);
+  p.orderRows(c);assert.deepEqual(order.filter(id=>c.interestIds.includes(CARE_ACTIONS[id].interest)),['snack','read']);
+  order.length=0;c.care.cooldowns.snack=Date.now()+30000;p.orderRows(c);assert.deepEqual(order.filter(id=>c.interestIds.includes(CARE_ACTIONS[id].interest)),['read','snack']);
 });
 test('care request errors remain inline without changing character or mounted form', async () => {
   const {p,c,node}=panel();p.connected=true;p.sim.lot={project:'isolated-fixture'};c.id='fixture';
   const original=globalThis.fetch;globalThis.fetch=async()=>({ok:false,json:async()=>({error:'Fixture conflict'})});
   try {await p.send('praise');assert.equal(node('.care-message').textContent,'Fixture conflict');assert.equal(c.happiness,50);assert.equal(p.sending,false);}finally{globalThis.fetch=original;}
+});
+test('scene errors and non-reward endings stay visible; capped completion reports its actual delta',()=>{
+  const {p,c,node}=panel();p.sim.careError='Care station is no longer available.';p.render(true);
+  assert.match(node('.care-message').textContent,/no longer available/);
+  p.sim.careError=null;p.hadPending=true;c.care.history=[{label:'Care interrupted by agent activity',delta:0}];p.render(true);
+  assert.match(node('.care-message').textContent,/interrupted/);
+  p.hadPending=true;c.happiness=100;c.care.history=[{action:'read',delta:0}];p.render(true);
+  assert.match(node('.care-message').textContent,/completed.*\+0 happiness \(100\/100\)/);
 });
 
 test('temporary missing care preserves mounted editor and blocks stale actions until data returns', async () => {
@@ -83,7 +92,7 @@ test('temporary missing care preserves mounted editor and blocks stale actions u
   const original=globalThis.fetch;globalThis.fetch=()=>{throw Error('No request allowed')};
   try{await p.send('praise');}finally{globalThis.fetch=original;}
   p.sim.character=c;p.render(true);
-  assert.equal(node('[data-care-action="praise"]').disabled,false);
+  assert.equal(node('[data-care-action="praise"]').disabled,true);
   assert.equal(node('.care-message').textContent,'');
 });
 

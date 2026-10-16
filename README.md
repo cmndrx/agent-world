@@ -34,16 +34,28 @@ A valid same-session failure report stays visible without next passes or handoff
 acknowledged StructuredOutput tool report is also captured when the final CLI event omits it.
 Exact approval arguments are transient and are not added to canonical events or saved chat state.
 
-**Player-led care test (October 11):** Click a resident and scroll to Character.
-Residents receive two persistent interests drawn from Encouragement, Snacks and
-Reading; Choose interests allows one to three. Happiness starts at 50/100. Praise
-and Give snack add 3 happiness, plus 5 when the interest matches. Read a book adds
-5 after a ten-second simulated activity, requires Reading, and is interrupted by
-real agent work. Each fulfilled action has a thirty-second cooldown. Free snacks
-are an immediate simulated interaction without a consumption animation or inventory.
-The history explains changes. No decay, autonomous gains, provider prompts, XP
-changes or spending are included. The updated bridge and refreshed client must
-both be loaded; rebuilding alone does not update running processes.
+**Home activity scenes (October 15):** Idle and off-duty residents act out the 19
+catalog activities compatible with home, using existing furniture or temporary
+procedural props. Every scene is simulated and grants no automatic happiness,
+XP, task completion or acceptance. Observed work interrupts and clears the scene.
+Busy or unsuitable space makes an activity unavailable; residents remain on their
+own floor. Run `node scripts/home-activity-fixture.mjs` for an isolated visual QA
+page on :4796, with no observer, provider execution or real state.
+
+**Player-led interest care (October 15):** Click a resident and open Care from
+Character. Fifteen home activities support ten active scene seconds for up to +5
+simulated happiness, followed by a thirty-second cooldown. Actions require the
+matching interest, real household resources and a reachable same-floor station.
+The server validates resources and sequential scene progress; elapsed time alone
+does not reward care. Work, cancellation, resource loss, restart or interrupted
+scene progress grants nothing. Passive leisure grants no happiness or XP.
+Choose interests allows one to three of the 68 reviewed interests; 53 currently
+have explicit unavailable care reasons, including unimplemented venue/pet scenes.
+Build mode offers a free television and an authored above-fireplace mounting option.
+No resources are placed automatically. See [implementation evidence and remaining
+limitations](docs/INTEREST_CARE_IMPLEMENTATION.md). The updated bridge and client
+must both load; rebuilding does not update running processes. Current real
+resident assignments remain unchanged until the blocked scoped update can run.
 
 For a disposable town with provider execution disabled, after building run
 `node scripts/care-fixture.mjs` and open http://127.0.0.1:4793. Its gameplay and

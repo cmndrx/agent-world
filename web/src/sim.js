@@ -1,3 +1,6 @@
+import { mountedTV } from '../../shared/tv-mounts.mjs';
+import { interestForActivity } from '../../shared/interest-care.mjs';
+import { CARE_ACTIONS } from '../../shared/care.mjs';
 import { assignedRole } from '../../shared/team.mjs';
 import { CareFeedback } from './care-feedback.js';
 import {canPromptFromStatus} from '../../shared/agent-view.mjs';
@@ -18,6 +21,9 @@ import { icon, STATE_ICON } from './icons.js';
 import { SHOULDER_X, buildContactShadow, buildPerson, buildPlumbob, lookFromSeed, PLUMBOB_COLORS, PROVIDER_COLORS } from './models.js';
 import { conversationLabel } from '../../shared/conversations.mjs';
 import { Screen } from './screens.js';
+import { HOME_ACTIVITIES, homeActivity, planHomeActivity, overlaps } from './home-activities.js';
+import { HomeActivityScene } from './home-activity-scene.js';
+import { ClickReaction } from './click-reaction.js';
 
 const SPEED = 2.5;
 /** Inside the house walls (lot-local metres; the same room bounds decor placement uses), not the yard. */
@@ -41,13 +47,14 @@ const DESK = {
 };
 const LAPTOP_AT = [0, 1.02, 0.36];
 
+// Generic ambient routines use actual stations, independently of assigned interests.
 const FLAVOR = {
-  coffee: { label: 'Getting coffee', pose: 'sip', station: 'coffee', min: 7, max: 12 },
-  couch: { label: 'Relaxing on the couch', pose: 'relax', station: 'couch', min: 10, max: 18 },
-  wander: { label: 'Stretching their legs', pose: 'look', station: 'wander', min: 5, max: 10 },
-  books: { label: 'Browsing the bookshelf', pose: 'browse', station: 'bookshelf', min: 6, max: 11 },
-  doodle: { label: 'Doodling on the whiteboard', pose: 'present', station: 'whiteboard', min: 6, max: 10 },
-  globe: { label: 'Spinning the globe', pose: 'globe', station: 'globe', min: 5, max: 9 },
+  coffee: {label:'Getting coffee · simulated',pose:'sip',station:'coffee',min:7,max:12},
+  couch: {label:'Relaxing on the couch · simulated',pose:'relax',station:'couch',min:10,max:18},
+  wander: {label:'Stretching their legs · simulated',pose:'look',station:'wander',min:5,max:10},
+  books: {label:'Browsing the bookshelf · simulated',pose:'browse',station:'bookshelf',min:6,max:11},
+  doodle: {label:'Doodling on the whiteboard · simulated',pose:'present',station:'whiteboard',min:6,max:10},
+  globe: {label:'Spinning the globe · simulated',pose:'globe',station:'globe',min:5,max:9},
 };
 
 const JOINTS = ['bodyY', 'lean', 'twist', 'legL', 'legR', 'kneeL', 'kneeR', 'armLx', 'armLz', 'armRx', 'armRz', 'elbowL', 'elbowR', 'headX', 'headY', 'headZ'];
@@ -113,6 +120,7 @@ export class Sim {
    */
   constructor({ key, lot, character = null, parent = null, seed, arriving = false }) {
     this.key = key;
+    this.clickReaction = new ClickReaction();
     this.lot = lot;
     this.character = character;
     this.careFeedback = new CareFeedback(character);
@@ -258,6 +266,8 @@ export class Sim {
   }
 
   leave() {
+    this.clickReaction.cancel();
+    this.stopHomeActivity();
     this.release();
     this.leaving = true;
     this.activity = { pose: 'laptop_walk', flavor: false };
@@ -291,17 +301,7 @@ export class Sim {
       return { spot: desk.chair, pose: a.pose };
     }
     if (a.at === 'wait') return { spot: this.isVisitor ? desk.visitorWait : desk.wait, pose: a.pose };
-    if (this.state === 'off_duty') {
-      // Off duty: on their own bed when their living space has one, else the couch or a quiet spot.
-      if (desk.rest) return { spot: desk.rest, pose: 'doze' };
-      // Never the yard: off-duty residents stay inside their home.
-      const slot = this.character.slot;
-      const st = this.stations;
-      if (slot <= 3 && st.couch[slot - 1]) return { spot: st.couch[slot - 1], pose: 'doze' };
-      const inside = this.indoorWander();
-      return { spot: inside.length ? inside[slot % inside.length] : this.standingSpot(desk.chair, true), pose: 'doze_stand' };
-    }
-    return null; // idle: room for flavor
+    return null; // idle or off duty: room for explicitly simulated home scenes
   }
 
   // ---- Spot reservations: one Sim per seat or standing spot -------------------
@@ -309,7 +309,9 @@ export class Sim {
   /** Who holds a spot in this lot (lot.claims maps spot object → Sim). */
   holder(spot) {
     const h = (this.lot.claims ??= new Map()).get(spot);
-    return h && h !== this && !h.gone ? h : null;
+    if(h && h!==this && !h.gone)return h;
+    for(const [sim,p] of this.lot.homeActivityClaims || [])if(sim!==this && !sim.gone && p.floor===this.floor && spot.x>p.rect[0] && spot.x<p.rect[2] && spot.z>p.rect[1] && spot.z<p.rect[3])return sim;
+    return null;
   }
 
   claim(spot) {
@@ -357,10 +359,16 @@ export class Sim {
 
   decide() {
     if (this.leaving) return;
+    this.stopHomeActivity();
     const care = this.character?.care?.pending;
     const canCare = care && (!this.truth || ['idle','done'].includes(this.state));
-    const careSpot = canCare && (this.freeSpot(this.stations.bookshelf) || this.standingSpot(this.desk().chair));
-    const target = careSpot ? { spot: careSpot, pose: 'browse', careId: care.id } : this.truthTarget();
+    const target = this.truthTarget();
+    if (!target && canCare) {
+      if (this.startHomeActivity(CARE_ACTIONS[care.action]?.activityId, care)) return;
+      this.careError = 'Care cancelled: the reserved station or its approach is blocked.';
+      this.activity = {spot:this.standingSpot(this.desk().chair),pose:'stand',careId:care.id,flavor:false};
+      this.cancelBlockedCare(care);
+    } else
     if (target) {
       // Real work and off-duty spots take priority: an idle Sim relaxing there moves on.
       const holder = this.holder(target.spot);
@@ -381,24 +389,18 @@ export class Sim {
       const spot = [guests[this.guestIndex % 3], ...guests].find((g) => !this.holder(g)) || this.standingSpot(guests[0]);
       this.activity = { spot, pose: 'laptop', flavor: false };
     } else {
-      // Simulation layer: pick a flavor activity from fake needs, at a spot nobody else is using.
-      const r = Math.random();
-      let kind;
-      if (this.needs.energy < 0.5 && r < 0.6) kind = 'coffee';
-      else if (this.needs.fun < 0.5 && r < 0.6) kind = 'couch';
-      else kind = ['wander', 'books', 'doodle', 'globe', 'coffee'][Math.floor(Math.random() * 5)];
-      let spot = this.freeSpot(this.stations[FLAVOR[kind].station]);
-      if (!spot) {
-        // Everything for that is taken: try the other activities, then just stand somewhere free.
-        for (const k of ['wander', 'books', 'globe', 'doodle', 'coffee', 'couch'].sort(() => Math.random() - 0.5)) {
-          spot = this.freeSpot(this.stations[FLAVOR[k].station]);
-          if (spot) { kind = k; break; }
-        }
+      // Alternate families; rotate within each. A permanently eligible interest cannot
+      // starve coffee/globe, and a plentiful generic station cannot starve interests.
+      this.preferInterest = !this.preferInterest;
+      if (this.preferInterest && this.startInterestActivity()) return;
+      if (this.startAmbientActivity()) { /* claimed and routed below */ }
+      else if (this.startInterestActivity()) return;
+      else {
+      this.homeUnavailable = 'Home activities unavailable due to space · simulated';
+      const spot=this.freeSpot(this.indoorWander()) || this.standingSpot(this.desk().chair,true);
+      this.activity={spot,pose:'stand',flavor:true,label:this.homeUnavailable,kind:'wander'};
+      this.flavorUntil=performance.now()/1000+8;
       }
-      const f = FLAVOR[spot ? kind : 'wander'];
-      if (!spot) spot = this.standingSpot(this.stations.wander[0]);
-      this.activity = { spot, pose: spot.adHoc ? 'look' : f.pose, flavor: true, label: f.label, kind: spot.adHoc ? 'wander' : kind };
-      this.flavorUntil = performance.now() / 1000 + f.min + Math.random() * (f.max - f.min);
     }
     this.claim(this.activity.spot);
     if (!this.placed) {
@@ -414,24 +416,122 @@ export class Sim {
     this.goTo(this.activity.spot);
   }
 
+  startInterestActivity() {
+    const start = (this.homeCursor ??= this.hash % HOME_ACTIVITIES.length);
+    for (let i=0;i<HOME_ACTIVITIES.length;i++) {
+      const index=(start+i)%HOME_ACTIVITIES.length, id=HOME_ACTIVITIES[index].id;
+      if (!this.character.interestIds?.includes(interestForActivity(id))) continue;
+      if (this.startHomeActivity(id)) { this.homeCursor=(index+1)%HOME_ACTIVITIES.length; return true; }
+    }
+    return false;
+  }
+
+  startAmbientActivity() {
+    const kinds=Object.keys(FLAVOR), start=(this.ambientCursor ??= this.hash % kinds.length);
+    const nav=this.lot.getNav(this.floor,this), from={x:this.pos.x,z:this.pos.y}, seen=nav.reachableFrom(from);
+    for(let i=0;i<kinds.length;i++) {
+      const index=(start+i)%kinds.length,kind=kinds[index],f=FLAVOR[kind];
+      const spot=this.freeSpot((this.stations[f.station] || []).filter(s=>{
+        const cell=nav.nearestFree(...nav.toCell(s.x,s.z),2);
+        return cell && seen[cell[1]*nav.w+cell[0]];
+      }));
+      if(!spot)continue;
+      this.ambientCursor=(index+1)%kinds.length;
+      this.activity={spot,pose:f.pose,flavor:true,label:f.label,kind};
+      this.flavorUntil=performance.now()/1000+f.min+Math.random()*(f.max-f.min);
+      return true;
+    }
+    return false;
+  }
+
   goTo(spot) {
-    const path = this.lot.getNav(this.floor).findPath({ x: this.pos.x, z: this.pos.y }, spot);
+    const path = this.lot.getNav(this.floor, this).findPath({ x: this.pos.x, z: this.pos.y }, spot);
     path[path.length - 1].face = spot.face;
     this.path = path;
     this.arrived = false;
   }
 
+  stopHomeActivity() {
+    const hadScene=!!this.homeScene;
+    this.homeScene?.dispose();
+    this.homeScene = null;
+    this.homePlan = null;
+    this.lot.homeActivityClaims?.delete(this);
+    this.homeUnavailable=null;
+    if(hadScene && this.joints)for(const key of JOINTS)this.joints[key]=0;
+    if (this.parts) { this.parts.body.rotation.x = 0; this.parts.body.position.z = 0; }
+  }
+
+  /** Simulation only; intentionally has no API/persistence/reward effect. Observed work always wins. */
+  startHomeActivity(id, care = null) {
+    if (this.isVisitor || this.leaving || (this.truth && !['idle','done'].includes(this.state)) || (this.character?.care?.pending && !care)) return false;
+    if (!homeActivity(id)) return false;
+    let floor = this.lot.building?.floors[this.floor];
+    if (!floor) return false;
+    if(!this.floor) floor={...floor,items:[...(this.lot.homeActivityItems || floor.items),...this.lot.decor.items.flatMap(d=>{const m=d.item==='fireplace_tv'?mountedTV(d,floor.items):null;if(d.item==='fireplace_tv'&&!m)return [];return [{kind:m?'television':d.item,x:m?.screenX??d.x,z:m?.screenZ??d.z,facing:m?.facing || ['s','w','n','e'][d.rot],floor:0}];})]};
+    // Player care owns its server-reserved envelope ahead of passive simulation.
+    if(care?.plan) for(const [sim,p] of [...(this.lot.homeActivityClaims || [])]) {
+      if(sim!==this && p.floor===this.floor && sim.activity?.flavor && overlaps(p.rect,care.plan.rect)) {
+        sim.stopHomeActivity();sim.release();sim.activity=null;sim.path=[];
+      }
+    }
+    if(care?.plan) for(const [spot,sim] of [...(this.lot.claims || [])]) {
+      if(sim!==this && sim.floor===this.floor && sim.activity?.flavor && overlaps([spot.x-.45,spot.z-.45,spot.x+.45,spot.z+.45],care.plan.rect)) {
+        sim.stopHomeActivity();sim.release();sim.activity=null;sim.path=[];
+      }
+    }
+    const nav = this.lot.getNav(this.floor,this);
+    const protectedSpots = (this.lot.desks || []).filter(d=>(d.floor || 0)===this.floor)
+      .flatMap(d=>[d.chair,d.wait,d.visitorWait,...d.guests,d.entrance].filter(Boolean));
+    const occupied = [...(this.lot.claims || [])].filter(([,h])=>h!==this && !h.gone && h.floor===this.floor)
+      .map(([s])=>[s.x-.45,s.z-.45,s.x+.45,s.z+.45]);
+    if(!this.floor)occupied.push(...this.lot.decor.obstacles);
+    for (const [sim,p] of this.lot.homeActivityClaims || []) if(sim!==this && p.floor===this.floor) occupied.push(p.rect);
+    const from=this.placed?{x:this.pos.x,z:this.pos.y}:this.desk().entrance || floor.stations.entrance;
+    const solidRects=this.floor ? floor.obstacles : [...this.obstaclesForHomeActivity()];
+    const plan=care?.plan || planHomeActivity({id,floor,nav,from,pet:this.lot.pet?.kind,protectedSpots,occupied,solidRects});
+    if (!plan) return false;
+    const [pi,pj]=nav.toCell(plan.spot.x,plan.spot.z);
+    if(care && (care.floor!==this.floor || this.holder(plan.spot) || occupied.some(r=>overlaps(r,plan.rect)) || !nav.walkable(plan.spot.x,plan.spot.z) || !nav.reachableFrom(from)[pj*nav.w+pi])) return false;
+    this.stopHomeActivity();this.release();
+    this.homeUnavailable=null;this.homePlan=plan;
+    (this.lot.homeActivityClaims ??= new Map()).set(this,{...plan,floor:this.floor});
+    this.activity={spot:plan.spot,pose:'home',homeId:id,flavor:!care,careId:care?.id,label:plan.def.label,kind:id};
+    this.claim(plan.spot);
+    this.flavorUntil=Infinity; // duration starts on arrival, not while walking
+    if(!this.placed){this.pos.set(from.x,from.z);this.placed=true;}
+    this.goTo(plan.spot);
+    return true;
+  }
+
+  obstaclesForHomeActivity() {
+    return [...this.lot.obstacles,...this.lot.levelObstacles,...this.lot.deskBlocks,...this.lot.decor.obstacles];
+  }
+
   // ---- Per frame ------------------------------------------------------------
 
   update(dt, t) {
-    if (this.truth && this.observationConnected === false) { this.plumbob.userData.material.color.setHex(0x9299a5); this.plumbob.userData.material.emissive.setHex(0x9299a5); this.plumbob.userData.material.emissiveIntensity = 0.25; this.updateLabel(); return; }
     if (this.layoutVersion !== this.lot.layoutVersion) {
-      // The home was rebuilt with a new floor plan: reappear at the matching spot in the new rooms.
       this.layoutVersion = this.lot.layoutVersion;
-      this.release();
-      this.activity = null;
-      this.path = [];
-      this.placed = false;
+      this.clickReaction.cancel();this.staleReactionRestore=0;
+      this.stopHomeActivity();this.release();this.activity=null;this.path=[];this.placed=false;
+    }
+    if(this.clickReaction.active){this.staleReactionRestore=1;this.staleClickBase=this.clickReaction.active.baseJoints;this.staleClickYaw=this.clickReaction.active.baseYaw;}
+    this.clickReaction.tick(dt,this);
+    if(this.observationConnected===false && (this.character?.care?.pending || this.activity?.careId)) {
+      // Offline scenes cannot earn progress or keep a household station locked.
+      // The bridge owns expiry/restart cancellation; never send an offline reward.
+      this.stopHomeActivity();this.release();this.activity=null;this.path=[];
+      if(!this.truth){this.updateLabel();return;}
+    }
+    if (this.truth && this.observationConnected === false) {
+      this.plumbob.userData.material.color.setHex(0x9299a5);this.plumbob.userData.material.emissive.setHex(0x9299a5);this.plumbob.userData.material.emissiveIntensity=.25;
+      if(this.staleReactionRestore>0){
+        this.staleReactionRestore-=dt;this.root.rotation.y=this.staleClickYaw??this.facing;
+        const pose=this.currentPose(false,performance.now()/1000);this.animate(pose,t,dt);
+        if(pose==='home')this.homeScene?.update(0,matchMedia('(prefers-reduced-motion: reduce)').matches);
+      }
+      this.updateLabel();return;
     }
     if (!this.activity) this.decide();
     const careId = this.character?.care?.pending?.id;
@@ -440,7 +540,7 @@ export class Sim {
     this.needs.energy = Math.max(0, this.needs.energy - dt * 0.012);
     this.needs.fun = Math.max(0, this.needs.fun - dt * 0.009);
 
-    if (this.activity?.flavor && this.arrived && now > this.flavorUntil) {
+    if (!this.clickReaction.active && this.activity?.flavor && this.arrived && now > this.flavorUntil) {
       if (this.activity.kind === 'coffee') this.needs.energy = 1;
       if (this.activity.kind === 'couch') this.needs.fun = 1;
       this.decide();
@@ -448,6 +548,7 @@ export class Sim {
 
     // Movement along the path.
     let step = SPEED * (this.leaving ? 1.3 : 1) * dt;
+    if(this.clickReaction.active?.kind==='friendly')step=0;
     while (step > 0 && this.path.length) {
       const wp = this.path[0];
       const dx = wp.x - this.pos.x;
@@ -490,7 +591,7 @@ export class Sim {
     this.label.visible = shown;
     this.root.rotation.y = this.facing;
     // Selecting a Sim gives it a quick squash-and-stretch hop (pure feedback; says nothing about the agent).
-    if (this.selected && !this.wasSelected) this.popT = 0;
+    if (this.selected && !this.wasSelected && !this.clickReaction.active) this.popT = 0;
     if (this.arriving && this.root.visible) this.root.position.y += Math.abs(Math.sin(performance.now() / 160)) * 0.05; // bouncy, excited walk-in
     this.wasSelected = this.selected;
     const base = (this.root.userData.baseScale ??= this.root.scale.x);
@@ -501,8 +602,22 @@ export class Sim {
       this.root.position.y += Math.max(0, Math.sin(Math.min(this.popT * 9, Math.PI))) * 0.14;
     } else this.root.scale.setScalar(base);
 
-    const pose = this.currentPose(walking, now);
+    const pose = this.clickReaction.active?.kind==='friendly' && walking ? 'stand' : this.currentPose(walking, now);
+    if (pose === 'home' && !this.homeScene) {
+      const plan=this.homePlan;
+      this.homeScene=new HomeActivityScene(this,plan);
+      if(this.activity.flavor) this.flavorUntil=now+10;
+    }
+    if(this.homeScene) {
+      const active=pose==='home';
+      this.homeScene.group.visible=active;
+      for(const g of this.homeScene.held)g.visible=active;
+      if(active && this.homePlan){const c=this.homePlan.center;this.root.position.set(c.x,FLOOR_Y+this.lot.floorY(this.floor),c.z);this.root.rotation.y=this.homePlan.face;}
+    }
     this.animate(pose, t, dt);
+    // Reapply structural sleep/bath support even while choreography time is frozen.
+    if(pose==='home')this.homeScene?.update(this.clickReaction.active?0:dt,matchMedia('(prefers-reduced-motion: reduce)').matches);
+    this.pulseCareScene(pose==='home' && !walking && !this.clickReaction.active);
     if (pose === 'globe') this.lot.globeSpin = 1;
     if (pose === 'sip') this.lot.coffeeBusy = 1;
     if (this.laptop) this.laptop.visible = !['wave', 'cheer'].includes(pose);
@@ -518,6 +633,25 @@ export class Sim {
     this.plumbob.userData.material.emissiveIntensity = waiting ? 3.6 + Math.sin(t * 6) * 1.2 : this.state === 'off_duty' ? 0.35 : 2.2;
 
     this.updateLabel();
+  }
+
+  pulseCareScene(active) {
+    const p=this.character?.care?.pending;
+    if(!active || !p || this.activity?.careId!==p.id || document.hidden || this.observationConnected===false || this.carePulseSending || performance.now()<(this.nextCarePulse || 0)) return;
+    this.nextCarePulse=performance.now()+750;this.carePulseSending=true;
+    fetch('/api/care',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({project:this.lot.project,agentId:this.character.id,action:'scene',pendingId:p.id,sequence:p.sequence+1,floor:this.floor,x:this.pos.x,z:this.pos.y})})
+      .then(async r=>{const data=await r.json();if(!r.ok)throw Error(data.error || 'Care scene request failed.');this.careError=null;this.receiveCare(data.character);if(data.character.care.revision>=this.character.care.revision)this.character=data.character;})
+      .catch(error=>{this.careError=error.message || 'Care scene connection failed.';this.nextCarePulse=performance.now()+750;})
+      .finally(()=>{this.carePulseSending=false;});
+  }
+
+  cancelBlockedCare(pending) {
+    if(this.cancellingCare===pending.id)return;
+    this.cancellingCare=pending.id;
+    fetch('/api/care',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({project:this.lot.project,agentId:this.character.id,action:'cancel',id:crypto.randomUUID(),revision:this.character.care.revision})})
+      .then(async r=>{const data=await r.json();if(!r.ok)throw Error(data.error || 'Care cancellation failed.');if(data.character.care.revision>=this.character.care.revision)this.character=data.character;})
+      .catch(error=>{this.careError+=' '+error.message;})
+      .finally(()=>{this.cancellingCare=null;});
   }
 
   receiveCare(character, replay = false) {
@@ -779,6 +913,9 @@ export class Sim {
         break;
     }
 
+    if(pose==='home' && this.homeScene) this.homeScene.pose(T, matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : this.homeScene.age, armIK, build);
+    if(this.observationConnected===false && this.staleClickBase)Object.assign(T,this.staleClickBase);
+    this.clickReaction.compose(this,T,dt);
     // Ease joints toward targets: snappy while walking, softer otherwise.
     const k = 1 - Math.exp(-dt * (pose === 'walk' || pose === 'laptop_walk' ? 18 : 10));
     const J = this.joints;
@@ -786,6 +923,7 @@ export class Sim {
 
     const p = this.parts;
     p.body.position.y = J.bodyY;
+    if(pose!=='home'){p.body.rotation.x=0;p.body.position.z=0;p.legL.visible=p.legR.visible=true;}
     p.spine.rotation.set(J.lean, J.twist, 0);
     p.legL.rotation.x = J.legL;
     p.legR.rotation.x = J.legR;
@@ -836,11 +974,12 @@ export class Sim {
     const chip = this.observationConnected !== false && this.labelMode === 'chip' && !compact;
     const stateIcon = icon(this.walking && !stale ? 'navigation' : STATE_ICON[state]);
     const careReceived = performance.now() / 1000 < this.careReceivedUntil && !stale && !['waiting_for_user','error'].includes(state);
+    const homeLabel = !stale && (this.activity?.homeId ? (this.walking ? `Approaching · ${homeActivity(this.activity.homeId)?.label}` : homeActivity(this.activity.homeId)?.label) : this.homeUnavailable);
     const detail = this.selected && !this.detailSuppressed && !stale && this.labelMode === 'full' && !['waiting_for_user','error'].includes(state) ? `<span class="b-resident-detail">${escapeHtml(assignedRole(this.character?.assignedRole)?.title || '')}${this.character?.care ? `<small>Lv ${this.residentLevel || 1} &middot; Happiness ${this.character.happiness}/100 (simulated)</small>` : ''}</span>` : '';
     const html = compact
       ? `<span class="b-icon">${stateIcon}</span>`
       : `<span class="b-icon">${stateIcon}</span>` +
-        `<span class="b-text"><b>${escapeHtml(this.name)}</b>${detail}${canPromptFromStatus(this.truth)?`<button type="button" class="b-state" data-prompt-sim aria-label="${escapeHtml(text)} · Open chat">${escapeHtml(text)}</button>`:`<span class="b-state">${escapeHtml(text)}</span>`}${careReceived ? '<small class="b-care-feedback">Care received &middot; simulated</small>' : ''}</span>`;
+        `<span class="b-text"><b>${escapeHtml(this.name)}</b>${detail}${canPromptFromStatus(this.truth)?`<button type="button" class="b-state" data-prompt-sim aria-label="${escapeHtml(text)} · Open chat">${escapeHtml(text)}</button>`:`<span class="b-state">${escapeHtml(text)}</span>`}${homeLabel ? `<small>${escapeHtml(homeLabel)}</small>` : ''}${careReceived ? '<small class="b-care-feedback">Care received &middot; simulated</small>' : ''}</span>`;
     if (html !== this.labelHtml) {
       this.bubbleEl.innerHTML = html;
       this.labelHtml = html;
@@ -898,6 +1037,8 @@ export class Sim {
   }
 
   dispose() {
+    this.clickReaction.cancel();
+    this.stopHomeActivity();
     this.release();
     this.lot.group.remove(this.root);
     this.labelEl.remove();

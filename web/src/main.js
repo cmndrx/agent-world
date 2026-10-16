@@ -643,6 +643,7 @@ let inspectedLot = null;
 const floorPicker = new FloorPicker({ onPick: (lot, floor) => lot.setViewFloor(floor) });
 
 function select(sim) {
+  if (selected && selected !== sim) selected.clickReaction.cancel();
   if (selected) selected.selected = false;
   // Letting go of a Sim leaves the camera where it is.
   if (!sim && followSelected) camFocus.copy(rig.target).setY(0.12);
@@ -781,7 +782,7 @@ renderer.domElement.addEventListener('click', (e) => {
   const find = !photo.active && pickFind();
   if (find) return explore.collect(find);
   const sim = pick();
-  if (sim) select(sim);
+  if (sim) { if(!photo.active)sim.clickReaction.start(sim,camera,matchMedia('(prefers-reduced-motion: reduce)').matches); select(sim); }
   else ui.close();
 });
 // Double-click a home to glide in and look inside (the roof lifts as you get close).

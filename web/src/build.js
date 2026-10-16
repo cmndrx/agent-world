@@ -1,3 +1,4 @@
+import { tvMounts } from '../../shared/tv-mounts.mjs';
 // Build mode: decorate homes (place / move / rotate / delete decor) and repaint them.
 // Purely cosmetic (simulation layer): it never changes what is shown as true about agents.
 // Saves through POST /api/style; the bridge validates against shared/style.mjs. See docs/GAMEPLAY.md.
@@ -390,7 +391,7 @@ export class BuildMode {
     const p = this.pointerSpot();
     if (!p) return;
     const { item, rot, moving } = this.holding;
-    this.ghost.position.set(p.x, 0.12, p.z);
+    this.ghost.position.set(p.screenX ?? p.x, 0.12, p.screenZ ?? p.z);
     this.ghost.rotation.y = -rot * (Math.PI / 2);
     const check = this.lot.canPlace(item, p.x, p.z, rot, moving);
     this.ghostOk = check.ok;
@@ -417,12 +418,12 @@ export class BuildMode {
       const { item, rot, moving } = this.holding;
       if (moving) {
         const it = home.decor.find((d) => d.id === moving);
-        Object.assign(it, { x: this.spot.x, z: this.spot.z, rot });
+        Object.assign(it, { x: this.spot.x, z: this.spot.z, rot, ...(item==='fireplace_tv'?{anchor:this.spot.anchor}:{}) });
         this.drop();
         this.commit(home, 'Moved.');
       } else {
         const id = Math.random().toString(36).slice(2, 10);
-        home.decor.push({ id, item, x: this.spot.x, z: this.spot.z, rot });
+        home.decor.push({ id, item, x: this.spot.x, z: this.spot.z, rot, ...(item==='fireplace_tv'?{anchor:this.spot.anchor}:{}) });
         this.commit(home);
         this.pointerMoved = true; // keep placing more of the same item
       }

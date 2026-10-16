@@ -2,6 +2,7 @@
 // passing cars, birds, street furniture and a distant skyline. Nothing here reflects agent activity.
 
 import * as THREE from 'three';
+import { BirdFlock } from './birds.js';
 import { LOT_D, LOT_W } from './lot.js';
 import { PALETTE, box, cyl, ico, mat, mergeStatic, rng } from './models.js';
 import { entranceTile, key, localToWorld, roadMap, roadShape, tileCenter } from '../../shared/town.mjs';
@@ -173,12 +174,8 @@ export class Landscape {
 
   /** A small flock that crosses the sky every so often during the day. */
   buildBirds() {
-    const geo = new THREE.BufferGeometry();
-    // Two wings as thin triangles, joined at the body.
-    geo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, -0.5, 0, 0.55, 0.15, 0, 0.05, 0, 0, 0, -0.5, 0, -0.55, 0.15, 0, -0.05], 3));
-    geo.computeVertexNormals();
-    this.birds = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ color: 0x2a2f3c, side: THREE.DoubleSide }), 9);
-    this.birds.frustumCulled = false;
+    this.birdFlock = new BirdFlock();
+    this.birds = this.birdFlock.root;
     this.birds.visible = false;
     this.flock = { t: -20, from: new THREE.Vector3(), dir: new THREE.Vector3() };
     this.group.add(this.birds);
@@ -292,20 +289,6 @@ export class Landscape {
     const k = t - f.t;
     this.birds.visible = k < 30;
     if (!this.birds.visible) return;
-    const m = new THREE.Matrix4();
-    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(-f.dir.z, f.dir.x));
-    const s = new THREE.Vector3();
-    const p = new THREE.Vector3();
-    for (let i = 0; i < 9; i++) {
-      const row = Math.ceil(i / 2);
-      const side = i % 2 ? 1 : -1;
-      p.copy(f.from).addScaledVector(f.dir, k * 10 - row * 1.6);
-      p.x += side * row * 1.4 * -f.dir.z;
-      p.z += side * row * 1.4 * f.dir.x;
-      p.y += Math.sin(t * 0.8 + i) * 0.3;
-      const flap = 0.4 + Math.abs(Math.sin(t * 7 + i * 0.7)) * 0.8;
-      this.birds.setMatrixAt(i, m.compose(p, q, s.set(1.4, flap, 1.4)));
-    }
-    this.birds.instanceMatrix.needsUpdate = true;
+    this.birdFlock.update(k, f.from, f.dir, matchMedia('(prefers-reduced-motion: reduce)').matches);
   }
 }

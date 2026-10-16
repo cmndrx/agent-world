@@ -125,7 +125,7 @@ export const D = (x, z, look = 'n', bed = null) => [x, z, look, bed];
  */
 export const FLOORPLANS = {
   cottage: {
-    rooms: [['Kitchen', 'tile', -6.95, -4.95, -2.2, -3.4], ['Bedroom', 'carpet', 2.86, -4.95, 6.95, -1.06], ['Living room', null, -6.95, 0.6, -2.0, 4.95], ['Study', null, 2.9, -0.9, 6.95, 4.95]],
+    rooms: [['Kitchen', 'tile', -6.95, -4.95, -2.2, -3.4], ['Bedroom', 'carpet', 2.86, -4.95, 6.95, -1.06], ['Living room', null, -6.95, 0.6, -2.0, 4.95], ['Study', null, 2.9, -0.9, 6.95, 4.95], ['Activity nook', null, -1.8, 1.0, 1.4, 4.95]],
     partitions: [[2.8, -4.95, 2.8, -1.0], [2.8, -1.0, 6.95, -1.0, [3.7]]],
     items: [
       I('kitchen', -5.05, -4.6, 's', { len: 3.8, coffee: 1.3 }),
@@ -182,7 +182,7 @@ export const FLOORPLANS = {
     gallery: [-4.6, -4.96],
   },
   duplex: {
-    rooms: [['Kitchen', 'tile', -6.95, -4.95, -0.06, -3.6], ['Kitchen', 'tile', 0.06, -4.95, 6.95, -3.6], ['Living room', 'carpet', -6.95, 2.0, -3.2, 4.95], ['Living room', 'carpet', 3.2, 2.0, 6.95, 4.95]],
+    rooms: [['Kitchen', 'tile', -6.95, -4.95, -0.06, -3.6], ['Kitchen', 'tile', 0.06, -4.95, 6.95, -3.6], ['Living room', 'carpet', -6.95, 2.0, -3.2, 4.95], ['Living room', 'carpet', 3.2, 2.0, 6.95, 4.95], ['Activity nook', null, -6.8, -.4, -2.1, 1.8], ['Activity nook', null, 2.1, -.4, 6.8, 1.8]],
     partitions: [[0, -4.95, 0, 4.95]],
     items: [
       // West home.
@@ -216,7 +216,7 @@ export const FLOORPLANS = {
   'townhouse-row': {
     // Four narrow homes behind party walls, each entered by its own front door: kitchen across the back, a desk
     // against a party wall, stairs up from the front hall.
-    rooms: [['Kitchen', 'tile', -6.95, -4.95, -3.66, -3.9], ['Kitchen', 'tile', -3.54, -4.95, -0.06, -3.9], ['Kitchen', 'tile', 0.06, -4.95, 3.54, -3.9], ['Kitchen', 'tile', 3.66, -4.95, 6.95, -3.9]],
+    rooms: [['Kitchen', 'tile', -6.95, -4.95, -3.66, -3.9], ['Kitchen', 'tile', -3.54, -4.95, -0.06, -3.9], ['Kitchen', 'tile', 0.06, -4.95, 3.54, -3.9], ['Kitchen', 'tile', 3.66, -4.95, 6.95, -3.9], ...[[-6.95,-3.66],[-3.54,-.06],[.06,3.54],[3.66,6.95]].map(([x0,x1])=>['Activity nook',null,x0,-.9,x1,2.15])],
     partitions: [[-3.6, -4.95, -3.6, 4.95], [0, -4.95, 0, 4.95], [3.6, -4.95, 3.6, 4.95]],
     items: [
       // Home 1 (door −6.1): the reader's home.

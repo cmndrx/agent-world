@@ -15,7 +15,7 @@ function soft(color, roughness = 0.7) {
 }
 
 /** Low-poly pet facing +z. Returns the root plus parts we animate. */
-function buildPet(kind, seed) {
+export function buildPet(kind, seed) {
   const r = rng(seed);
   const coatColor = COATS[kind][Math.floor(r() * COATS[kind].length)];
   const coat = soft(coatColor);
@@ -155,6 +155,7 @@ export class Pet {
    * @param {THREE.Vector3|null} avatar where the camera is looking, when zoomed in close
    */
   update(dt, t, avatar) {
+    if(this.activityOwner)return;
     const speed = this.kind === 'dog' ? 2.6 : this.kind === 'bunny' ? 1.8 : 2.1;
     // Come say hi when you zoom in close by (same lot).
     let greet = null;

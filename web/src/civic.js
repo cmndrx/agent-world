@@ -5,6 +5,7 @@
 // They're scenery: nothing here reflects agent work.
 
 import * as THREE from 'three';
+import { CivicStaff } from './civic-staff.js';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { CIVIC, CIVIC_KINDS, civicTransform } from '../../shared/town.mjs';
 import { icon } from './icons.js';
@@ -592,6 +593,8 @@ export class CivicBuildings {
     for (const [kind, c] of placed) {
       if (this.items.has(kind)) continue;
       const b = buildCivic(kind);
+      b.staff = new CivicStaff(kind, CIVIC_KINDS.indexOf(kind) + 1);
+      b.root.add(b.staff.root);
       const t = civicTransform(c);
       b.root.position.set(t.x, 0, t.z);
       b.root.rotation.y = t.yaw;
@@ -621,6 +624,7 @@ export class CivicBuildings {
   }
 
   dispose(it) {
+    it.staff?.dispose();
     it.label.element.remove();
     it.label.removeFromParent();
     this.group.remove(it.root);
@@ -636,6 +640,7 @@ export class CivicBuildings {
    */
   update(dt, t, { night = 0, camera = null, target = null, peekOpen = 60 } = {}) {
     for (const it of this.items.values()) {
+      it.staff?.update(t, globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
       for (const g of it.glows) g.material.emissiveIntensity = g.material.userData.dayGlow + night * g.material.userData.nightGlow;
       for (const p of it.puffs) {
         const k = (t * 0.12 + p.userData.phase) % 1;

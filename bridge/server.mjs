@@ -1,5 +1,6 @@
+import { careEligibility, validateTelevisions } from './care-resources.mjs';
 import {BrowserVideo} from './browser-video.mjs';
-import { initializeCare, applyCare, advanceCare } from '../shared/care.mjs';
+import { initializeCare, applyCare, advanceCare, pulseCare, applySavedInterests, CARE_ACTIONS } from '../shared/care.mjs';
 import {roommateView,recruitCandidate,inspectionInstruction} from '../shared/roommates.mjs';
 import { readConnections } from './connections.mjs';
 import { resetTown } from './game-reset.mjs';
@@ -292,7 +293,7 @@ setInterval(() => {
   }
 }, 2000).unref();
 const connectionSnapshot = () => readConnections(path.join(homeDir(), 'connections'));
-const snapshot = () => ({ town: townView(), foundation: foundationSnapshot(Object.values(world.households).map(presentedHome), gameplay), connections: connectionSnapshot(), selectedProjects:allowSynthetic?null:selectedProjects, ...world.snapshot(), households: Object.values(world.households).map(presentedHome), ...productivity.snapshot(), style, gameplay, photos: listPhotos(), city, passes:passes.snapshot(), runner:runner.status(), computerUse:computerUse.snapshot() });
+const snapshot = () => ({ careProtocol: 2, town: townView(), foundation: foundationSnapshot(Object.values(world.households).map(presentedHome), gameplay), connections: connectionSnapshot(), selectedProjects:allowSynthetic?null:selectedProjects, ...world.snapshot(), households: Object.values(world.households).map(presentedHome), ...productivity.snapshot(), style, gameplay, photos: listPhotos(), city, passes:passes.snapshot(), runner:runner.status(), computerUse:computerUse.snapshot() });
 const inbox = new Inbox(eventsDir(), { onError: (err) => console.warn('[inbox]', err.message) });
 for (const e of inbox.readAll()) {
   world.apply(e);
@@ -329,11 +330,15 @@ function careBusy(project, character) {
     || passes.snapshot().proposals.some(r => r.project === project && r.slot === character.slot && r.status === 'approved')
     || [...world.sessions.values()].some(s => s.project === project && s.slot === character.slot && world.isLive(s) && !['idle','done'].includes(s.state));
 }
+function eligibilityFor(home, character, interest, ignoreReservations=false) {
+  const level=progress({households:[home],runs:passes.snapshot().runs},style,gameplay).levels[home.project];
+  return careEligibility({home,character,style,level,interest,ignoreReservations});
+}
 function tickCare() {
   for (const project of selectedProjects) {
     const home = world.households[project];
     let changed = false;
-    for (const c of residentCharacters(home)) changed = advanceCare(c, { busy: careBusy(project, c) }) || changed;
+    for (const c of residentCharacters(home)) changed = advanceCare(c, { busy: careBusy(project, c), unavailable: !!c.care?.pending && eligibilityFor(home,c,CARE_ACTIONS[c.care.pending.action]?.interest).layout !== c.care.pending.layout }) || changed;
     if (changed) { persistHouseholds(); broadcast({ type: 'household', household: home }); }
   }
 }
@@ -503,6 +508,13 @@ const server = http.createServer(async (req, res) => {
     return res.end(JSON.stringify(await readUsage()));
   }
 
+  if (url.pathname === '/api/care-options' && req.method==='GET') {
+    const home=world.households[url.searchParams.get('project')];
+    const c=residentCharacters(home).find(c=>c.id===url.searchParams.get('agentId'));
+    const options={};
+    for(const [id,rule] of Object.entries(CARE_ACTIONS)) options[id]=!home || !selectedProjects.includes(home.project) ? 'Care is unavailable in inactive homes.' : !c ? 'Choose an active resident.' : homeBuildState(gameplay,home.project).status!=='built' ? 'Finish building this home first.' : careBusy(home.project,c) ? 'Available when this resident is free.' : eligibilityFor(home,c,rule.interest).reason;
+    res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'});return res.end(JSON.stringify({protocol:2,options}));
+  }
   if (url.pathname === '/api/state') {
     res.writeHead(200, { 'content-type': 'application/json' });
     return res.end(JSON.stringify(snapshot()));
@@ -524,7 +536,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (['/api/town','/api/care','/api/home-level','/api/roommates','/api/schedules','/api/codex-projects','/api/voice','/api/computer-use','/api/pass-attachment','/api/gameplay','/api/pass-cancel','/api/pass-chat','/api/pass-proposal', '/api/pass-decision', '/api/pass-resolve', '/api/projects', '/api/conversations', '/api/conversation-title', '/api/plan', '/api/task', '/api/briefing-seen', '/api/style', '/api/milestone', '/api/photo-delete', '/api/review', '/api/artifact-preview'].includes(url.pathname) && req.method === 'POST') {
+  if (['/api/care-preferences','/api/town','/api/care','/api/home-level','/api/roommates','/api/schedules','/api/codex-projects','/api/voice','/api/computer-use','/api/pass-attachment','/api/gameplay','/api/pass-cancel','/api/pass-chat','/api/pass-proposal', '/api/pass-decision', '/api/pass-resolve', '/api/projects', '/api/conversations', '/api/conversation-title', '/api/plan', '/api/task', '/api/briefing-seen', '/api/style', '/api/milestone', '/api/photo-delete', '/api/review', '/api/artifact-preview'].includes(url.pathname) && req.method === 'POST') {
     res.setHeader('content-type', 'application/json');
     // Browser forms from other websites must not alter the local catalog.
     if (!req.headers['content-type']?.startsWith('application/json')) {
@@ -596,13 +608,29 @@ const server = http.createServer(async (req, res) => {
         });
         res.writeHead(200); return res.end(JSON.stringify({ ok: true, result }));
       }
+      if (url.pathname === '/api/care-preferences') {
+        const home=world.households[input.project];
+        const character=home?.characters.find(c=>c.id===input.agentId);
+        if(!character || input.action!=='interests') throw Error('Choose a saved resident and interests only.');
+        if(!Array.isArray(input.interestIds)) throw Error('Choose supported interests.');
+        for(const interest of input.interestIds){
+          const eligibility=eligibilityFor(home,character,interest,true);
+          if(eligibility.reason) throw Error(eligibility.reason);
+        }
+        const changed=applySavedInterests(character,input);
+        if(!changed.duplicate){home.characters[home.characters.indexOf(character)]=changed.character;persistHouseholds();broadcast({type:'household',household:home});}
+        res.writeHead(200);return res.end(JSON.stringify({ok:true,...changed}));
+      }
       if (url.pathname === '/api/care') {
         const home = world.households[input.project];
         if (!home || !selectedProjects.includes(input.project)) throw Error('Choose a home in this town.');
         if (homeBuildState(gameplay, input.project).status !== 'built') throw Error('Finish building this home first.');
         const character = residentCharacters(home).find(c => c.id === input.agentId);
         if (!character) throw Error('Choose an active resident in this home.');
-        const changed = applyCare(character, input, { busy: careBusy(input.project, character) });
+        const interest=CARE_ACTIONS[input.action]?.interest || CARE_ACTIONS[character.care?.pending?.action]?.interest;
+        const eligibility=interest ? eligibilityFor(home,character,interest) : null;
+        const context={busy:careBusy(input.project,character),eligibility};
+        const changed=input.action==='scene' ? pulseCare(character,input,context) : applyCare(character,input,context);
         if (!changed.duplicate) {
           home.characters[home.characters.indexOf(character)] = changed.character;
           persistHouseholds();
@@ -804,7 +832,9 @@ const server = http.createServer(async (req, res) => {
           photos: photoIds(),
           now: Date.now(),
         };
-        style = applyStyleChange(style, input, known);
+        const nextStyle = applyStyleChange(style, input, known);
+        if(input.kind==='home') validateTelevisions(nextStyle.homes[input.key],style.homes[input.key],known.levels[input.key]);
+        style=nextStyle;
         writeStyle();
         res.writeHead(200); return res.end(JSON.stringify({ ok: true }));
       }

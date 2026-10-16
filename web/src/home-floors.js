@@ -77,7 +77,7 @@ const townhouseUpper = () => {
     name: 'Upstairs', y: GROUND_H, h: 2.7, rects: FULL,
     landings: homes.map(([, , sx]) => [sx, 1.9, 'n']),
     plan: {
-      rooms: parts.map((p) => p.room),
+      rooms: [...parts.map((p) => p.room), ...homes.map(([x0,x1])=>['Bedroom',null,x0,.46,x1,4.95])],
       partitions: [[-3.6, -4.95, -3.6, 4.95], [0, -4.95, 0, 4.95], [3.6, -4.95, 3.6, 4.95], ...parts.map((p) => p.partition)],
       items: parts.flatMap((p) => p.items),
       // Each home's first study desk owns that home's bed; the second resident shares the house.

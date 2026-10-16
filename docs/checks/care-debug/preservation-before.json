@@ -1,0 +1,314 @@
+[
+    {
+        "path":  "bridge/care-resources.mjs",
+        "hash":  "37742F2288B055EC311762CC28CED0746E807B99399726A1A53459FC7000AE4B"
+    },
+    {
+        "path":  "bridge/server.mjs",
+        "hash":  "4B78A4E1F7814E39CA9FCBF673A66DAAFA5AC64BD77BC7D4C7A2BFB0F5A4EDD7"
+    },
+    {
+        "path":  "docs/checks/home-activities/app-build.log",
+        "hash":  "697D6726E24126391DB2B3A076222423069AF974673C54A4CEE7F4C510A39E6F"
+    },
+    {
+        "path":  "docs/checks/home-activities/focused.log",
+        "hash":  "89C864EEB50449FE66CB30DE12EF181A0FB412935FB25A01BCD35049F60B256F"
+    },
+    {
+        "path":  "docs/checks/home-activities/full-partial.log",
+        "hash":  "CECDAD1BD80BF49C8AF76A238C91733D43646E38D3661627FD5F4B38A2E4CA46"
+    },
+    {
+        "path":  "docs/checks/home-activities/npm-test.log",
+        "hash":  "D1448C36FDC55B308D90C9330FFB9E8B3A53133428E7E4DC85A670B45D8DACE1"
+    },
+    {
+        "path":  "docs/checks/home-activities/package-parity.json",
+        "hash":  "2643DDEBE13E757D23C9332163C5670ACC061A2E1D59C3EDAB2BA4236D63E030"
+    },
+    {
+        "path":  "docs/checks/interest-care-app-build.log",
+        "hash":  "CB56DAFBDDEB6EADBF0E9E303F9322EFD0E80A9843E16A54B825B29CD3D266B1"
+    },
+    {
+        "path":  "docs/checks/interest-care-app-build-final.log",
+        "hash":  "6509A6D54A274BD278CFF62A3E6BDFD2242340F2B58564E900CC7E9EF545C86F"
+    },
+    {
+        "path":  "docs/checks/interest-care-explicit-tests.log",
+        "hash":  "A751395771FD9582233212FA5BC8990F0EA7383D0B70D594EB5C296047A792B7"
+    },
+    {
+        "path":  "docs/checks/interest-care-focused-final.log",
+        "hash":  "A3AE69017A52FAFF624CF1274EA8CC4AF6D59F02DAB3CE7B044667F016244B09"
+    },
+    {
+        "path":  "docs/checks/interest-care-focused-tests.log",
+        "hash":  "D361ABB8572E723183EFBCBE42D997B7AADC409741E836E77083009649D0DBB0"
+    },
+    {
+        "path":  "docs/checks/interest-care-full-tests.log",
+        "hash":  "6E6BF3A922D1328054E4AB10C3C93D6D0054EC08E8C9387D7E4FDB41516113BB"
+    },
+    {
+        "path":  "docs/checks/interest-care-implementation-preservation.json",
+        "hash":  "6C4DCFCB13C69D13ABCD940A72791CE94E8012CD0FC265FC4CF4E11095EF873E"
+    },
+    {
+        "path":  "docs/checks/interest-care-package-parity.json",
+        "hash":  "AFCDC4D9704B4B76505B646FBEF2BD2DA1B0DD435C75404AD8FBE761D429D2D3"
+    },
+    {
+        "path":  "docs/checks/interest-care-package-parity-final.json",
+        "hash":  "8E4A46926953F3633F0EBD1546902590C2B9C40F24CED2A41BB50179FA8D80E7"
+    },
+    {
+        "path":  "docs/checks/interest-care-preservation-baseline.json",
+        "hash":  "41644B6D0A946736DA854D0138A38561554F9C59AB30D9F3CD93E64469132274"
+    },
+    {
+        "path":  "docs/checks/interest-care-review-results.json",
+        "hash":  "6AEE063304EF3C9C1FC613BACE5C6E553CAD269A4C12300D5BF0CA59AF1DB85A"
+    },
+    {
+        "path":  "docs/checks/interest-care-signature.json",
+        "hash":  "6DCCFE75BC5A10DDF4ECBC287C6C1CC816BF3A390C6019871FFE2F3D4E42AD14"
+    },
+    {
+        "path":  "docs/checks/interest-care-signature-final.json",
+        "hash":  "6DCCFE75BC5A10DDF4ECBC287C6C1CC816BF3A390C6019871FFE2F3D4E42AD14"
+    },
+    {
+        "path":  "docs/checks/town-characters/app-build.log",
+        "hash":  "FB0D42014EB158E98DB63308571F9FDB37C25A04A8DBA030CBD544DD98B147D5"
+    },
+    {
+        "path":  "docs/checks/town-characters/focused.log",
+        "hash":  "485BEA9C9A7101858A6C40A4335CCF53BAFDBEA165AF43DE8CA8A7C7FB36FBCF"
+    },
+    {
+        "path":  "docs/checks/town-characters/package-parity.json",
+        "hash":  "2643DDEBE13E757D23C9332163C5670ACC061A2E1D59C3EDAB2BA4236D63E030"
+    },
+    {
+        "path":  "docs/checks/town-characters/preexisting-sim.diff",
+        "hash":  "9A49A3F89A152C0E94081E40A5ED6C7A76C478CE57C3FF01DC024818D6A62594"
+    },
+    {
+        "path":  "docs/checks/town-characters/preservation-results.json",
+        "hash":  "3144694F33CA2EF3C98F7FCD28218E41A1F744C135297C512AE5743190130A81"
+    },
+    {
+        "path":  "docs/checks/town-characters/preserved-hashes.json",
+        "hash":  "4878068F425B67DF60FE61BAC93215A249DB18AEBB7F9EC25D2E0071EAF5BBAD"
+    },
+    {
+        "path":  "docs/checks/town-characters/README.md",
+        "hash":  "1D88125AEBD8AC10500E755FB358DD3E5F55C2B7ED077A22F9DB2C9922332653"
+    },
+    {
+        "path":  "docs/checks/town-characters/runtime.json",
+        "hash":  "7075F4F352ED2FA915D3281D79014C2A09DA5AEED9B2052FE76F52F378E94EC0"
+    },
+    {
+        "path":  "docs/checks/town-characters/signature.json",
+        "hash":  "A9C2D8FE5D7AE3D07958E1BDACCF6B449D8C156E91E771D8693F49065B71013F"
+    },
+    {
+        "path":  "docs/HOME_ACTIVITY_VISUAL_SPEC.md",
+        "hash":  "6946B87A62C9AC3FF895CAF31DDF1D5EBE5E66760B448C0DA1AE5EE447CD5162"
+    },
+    {
+        "path":  "docs/INTEREST_CARE_DESIGN_SPEC.md",
+        "hash":  "AA0E11E071A38C62B204D0FA04B18D1E2B4F2D5185460D01316209015085DCD2"
+    },
+    {
+        "path":  "docs/INTEREST_CARE_IMPLEMENTATION.md",
+        "hash":  "F7533ECD0FA22D4172CB5C1ABA9F7F7C09A98DD859EA1ECFE48C295F2A3F6E8F"
+    },
+    {
+        "path":  "docs/INTEREST_CARE_MATRIX.md",
+        "hash":  "807902CB0D1E00588EB51B7B2ACE9BBC4BFB4515A9D1D1ACDB4D0FF728E924A2"
+    },
+    {
+        "path":  "docs/INTEREST_CARE_TEAM_BRIEF.md",
+        "hash":  "156F9CA1319E98E8EFEA6F25CEF43CF8EE9D038E2DF47A415F74DB3B2565264B"
+    },
+    {
+        "path":  "docs/NEXT_PASS.md",
+        "hash":  "20FD10D93B74A16E6F9DC866341BA207F682F04FEB23FE1BA8EC01ABDF7D46C2"
+    },
+    {
+        "path":  "docs/TOWN_CHARACTER_UPDATES_PLAN.md",
+        "hash":  "FAC2F529A78BC96AC667DF8C977C82F73E7821F8E6C43BCBDCB0F7F38B82BE4C"
+    },
+    {
+        "path":  "docs/TOWN_CHARACTER_VISUAL_SPEC.md",
+        "hash":  "72A20ACCD10375BAA09C5282EFA8AB6D31841942C814750331A1182C086403D2"
+    },
+    {
+        "path":  "package.json",
+        "hash":  "59A7B0D929029969AC9CDC1BDF6734DD4203F71FE9ECA9F65840F4AFE65CED7A"
+    },
+    {
+        "path":  "README.md",
+        "hash":  "29A9A4EE84FF0629FE0139763A3DD741CCCFFE1554F066BF16BB39FCF85CA0C4"
+    },
+    {
+        "path":  "scripts/check-home-activity-package.mjs",
+        "hash":  "662AB7F922071A89DFAAD62C20B0469621890DC65DA6D424F08D3D02809D335F"
+    },
+    {
+        "path":  "scripts/home-activity-fixture.mjs",
+        "hash":  "5EEB9378301C33C05B1E5F684714F7E208A238A342972CE60CAAB9C8F7C33FBA"
+    },
+    {
+        "path":  "scripts/interest-care-fixture.mjs",
+        "hash":  "0B0B77D944ED12524B98C8418E5E244B483757FC5B42CC3415664C0C0E06561D"
+    },
+    {
+        "path":  "scripts/test-web-assets.mjs",
+        "hash":  "7D98F17FC23D494E7999BFBB2AA74A4700268EF9E1232C8110233B3197733B1B"
+    },
+    {
+        "path":  "scripts/town-character-fixture.mjs",
+        "hash":  "C78E69CFE24155269DC53CE88A6C8C74E37060842D8BBA26D92C735F5ABA6CF5"
+    },
+    {
+        "path":  "shared/care.mjs",
+        "hash":  "92EEE196C271AEE16CBB5655C739F6C58CB6BA3E93D956797E98A4774DEC2454"
+    },
+    {
+        "path":  "shared/interest-care.mjs",
+        "hash":  "2AF4157233909E3D598AA3EC704A84A33A22C44CBF5E2DCCBA72C221346CE8AD"
+    },
+    {
+        "path":  "shared/style.mjs",
+        "hash":  "AF365501B572C846FBED9FEB817FC062C634B5FD20161F1D6CF00F1A0DFCFC1E"
+    },
+    {
+        "path":  "shared/tv-mounts.mjs",
+        "hash":  "E17F569CA4DB6EE4842C18791568AFC7AAA98ACDD722DAC9621E9146ACF25433"
+    },
+    {
+        "path":  "test/card-layout.test.mjs",
+        "hash":  "F122194CD81C62C2E2F2D527E79E03ACFC1360DACB8239F744C4A875A684DA6B"
+    },
+    {
+        "path":  "test/care.test.mjs",
+        "hash":  "A3724931671A036B2E18AD1003E6F5160105E3A6A30F70F445BE8AFCA90FC02B"
+    },
+    {
+        "path":  "test/care-api.test.mjs",
+        "hash":  "EFE8761E289C9E9973842F583CC895B0E7DED2F4CF9CC2A0AD744D6492B128F1"
+    },
+    {
+        "path":  "test/home-activities.test.mjs",
+        "hash":  "8D7A43952CF7003E54EB0CE015ECB243BE6B3EC81A0B6BB2F36EE6B24EBBAFD4"
+    },
+    {
+        "path":  "test/home-activity-scene.test.mjs",
+        "hash":  "F9F2CD16D1766D73218B3347101248EBCDA6C59350B65C2CAC6A829DB9B1A571"
+    },
+    {
+        "path":  "test/interest-care.test.mjs",
+        "hash":  "41214D1DEE4AB9BA8E68A6E1394825D5356EFB39345BC687C5156F06D29CAEFE"
+    },
+    {
+        "path":  "test/town-characters.test.mjs",
+        "hash":  "3B32658EB8CB9136B4D2B5069971B7DBA668109DE3ADCAFEDDF10778ED1ED074"
+    },
+    {
+        "path":  "web/home-activity-fixture.html",
+        "hash":  "5C033EF93ACAFB2F889580802FE09F5DF9D6853EA2201B0037C2763E3FB94222"
+    },
+    {
+        "path":  "web/interest-care-fixture.html",
+        "hash":  "966DE15AD95DB1624053C174B1FC915364DD2E32AAD67614F66BF908FA599210"
+    },
+    {
+        "path":  "web/src/birds.js",
+        "hash":  "FA69C0F2AB4CF6074BF3FA38912F9870763F34EEC9085D335D30B59A94E17C57"
+    },
+    {
+        "path":  "web/src/build.js",
+        "hash":  "F0919A8249FED7288D88C60E9A2A002D26536F188BDEF5A4D94FA49A07C431FE"
+    },
+    {
+        "path":  "web/src/care.js",
+        "hash":  "2AB2C6801A571C42A2C7EDAE15A0C2A090B2BDAC7E1B40082BA9004A4D272670"
+    },
+    {
+        "path":  "web/src/care-feedback.js",
+        "hash":  "2B7C4CBCEA489474B9600C47FCD772541F66AC0C3C3F857B6384B558D0683609"
+    },
+    {
+        "path":  "web/src/civic.js",
+        "hash":  "007BA1AAF0F89D294700AEF1FFD495035680CD8E87BB32122B1EF45942459A88"
+    },
+    {
+        "path":  "web/src/civic-staff.js",
+        "hash":  "4BF0658675F4CA5014934A5C15ED706346B524D9CC35E571B3435B9CD9391518"
+    },
+    {
+        "path":  "web/src/click-reaction.js",
+        "hash":  "E028936CEA743301879BED6F6B0CFC76C3819D5173E1360A64BCF3198D4A8DC4"
+    },
+    {
+        "path":  "web/src/decor.js",
+        "hash":  "F4F98DB2114B4EDDA5845D3B047B355F4CF3ABEB8699C8E7B31AFEC1CFF83C85"
+    },
+    {
+        "path":  "web/src/home-activities.js",
+        "hash":  "F6F30BD5697F13FEB21EED94987BCB4CEF6369CCD1226246D6D1D60CE117D985"
+    },
+    {
+        "path":  "web/src/home-activity-fixture.js",
+        "hash":  "D997422C445C7745EF779997C317690C69C0FC78D511ACC8C616652043C16194"
+    },
+    {
+        "path":  "web/src/home-activity-scene.js",
+        "hash":  "BAEB7E3B2ECAB4038FEB34DAE024AB9E4DAEB9CD4CA260CE4BD8E26074B9BC0D"
+    },
+    {
+        "path":  "web/src/home-floorplans.js",
+        "hash":  "8FE63243627CBFB6D481EE11943D648E88F0FE043F4FE9BA876898CBC7D6FD57"
+    },
+    {
+        "path":  "web/src/home-floors.js",
+        "hash":  "6F66973CCCD37170C0604EB0D2F015F80C15124E7977402B5A91ABF7D5944314"
+    },
+    {
+        "path":  "web/src/interest-care-fixture.js",
+        "hash":  "78AC2C3C76A6E3E2E45CF6745DBF74B32E2C798F0284E3691C5E5535EBBD1B6D"
+    },
+    {
+        "path":  "web/src/landscape.js",
+        "hash":  "AD22C2845AEF9A09DE61E95CC30A8C4C12FB2FA5DF150B8023747BC7B4B42DF6"
+    },
+    {
+        "path":  "web/src/lot.js",
+        "hash":  "C6E1E2868DCC8DBC0C0D1839280522A24453CE6F564A9C7A1131D9171935119D"
+    },
+    {
+        "path":  "web/src/main.js",
+        "hash":  "0607A5561C2C3AD4299A08B1CD54C84A5E30834A8052CE993C5E54C5700AEEC0"
+    },
+    {
+        "path":  "web/src/pets.js",
+        "hash":  "0BA8008191E0B7FBD1F429390458F5623049502F06156659963E356840506BAB"
+    },
+    {
+        "path":  "web/src/sim.js",
+        "hash":  "D2F3459E3A5796A63E9C94A6D2915455E83C879F54CF2D6CCB6E643CB9743C3E"
+    },
+    {
+        "path":  "web/src/town-character-fixture.js",
+        "hash":  "F36842B59FD40AC259C3C117620798D10245E50101520EC2B92F805566EBA9AA"
+    },
+    {
+        "path":  "web/town-character-fixture.html",
+        "hash":  "505FDE6D96D6F6E379ADAA3C1058A7BAEBBA71B03E25B00E6F9D1DD445E8536A"
+    }
+]

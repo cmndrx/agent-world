@@ -4,7 +4,7 @@
 // The catalog itself (names, footprints, where items may go) lives in shared/style.mjs.
 
 import * as THREE from 'three';
-import { buildFloorLamp, buildRug, buildSideTable } from './furniture.js';
+import { buildFloorLamp, buildRug, buildSideTable, buildTV } from './furniture.js';
 import { PALETTE, box, buildBush, buildTree, cyl, ico, mat, mergeStatic, rng, softBox } from './models.js';
 import { waterMaterial } from './fx.js';
 
@@ -29,6 +29,12 @@ function pot(g, color = PALETTE.pot, r = 0.2, h = 0.38) {
 }
 
 const BUILDERS = {
+  television(g) { g.add(buildTV()); },
+  fireplace_tv(g) {
+    g.add(box(1.12,.63,.08,0x2a2f3c,0,1.80,0));
+    g.add(box(1.02,.53,.012,0x527d84,0,1.80,.047));
+    g.add(box(.30,.10,.012,0x9ab6b2,-.22,1.84,.055));
+  },
   fern(g) {
     const h = pot(g);
     for (let i = 0; i < 9; i++) {

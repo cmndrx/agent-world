@@ -1,3 +1,4 @@
+import { tvMounts, mountedTV } from '../../shared/tv-mounts.mjs';
 // A lot is one project's house: a room with Sims-style cutaway walls, furniture, and the
 // "stations" Sims use. All coordinates are lot-local. The room spans x -7..7, z -5..5; the street is at +z.
 
@@ -22,6 +23,7 @@ import { NavGrid } from './nav.js';
 import { Pet } from './pets.js';
 import { Screen } from './screens.js';
 import { Crew } from './crew.js';
+import { copyNav } from './home-activities.js';
 
 const photoLoader = new THREE.TextureLoader();
 const photoTextures = new Map();
@@ -216,7 +218,15 @@ export class Lot {
   }
 
   /** Navigation grid over the lot (or an upper floor), rebuilt lazily when furniture or decor changes. */
-  getNav(floor = 0) {
+  getNav(floor = 0, owner = null) {
+    let nav = this.baseNav(floor);
+    for (const [sim, station] of this.homeActivityClaims || []) {
+      if (sim !== owner && station.floor === floor && !station.existing) nav = copyNav(nav, station.rect, 0);
+    }
+    return nav;
+  }
+
+  baseNav(floor = 0) {
     if (floor > 0) {
       if (!this.floorNavs[floor]) {
         const f = this.building.floors[floor];
@@ -342,9 +352,11 @@ export class Lot {
     const items = fp.items.filter((it) => !(OPTIONAL.has(it.kind) && it.rect && decorRects.some((d) => overlaps(it.rect, d))));
     const key = `${fp.key}|${this.interior}|${items.length}`;
     if (key === this.interiorKey) return;
+    this.clearHomeActivities();
     const planChanged = fp.key !== this.floorplan?.key;
     this.interiorKey = key;
     this.floorplan = fp;
+    this.homeActivityItems = items;
     this.building = bp;
     this.disposeObject(this.interiorGroup);
     this.disposeObject(this.partitionGroup);
@@ -671,6 +683,7 @@ export class Lot {
   setDecor(list) {
     const key = JSON.stringify(list);
     if (key === this.decor.key) return;
+    this.clearHomeActivities();
     this.decor.key = key;
     const d = this.decor;
     for (const child of [...d.group.children]) {
@@ -684,7 +697,9 @@ export class Lot {
     for (const it of list) {
       if (!(it.item in DECOR)) continue;
       const built = buildDecor(it.item, this.seed + [...it.id].reduce((a, c) => a + c.charCodeAt(0), 0));
-      built.group.position.set(it.x, 0.12, it.z);
+      const mount=it.item==='fireplace_tv' ? mountedTV(it,this.building?.floors[0].items || []) : null;
+      if(it.item==='fireplace_tv'&&!mount)continue;
+      built.group.position.set(mount?.screenX ?? it.x, 0.12, mount?.screenZ ?? it.z);
       built.group.rotation.y = -it.rot * (Math.PI / 2);
       built.group.userData.decorId = it.id;
       built.group.traverse((o) => (o.userData.decorId = it.id));
@@ -701,6 +716,12 @@ export class Lot {
     this.nav = null;
   }
 
+  clearHomeActivities() {
+    for(const [sim] of [...(this.homeActivityClaims || [])]) {
+      sim.stopHomeActivity();sim.release();sim.activity=null;sim.path=[];
+    }
+  }
+
   /**
    * Can `item` go at (x, z, rot)? Keeps rooms and yards separate, avoids furniture and other decor,
    * and makes sure every desk, waiting spot and station stays reachable from the street.
@@ -709,6 +730,12 @@ export class Lot {
   canPlace(item, x, z, rot = 0, ignoreId = null) {
     const def = DECOR[item];
     if (!def) return { ok: false, reason: 'Unknown item' };
+    if(item==='fireplace_tv') {
+      const mount=tvMounts(this.building.floors[0].items).find(m=>m.x===x&&m.z===z&&m.rot===rot);
+      if(!mount)return {ok:false,reason:'Point at a ground-floor fireplace to mount the TV.'};
+      if(this.decor.items.some(d=>d.id!==ignoreId&&d.item==='fireplace_tv'&&d.anchor===mount.anchor))return {ok:false,reason:'This fireplace already has a TV.'};
+      return {ok:true};
+    }
     const [x0, z0, x1, z1] = this.footprint(item, x, z, rot);
     const inRoom = x0 >= -6.95 && x1 <= 6.95 && z0 >= -4.95 && z1 <= 4.95;
     const overlapsRoom = x1 > -7.3 && x0 < 7.3 && z1 > -5.3 && z0 < 5.3;
@@ -1197,6 +1224,11 @@ export class Lot {
       w.userData.scale += (target - w.userData.scale) * (1 - Math.exp(-dt * 7));
       w.scale.y = w.userData.scale;
       for (const win of w.userData.windows) win.visible = w.userData.scale > 0.75;
+    }
+    for(const d of this.decor.items) if(d.item==='fireplace_tv') {
+      const m=mountedTV(d,this.building.floors[0].items);
+      const wall=m && this.walls.find(w=>w.userData.normal.dot(new THREE.Vector3(-Math.sin(-m.rot*Math.PI/2),0,-Math.cos(-m.rot*Math.PI/2)))>.9);
+      d.object.visible=!!m && view===0 && (!open || this.wallMode!=='down' && (!wall || wall.userData.scale>.75));
     }
     // Interior partitions drop to a low stub whenever the room is open (cutaway or walls down).
     const ease = 1 - Math.exp(-dt * 7);

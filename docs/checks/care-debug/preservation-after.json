@@ -1,0 +1,314 @@
+[
+    {
+        "path":  "bridge/care-resources.mjs",
+        "unchanged":  true
+    },
+    {
+        "path":  "bridge/server.mjs",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/checks/home-activities/app-build.log",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/checks/home-activities/focused.log",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/checks/home-activities/full-partial.log",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/checks/home-activities/npm-test.log",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/checks/home-activities/package-parity.json",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/checks/interest-care-app-build.log",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/checks/interest-care-app-build-final.log",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/checks/interest-care-explicit-tests.log",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/checks/interest-care-focused-final.log",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/checks/interest-care-focused-tests.log",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/checks/interest-care-full-tests.log",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/checks/interest-care-implementation-preservation.json",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/checks/interest-care-package-parity.json",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/checks/interest-care-package-parity-final.json",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/checks/interest-care-preservation-baseline.json",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/checks/interest-care-review-results.json",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/checks/interest-care-signature.json",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/checks/interest-care-signature-final.json",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/checks/town-characters/app-build.log",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/checks/town-characters/focused.log",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/checks/town-characters/package-parity.json",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/checks/town-characters/preexisting-sim.diff",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/checks/town-characters/preservation-results.json",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/checks/town-characters/preserved-hashes.json",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/checks/town-characters/README.md",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/checks/town-characters/runtime.json",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/checks/town-characters/signature.json",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/HOME_ACTIVITY_VISUAL_SPEC.md",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/INTEREST_CARE_DESIGN_SPEC.md",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/INTEREST_CARE_IMPLEMENTATION.md",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/INTEREST_CARE_MATRIX.md",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/INTEREST_CARE_TEAM_BRIEF.md",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/NEXT_PASS.md",
+        "unchanged":  false
+    },
+    {
+        "path":  "docs/TOWN_CHARACTER_UPDATES_PLAN.md",
+        "unchanged":  true
+    },
+    {
+        "path":  "docs/TOWN_CHARACTER_VISUAL_SPEC.md",
+        "unchanged":  true
+    },
+    {
+        "path":  "package.json",
+        "unchanged":  true
+    },
+    {
+        "path":  "README.md",
+        "unchanged":  true
+    },
+    {
+        "path":  "scripts/check-home-activity-package.mjs",
+        "unchanged":  true
+    },
+    {
+        "path":  "scripts/home-activity-fixture.mjs",
+        "unchanged":  true
+    },
+    {
+        "path":  "scripts/interest-care-fixture.mjs",
+        "unchanged":  true
+    },
+    {
+        "path":  "scripts/test-web-assets.mjs",
+        "unchanged":  true
+    },
+    {
+        "path":  "scripts/town-character-fixture.mjs",
+        "unchanged":  true
+    },
+    {
+        "path":  "shared/care.mjs",
+        "unchanged":  true
+    },
+    {
+        "path":  "shared/interest-care.mjs",
+        "unchanged":  true
+    },
+    {
+        "path":  "shared/style.mjs",
+        "unchanged":  true
+    },
+    {
+        "path":  "shared/tv-mounts.mjs",
+        "unchanged":  true
+    },
+    {
+        "path":  "test/card-layout.test.mjs",
+        "unchanged":  false
+    },
+    {
+        "path":  "test/care.test.mjs",
+        "unchanged":  true
+    },
+    {
+        "path":  "test/care-api.test.mjs",
+        "unchanged":  true
+    },
+    {
+        "path":  "test/home-activities.test.mjs",
+        "unchanged":  true
+    },
+    {
+        "path":  "test/home-activity-scene.test.mjs",
+        "unchanged":  true
+    },
+    {
+        "path":  "test/interest-care.test.mjs",
+        "unchanged":  true
+    },
+    {
+        "path":  "test/town-characters.test.mjs",
+        "unchanged":  true
+    },
+    {
+        "path":  "web/home-activity-fixture.html",
+        "unchanged":  true
+    },
+    {
+        "path":  "web/interest-care-fixture.html",
+        "unchanged":  true
+    },
+    {
+        "path":  "web/src/birds.js",
+        "unchanged":  true
+    },
+    {
+        "path":  "web/src/build.js",
+        "unchanged":  true
+    },
+    {
+        "path":  "web/src/care.js",
+        "unchanged":  false
+    },
+    {
+        "path":  "web/src/care-feedback.js",
+        "unchanged":  true
+    },
+    {
+        "path":  "web/src/civic.js",
+        "unchanged":  true
+    },
+    {
+        "path":  "web/src/civic-staff.js",
+        "unchanged":  true
+    },
+    {
+        "path":  "web/src/click-reaction.js",
+        "unchanged":  true
+    },
+    {
+        "path":  "web/src/decor.js",
+        "unchanged":  true
+    },
+    {
+        "path":  "web/src/home-activities.js",
+        "unchanged":  true
+    },
+    {
+        "path":  "web/src/home-activity-fixture.js",
+        "unchanged":  true
+    },
+    {
+        "path":  "web/src/home-activity-scene.js",
+        "unchanged":  true
+    },
+    {
+        "path":  "web/src/home-floorplans.js",
+        "unchanged":  true
+    },
+    {
+        "path":  "web/src/home-floors.js",
+        "unchanged":  true
+    },
+    {
+        "path":  "web/src/interest-care-fixture.js",
+        "unchanged":  false
+    },
+    {
+        "path":  "web/src/landscape.js",
+        "unchanged":  true
+    },
+    {
+        "path":  "web/src/lot.js",
+        "unchanged":  true
+    },
+    {
+        "path":  "web/src/main.js",
+        "unchanged":  true
+    },
+    {
+        "path":  "web/src/pets.js",
+        "unchanged":  true
+    },
+    {
+        "path":  "web/src/sim.js",
+        "unchanged":  false
+    },
+    {
+        "path":  "web/src/town-character-fixture.js",
+        "unchanged":  true
+    },
+    {
+        "path":  "web/town-character-fixture.html",
+        "unchanged":  true
+    }
+]

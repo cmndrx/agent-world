@@ -1,0 +1,22 @@
+{
+  "reviewedInterests": 68,
+  "relatedActivities": 68,
+  "homeSceneMappings": 19,
+  "liveCareInterests": 3,
+  "liveCareActions": [
+    "praise",
+    "snack",
+    "read"
+  ],
+  "preservedPreexistingFiles": 43,
+  "changedPreexistingFiles": [],
+  "checks": [
+    "Exact matrix IDs, all related items/pets/activities and venue IDs covered",
+    "Eight care design topics covered",
+    "Preexisting non-handoff files SHA-256 unchanged",
+    "Read-only API: eight saved residents"
+  ],
+  "limitations": [
+    "Source/documentation checks only; no player-care execution or rendered prototype"
+  ]
+}

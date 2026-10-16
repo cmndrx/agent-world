@@ -1,3 +1,4 @@
+import { INTEREST_CARE } from '../../shared/interest-care.mjs';
 import { CARE_ACTIONS, CARE_INTERESTS, careBenefit } from '../../shared/care.mjs';
 import { INTEREST_BY_ID } from '../../shared/catalogs/index.js';
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
@@ -21,6 +22,12 @@ export class CarePanel {
   }
   render(connected) {
     this.connected = connected;
+    if(connected && !this.loadingOptions && Date.now()>(this.optionsAt || 0)+1500) {
+      this.loadingOptions=true;this.optionsAt=Date.now();
+      fetch('/api/care-options?'+new URLSearchParams({project:this.sim.lot.project,agentId:this.sim.character?.id || ''}))
+        .then(async r=>{if(!r.ok)throw Error();const data=await r.json();if(data.protocol!==2)throw Error();this.options=data.options;})
+        .catch(()=>{this.options=null;}).finally(()=>{this.loadingOptions=false;});
+    }
     const c = this.sim.character;
     if (!c?.care) {
       // Keep a mounted editor intact during temporary missing data.
@@ -35,9 +42,9 @@ export class CarePanel {
       if (this.root.querySelector('.care-actions')) this.root.querySelector('.care-message').textContent = '';
     }
     if (!this.root.querySelector('.care-actions')) {
-      this.root.innerHTML = `<h3>Suggested care</h3><details><summary>Care details</summary><p class="care-note">Free test care. Praise/snacks: +3, with +5 for a matching interest. Reading: +5 after 10 seconds. Each action has a 30-second cooldown. No decay or automatic leisure gains yet.</p></details>
-        <div class="care-actions"></div><p class="care-pending"></p><button type="button" data-care-action="cancel" hidden>Cancel reading</button>
-        <details data-interest-editor><summary>Edit interests</summary><form><p class="care-note">Choose 1-3 test interests. Changing them grants no happiness.</p>
+      this.root.innerHTML = `<h3>Suggested care</h3><details><summary>Care details</summary><p class="care-note">Player care: up to +5 after 10 active scene seconds. Each action has a 30-second cooldown after completion. Passive activities and interest changes grant no happiness. Real household resources and reachable stations are required.</p></details>
+        <div class="care-actions"></div><p class="care-pending"></p><button type="button" data-care-action="cancel" hidden>Cancel activity</button>
+        <details data-interest-editor><summary>Edit interests</summary><form><p class="care-note">Choose 1-3 interests. Changing them grants no happiness.</p>
         ${CARE_INTERESTS.map(i => `<label><input type="checkbox" name="care-interest" value="${i.id}" ${c.interestIds.includes(i.id) ? 'checked' : ''}> ${esc(i.label)}</label>`).join('')}<button type="submit">Save interests</button></form></details>
         <details data-care-history><summary>Happiness history</summary><ol></ol></details><p class="care-message" role="status"></p>`;
       this.orderRows(c);
@@ -48,21 +55,26 @@ export class CarePanel {
       this.root.querySelector('[data-care-history] ol').innerHTML = [...c.care.history].reverse().map(h => `<li>${esc(h.label)} &middot; ${h.delta >= 0 ? '+' : ''}${h.delta}${h.matchedInterest ? ` &middot; ${esc(INTEREST_BY_ID[h.matchedInterest]?.label || h.matchedInterest)}` : ''}<small>${esc(new Date(h.at).toLocaleTimeString())} &middot; ${h.happiness}/100</small></li>`).join('');
     }
     const pending = c.care.pending;
-    if (this.hadPending && !pending) this.root.querySelector('.care-message').textContent = c.care.history.at(-1)?.delta > 0 ? 'Reading completed. Happiness recorded.' : 'Reading ended without a reward.';
+    if (this.hadPending && !pending) {
+      const result=c.care.history.at(-1);
+      this.root.querySelector('.care-message').textContent = result?.action ? `Care completed. +${result.delta} happiness (${c.happiness}/100).` : result?.label || 'Care ended without a reward.';
+    }
+    if(this.sim.careError)this.root.querySelector('.care-message').textContent=this.sim.careError;
     this.hadPending = !!pending;
     for (const [id, rule] of Object.entries(CARE_ACTIONS)) {
       const button = this.root.querySelector(`[data-care-action="${id}"]`);
       const seconds = Math.max(0, Math.ceil(((c.care.cooldowns[id] || 0) - Date.now()) / 1000));
-      const unavailable = id === 'read' && !c.interestIds.includes('reading');
-      const busy = id === 'read' && this.sim.truth && !['idle','done'].includes(this.sim.state);
-      const reason = !connected ? 'Care unavailable while disconnected' : this.sending ? 'Request underway' : pending ? 'Reading in progress' : unavailable ? 'Requires Reading interest' : busy ? 'Available when agent is idle' : seconds ? `Ready in ${seconds}s` : c.happiness === 100 ? 'Already at 100/100' : c.interestIds.includes(rule.interest) ? `Matches ${INTEREST_BY_ID[rule.interest]?.label || rule.interest}${rule.duration ? ' \u00b7 10 seconds' : ''}` : 'General encouragement';
+      const unavailable = !c.interestIds.includes(rule.interest);
+      const resource = this.options ? this.options[id] : 'Reconnect or update the bridge to validate household resources.';
+      const busy = this.sim.truth && !['idle','done'].includes(this.sim.state);
+      const reason = !connected ? 'Care unavailable while disconnected' : this.sending ? 'Request underway' : pending ? 'Care in progress' : resource ? resource : unavailable ? 'Requires matching interest' : busy ? 'Available when agent is idle' : seconds ? `Ready in ${seconds}s` : c.happiness === 100 ? 'Already at 100/100' : c.interestIds.includes(rule.interest) ? `Matches ${INTEREST_BY_ID[rule.interest]?.label || rule.interest}${rule.duration ? ' \u00b7 10 seconds' : ''}` : 'General encouragement';
       button.textContent = rule.label;
-      button.disabled = !connected || this.sending || !!pending || !!seconds || unavailable || !!busy;
+      button.disabled = !connected || this.sending || !!pending || !!seconds || unavailable || !!busy || !!resource;
       this.root.querySelector(`[data-care-reason="${id}"]`).textContent = reason;
       this.root.querySelector(`[data-care-gain="${id}"]`).textContent = `${c.happiness + careBenefit(c, id) > 100 ? 'Up to ' : ''}+${careBenefit(c, id)} happiness`;
 
     }
-    this.root.querySelector('.care-pending').textContent = pending ? `Reading · simulated · ${Math.max(0, Math.ceil((pending.readyAt - Date.now()) / 1000))}s remaining. Agent work interrupts this activity.` : '';
+    this.root.querySelector('.care-pending').textContent = pending ? `${CARE_ACTIONS[pending.action]?.label || 'Care'} · simulated · ${Math.max(0, Math.ceil((10000-(pending.activeMs || 0)) / 1000))}s of active scene time remaining. Agent work interrupts this activity.` : '';
     const cancel = this.root.querySelector('[data-care-action=cancel]');
     cancel.hidden = !pending;
     cancel.disabled = !connected || this.sending;
@@ -70,21 +82,28 @@ export class CarePanel {
   }
   orderRows(c) {
     this.orderedInterests = c.interestIds.join(',');
-    const available = id => !(c.care.cooldowns[id] > Date.now()) && !(id === 'read' && (!c.interestIds.includes('reading') || (this.sim.truth && !['idle','done'].includes(this.sim.state))));
+    const available = id => !(c.care.cooldowns[id] > Date.now()) && c.interestIds.includes(CARE_ACTIONS[id].interest) && !this.options?.[id] && !(this.sim.truth && !['idle','done'].includes(this.sim.state));
     const rank = id => (available(id) ? 0 : 2) + (c.interestIds.includes(CARE_ACTIONS[id].interest) ? 0 : 1);
     const area = this.root.querySelector('.care-actions');
-    for (const id of ['snack','read','praise'].sort((a,b) => rank(a)-rank(b))) {
+    for (const id of Object.keys(CARE_ACTIONS).sort((a,b) => rank(a)-rank(b))) {
       let row = area.querySelector(`[data-care-row="${id}"]`);
       if (!row) {
         row = document.createElement('article'); row.dataset.careRow = id; row.className = 'care-row';
         row.innerHTML = `<strong>${esc(CARE_ACTIONS[id].label)}</strong><small data-care-gain="${id}"></small><p id="${this.reasonPrefix}-${id}" data-care-reason="${id}"></p><button type="button" data-care-action="${id}" aria-describedby="${this.reasonPrefix}-${id}"></button>`;
       }
+      row.hidden=!c.interestIds.includes(CARE_ACTIONS[id].interest);
       area.append(row);
+    }
+    area.querySelectorAll('[data-unsupported]').forEach(el=>el.remove());
+    for(const id of c.interestIds.filter(id=>INTEREST_CARE[id]?.unsupported)) {
+      const row=document.createElement('article');row.dataset.unsupported=id;row.className='care-row';
+      row.innerHTML='<strong>'+esc(INTEREST_CARE[id].label)+'</strong><p>'+esc(INTEREST_CARE[id].unsupported)+'</p>';area.append(row);
     }
   }
   async send(action, interestIds) {
     if (this.sending || !this.connected || !this.sim.character?.care) return;
     this.sending = true;
+    this.sim.careError = null;
     this.render(this.connected);
     let message = '';
     try {
@@ -96,7 +115,7 @@ export class CarePanel {
       this.sim.receiveCare?.(result.character);
       if (result.character.care.revision >= this.sim.character.care.revision) this.sim.character = result.character;
       if (action === 'interests') this.orderRows(this.sim.character);
-      message = action === 'read' ? 'Reading started.' : action === 'interests' ? 'Interests saved.' : action === 'cancel' ? 'Reading cancelled.' : 'Care recorded.';
+      message = action === 'interests' ? 'Interests saved.' : action === 'cancel' ? 'Care cancelled.' : 'Finding a reachable station. Care starts after arrival.';
       if (Object.hasOwn(CARE_ACTIONS, action)) this.onApplied?.(action);
     } catch (error) { message = error.message; }
     finally {
@@ -110,7 +129,7 @@ export class CarePanel {
 
 export function careSummary(c) {
   if (!c?.care || !Number.isFinite(c.happiness)) return '<p class="care-note">Character care unavailable</p>';
-  return `<div class="care-summary"><div class="care-value"><span>Happiness &middot; simulated</span><strong>${c.happiness}/100</strong><meter min="0" max="100" value="${c.happiness}" aria-label="Simulated happiness"></meter></div><p class="care-interests">Interests: ${c.interestIds.map(id => esc(INTEREST_BY_ID[id]?.label || id)).join(' &bull; ')}</p>${c.care.pending ? `<p class="care-pending">Reading &middot; simulated &middot; ${Math.max(0, Math.ceil((c.care.pending.readyAt - Date.now()) / 1000))}s remaining. Open Care to cancel.</p>` : ''}</div>`;
+  return `<div class="care-summary"><div class="care-value"><span>Happiness &middot; simulated</span><strong>${c.happiness}/100</strong><meter min="0" max="100" value="${c.happiness}" aria-label="Simulated happiness"></meter></div><p class="care-interests">Interests: ${c.interestIds.map(id => esc(INTEREST_BY_ID[id]?.label || id)).join(' &bull; ')}</p>${c.care.pending ? `<p class="care-pending">${esc(CARE_ACTIONS[c.care.pending.action]?.label || 'Care')} &middot; simulated &middot; ${Math.max(0, Math.ceil((10000-(c.care.pending.activeMs || 0)) / 1000))}s active time remaining. Open Care to cancel.</p>` : ''}</div>`;
 }
 
 // One persistent editor per resident, shared by activity and chat entry points.
@@ -138,7 +157,7 @@ export class CareDialog {
     this.dialog.innerHTML = `<header class="panel-head"><h2 id="${title}"></h2><button type="button" class="icon-btn" data-care-close autofocus aria-label="Close care">×</button></header><div class="care-dialog-scroll"><div data-care-context></div><section class="care-panel"></section></div>`;
     document.body.append(this.dialog);
     this.panel = new CarePanel(this.dialog.querySelector('.care-panel'), sim);
-    this.panel.onApplied = () => this.close();
+    this.panel.onApplied = () => this.update();
     this.dialog.querySelector('[data-care-close]').addEventListener('click', () => this.close());
     this.dialog.addEventListener('toggle', e => {
       if (e.newState !== 'closed') return;
