@@ -8,7 +8,7 @@ test('chat groups only the selected resident and exact thread, preserving prompt
  const threads=chatThreads(runs,'/sample',1);
  assert.equal(threads.length,2);assert.deepEqual(threads.find(t=>t.id===one).runs.map(r=>r.id),['a','c']);
  const msgs=chatMessages(threads.find(t=>t.id===one).runs);
- assert.deepEqual(msgs.map(m=>m.role),['user','assistant','user','assistant']);assert.equal(msgs[0].text,'Prompt a');assert.match(msgs[1].text,/Answer a.*Checks.*Reported test.*Limitations.*Unknown/s);
+ assert.deepEqual(msgs.map(m=>m.role),['user','assistant','user','assistant']);assert.equal(msgs[0].text,'Prompt a');assert.equal(msgs[1].text,'Answer a');assert.deepEqual(msgs[1].report.checks,['Reported test']);
 });
 test('failed continuations retain the target and their own error without borrowing an answer',()=>{
  const failed=run('failure',null,{resumeSession:one,result:null,status:'failed',error:'Thread owned by desktop'});
@@ -18,14 +18,14 @@ test('failed continuations retain the target and their own error without borrowi
 
 test('a failed Claude report shows both its permission error and returned explanation',()=>{
  const failed=run('blocked',one,{provider:'claude',status:'failed',error:'Claude Code blocked Edit under configured permissions.'});
- const message=chatMessages([failed])[1];assert.equal(message.failed,true);assert.match(message.text,/blocked Edit.*Answer blocked.*Reported test.*Unknown/s);assert.doesNotMatch(message.text,/No response was returned/);
+ const message=chatMessages([failed])[1];assert.equal(message.failed,true);assert.match(message.text,/blocked Edit.*Answer blocked/s);assert.deepEqual(message.report.limitations,['Unknown']);assert.doesNotMatch(message.text,/No response was returned/);
 });
 test('queued human message appears once and running/completed states retain recorded content',()=>{
  const p={id:'p',status:'approved',instruction:'Human message'};
  assert.deepEqual(chatMessages([],p).map(m=>m.text),['Human message','Your message is queued.']);
  const running=run('r',one,{proposalId:'p',instruction:'Human message',status:'running',result:null});
  const msgs=chatMessages([running],p);assert.equal(msgs.length,2);assert.equal(msgs[1].pending,true);
- assert.match(responseText(run('done',one,{result:{summary:'Done',checks:[],limitations:[],next:{title:'Suggestion',instruction:'Do later'}}})),/Next\nSuggestion\nDo later/);
+ assert.equal(responseText(run('done',one,{result:{summary:'Done',checks:[],limitations:[],next:{title:'Suggestion',instruction:'Do later'}}})), 'Done');
  assert.deepEqual(chatMessages([]),[]);
 });
 

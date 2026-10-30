@@ -6,7 +6,7 @@
 //   npm run app:demo       same, with fake agents in an isolated home (never touches ~/.agent-world)
 //   npm run app:build      package release/mac-arm64/Agent World.app
 
-const { app, BrowserWindow, dialog, shell } = require('electron');
+const { app, BrowserWindow, dialog, shell, systemPreferences } = require('electron');
 const { spawn, execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const http = require('node:http');
@@ -14,6 +14,29 @@ const net = require('node:net');
 const path = require('node:path');
 
 const {TaskBrowsers} = require('./task-browser.cjs');
+const {waitForBridge} = require('./bridge-ready.cjs');
+// Scope microphone access to the game window's exact origin. Private task
+// browsers keep their separate deny-all session. OS consent stays with the human.
+function installMicrophonePermission(win,preferences,{platform=process.platform,log=()=>{}}={}){
+  const wc=win.webContents;
+  const local=url=>{try{const u=new URL(url);return u.protocol==='http:'&&['127.0.0.1','localhost','[::1]'].includes(u.hostname);}catch{return false;}};
+  const trusted=(sender,url)=>sender===wc&&!wc.isDestroyed()&&local(wc.getURL())&&new URL(url).origin===new URL(wc.getURL()).origin;
+  const allowed=(sender,url)=>{try{return trusted(sender,url);}catch{return false;}};
+  const status=()=>platform==='darwin'?preferences.getMediaAccessStatus('microphone'):'granted';
+  log('[microphone] macOS access status: '+status());
+  wc.session.setPermissionCheckHandler((sender,permission,origin,details)=>{
+    if(permission!=='media'||details?.mediaType!=='audio')return false;
+    return allowed(sender,origin)&&status()==='granted';
+  });
+  wc.session.setPermissionRequestHandler((sender,permission,callback,details)=>{
+    if(permission!=='media'||!details?.isMainFrame||!Array.isArray(details.mediaTypes)||details.mediaTypes.length!==1||details.mediaTypes[0]!=='audio'||!allowed(sender,details.requestingUrl))return callback(false);
+    const before=status();log('[microphone] requested; OS status: '+before);
+    if(before==='denied'||before==='restricted')return callback(false);
+    if(platform!=='darwin'||before==='granted')return callback(true);
+    preferences.askForMediaAccess('microphone').then(granted=>{log('[microphone] OS consent result: '+granted);callback(granted&&allowed(sender,details.requestingUrl));}).catch(()=>callback(false));
+  });
+}
+
 let taskBrowsers = null;
 
 const ROOT = path.resolve(__dirname, '..');
@@ -107,16 +130,6 @@ function runNode(name, script, args, env) {
 
 const logFile = () => path.join(app.getPath('logs'), 'agent-world.log');
 
-async function waitForBridge(port, ms = 30000) {
-  const until = Date.now() + ms;
-  while (Date.now() < until) {
-    const page = await get(`http://127.0.0.1:${port}/`);
-    if (page?.status === 200 && isAgentWorldState(await get(`http://127.0.0.1:${port}/api/state`))) return true;
-    await new Promise((r) => setTimeout(r, 250));
-  }
-  return false;
-}
-
 /**
  * Where to load the game from. If Agent World is already running on this machine (`npm run dev` or
  * `npm start`), reuse it rather than starting a second bridge over the same home folder.
@@ -144,9 +157,16 @@ async function resolveGameUrl() {
   // Keep the usual port when it's free (so Claude Code hooks and docs line up); otherwise any free one.
   const port = !DEMO && (await portFree(DEFAULT_PORT)) ? DEFAULT_PORT : await freePort();
   env.AGENT_WORLD_PORT = String(port);
-  runNode('bridge', 'bridge/server.mjs', ['--port', String(port), '--serve', DIST], env);
+  const bridge=runNode('bridge', 'bridge/server.mjs', ['--port', String(port), '--serve', DIST], env);
   runNode(DEMO ? 'fake' : 'codex', DEMO ? 'adapters/fake-agent.mjs' : 'adapters/codex/tail.mjs', [], env);
-  if (!(await waitForBridge(port))) return { error: `The local bridge didn't start.\n\nDetails: ${logFile()}` };
+  const alive=()=>!quitting&&bridge.exitCode===null&&bridge.signalCode===null;
+  while(alive()&&!(await waitForBridge(port,{alive}))){
+    if(!alive())break;
+    log('[app] Bridge readiness timed out; offering retry without starting another bridge.');
+    const choice=await dialog.showMessageBox(win,{type:'warning',title:'Agent World is still starting',message:'The local server is taking longer than expected.',detail:`Retry keeps waiting for the same server. It does not start duplicate work.\n\nDetails: ${logFile()}`,buttons:['Retry','Quit'],defaultId:0,cancelId:1});
+    if(choice.response!==0)return {error:'Local server startup cancelled.'};
+  }
+  if(!alive())return {error:'The local server stopped during startup.'};
   return { url: `http://127.0.0.1:${port}/` };
 }
 
@@ -166,6 +186,7 @@ function createWindow() {
     show: false,
     webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false },
   });
+  installMicrophonePermission(win,systemPreferences,{log});
   win.once('ready-to-show', () => win.show());
   win.loadURL(LOADING);
 

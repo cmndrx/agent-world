@@ -1097,13 +1097,24 @@ export class Lot {
     el.tabIndex = 0;
     el.setAttribute('aria-label', `Open home overview for ${household.name}`);
     el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); } });
-    el.innerHTML = `<span class="lot-dot" style="background:#${this.exterior.toString(16).padStart(6, '0')}"></span><span class="lot-name"></span><span class="lot-level"></span>`;
+    el.innerHTML = `<span class="lot-dot" style="background:#${this.exterior.toString(16).padStart(6, '0')}"></span><span class="lot-name"></span><span class="lot-level"></span><span class="lot-need" hidden></span>`;
     el.querySelector('.lot-name').textContent = household.name;
     el.title = household.project;
     this.signEl = el;
     const label = new CSS2DObject(el);
     label.position.set(-1.9, 2.0, 7.0);
     this.group.add(label);
+  }
+
+  /** Town simulation (never agent work): the home's most urgent unmet need on its sign, hidden when all are met. */
+  setSatisfaction(result) {
+    this.satisfaction = result;
+    const el = this.signEl.querySelector('.lot-need');
+    const worst = result && result.level !== 'good' ? result.worst : null;
+    el.hidden = !worst;
+    el.dataset.level = worst?.level || '';
+    el.textContent = worst?.hint || '';
+    el.title = worst ? `Town simulation · satisfaction ${result.score}/100` : '';
   }
 
   setConversationCount(count) {

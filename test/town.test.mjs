@@ -169,22 +169,22 @@ test('migrating the row layout keeps order, street names and inactive plots, and
   assert.deepEqual(big.report.repairs.length, repairs.length);
 });
 
-test('civic buildings unlock by player level, one of each, on a plot facing a connected street', async () => {
+test('civic buildings unlock by town tier, one of each, on a plot facing a connected street', async () => {
   const { CIVIC, CIVIC_KINDS, civicUnlocked, placeCivic, removeCivic } = await import('../shared/town.mjs');
   assert.equal(CIVIC_KINDS[0], 'fire_station');
-  assert.deepEqual(civicUnlocked(1), []);
-  assert.deepEqual(civicUnlocked(3), ['fire_station', 'police']);
+  assert.deepEqual(civicUnlocked(1), ['fire_station']);
+  assert.deepEqual(civicUnlocked(2), ['fire_station', 'police', 'library']);
   assert.equal(civicUnlocked(99).length, Object.keys(CIVIC).length);
   let town = emptyTown();
-  assert.throws(() => placeCivic(town, 'hospital', { i: -1, j: -2, rot: 0 }, { level: 5 }), /level 6/);
-  assert.throws(() => placeCivic(town, 'castle', { i: -1, j: -2, rot: 0 }, { level: 99 }), /Choose a civic building/);
-  assert.throws(() => placeCivic(town, 'fire_station', { i: -1, j: -2, rot: 2 }, { level: 2 }), /entrance/);
-  town = placeCivic(town, 'fire_station', { i: -1, j: -1, rot: 0 }, { level: 2 }); // 3 × 2, facing Main Street
+  assert.throws(() => placeCivic(town, 'hospital', { i: -1, j: -2, rot: 0 }, { tier: 3 }), /town tier 4/);
+  assert.throws(() => placeCivic(town, 'castle', { i: -1, j: -2, rot: 0 }, { tier: 99 }), /Choose a civic building/);
+  assert.throws(() => placeCivic(town, 'fire_station', { i: -1, j: -2, rot: 2 }, { tier: 1 }), /entrance/);
+  town = placeCivic(town, 'fire_station', { i: -1, j: -1, rot: 0 }, { tier: 1 }); // 3 × 2, facing Main Street
   assert.equal(town.civic.length, 1);
   assert.equal(town.civic[0].connected, true);
-  // Homes and other buildings can't overlap it; it moves (never duplicates), and a level drop never removes it.
+  // Homes and other buildings can't overlap it; it moves (never duplicates) without needing its tier again.
   assert.match(checkPlacement(town, { i: 0, j: -2, rot: 0 }, { project: '/p/a' }).reason, /fire station/);
-  town = placeCivic(town, 'fire_station', { i: 2, j: -1, rot: 0 }, { level: 1 });
+  town = placeCivic(town, 'fire_station', { i: 2, j: -1, rot: 0 }, { tier: 0 });
   assert.equal(town.civic.length, 1);
   assert.equal(town.civic[0].i, 2);
   assert.deepEqual(layoutProblems(town), []);
@@ -198,7 +198,7 @@ test('removing a street never cuts a civic building off from Main Street', async
   let town = addRoad(emptyTown(), { i: 4, j: 2 }, { i: 4, j: 8 });
   const { eligiblePlots: plots, entranceTile: door } = await import('../shared/town.mjs');
   const spot = plots(town, { civic: 'library', limit: 400 }).find((p) => p.rot === 3 && door({ kind: 'library', ...p }).i === 4 && door({ kind: 'library', ...p }).j === 3);
-  town = placeCivic(town, 'library', spot, { level: 4 }); // entrance west onto the new street
+  town = placeCivic(town, 'library', spot, { tier: 2 }); // entrance west onto the new street
   assert.equal(town.civic[0].connected, true);
   const plan = planRoadRemoval(town, { i: 4, j: 2 }, { i: 4, j: 3 });
   assert.equal(plan.ok, false);
@@ -223,4 +223,49 @@ test('civic buildings have their own sizes; entrances sit mid-front for every si
     const c = centeredAt({ i: 5, j: 5 }, rot, k);
     assert.ok(homeTiles({ kind: k, ...c }).some(([i, j]) => i === 5 && j === 5));
   }
+});
+
+test('recreation venues unlock in tiers, follow the catalog and place like civic buildings', async () => {
+  const { RECREATION, RECREATION_KINDS, RECREATION_TIERS, PUBLIC_BUILDINGS, PUBLIC_KINDS, CIVIC_KINDS, FACING, homeTiles, placeCivic, recreationTier, recreationUnlocked, removeCivic } = await import('../shared/town.mjs');
+  const { BUILDING_BY_ID, INTEREST_BY_ID } = await import('../shared/catalogs/index.js');
+  assert.equal(RECREATION_KINDS.length, 10);
+  assert.deepEqual(PUBLIC_KINDS, [...CIVIC_KINDS, ...RECREATION_KINDS]);
+  assert.deepEqual(recreationUnlocked(1), ['park', 'ice_cream']);
+  assert.deepEqual(recreationUnlocked(2), ['park', 'ice_cream', 'arcade']);
+  assert.equal(recreationUnlocked(99).length, RECREATION_KINDS.length);
+  assert.deepEqual([0, 1, 2, 3, 4, 6].map((t) => recreationTier(t)), [1, 1, 1, 2, 3, 4]);
+  // Groups rise with town tier, and every group has a venue.
+  const tiers = RECREATION_KINDS.map((k) => RECREATION[k].townTier);
+  assert.deepEqual(tiers, [...tiers].sort((a, b) => a - b));
+  for (const t of RECREATION_TIERS) assert.ok(RECREATION_KINDS.some((k) => RECREATION[k].tier === t.tier), `tier ${t.tier}`);
+  for (const k of RECREATION_KINDS) {
+    const def = RECREATION[k];
+    assert.equal(PUBLIC_BUILDINGS[k].group, 'recreation');
+    assert.equal(BUILDING_BY_ID[def.venue]?.category, 'recreational', k);
+    assert.ok(def.interests.length >= 1, `${k} serves an interest`);
+    for (const id of def.interests) assert.ok(INTEREST_BY_ID[id], id);
+    for (let rot = 0; rot < 4; rot++) {
+      const tiles = homeTiles({ kind: k, i: 0, j: 0, rot });
+      assert.equal(tiles.length, def.size.w * def.size.d);
+      const e = entranceTile({ kind: k, i: 0, j: 0, rot });
+      const [fx, fz] = FACING[rot];
+      assert.ok(tiles.some(([i, j]) => i === e.i - fx && j === e.j - fz), `${k} ${rot}`);
+    }
+  }
+  assert.deepEqual(RECREATION.park.interests.sort(), ['cycling', 'dog_companionship', 'jogging', 'outdoor_games', 'park_walks', 'photography']);
+  // Place, block, move and remove: the same rules and the same saved list as civic buildings.
+  let town = emptyTown();
+  assert.throws(() => placeCivic(town, 'arcade', { i: -1, j: -1, rot: 0 }, { tier: 1 }), /arcade unlocks at town tier 2/);
+  assert.throws(() => placeCivic(town, 'toString', { i: -1, j: -1, rot: 0 }, { tier: 99 }), /Choose a civic building/);
+  town = placeCivic(town, 'park', { i: -1, j: -2, rot: 0 }, { tier: 1 }); // 3 × 3, facing Main Street
+  assert.equal(town.civic[0].kind, 'park');
+  assert.equal(town.civic[0].connected, true);
+  assert.match(checkPlacement(town, { i: 0, j: -2, rot: 0 }, { project: '/p/a' }).reason, /public park/);
+  town = placeCivic(town, 'fire_station', { i: 2, j: -1, rot: 0 }, { tier: 1 });
+  assert.deepEqual(layoutProblems(town), []);
+  town = placeCivic(town, 'park', { i: 5, j: -2, rot: 0 }, { tier: 1 });
+  assert.equal(town.civic.filter((c) => c.kind === 'park').length, 1);
+  assert.deepEqual(layoutProblems(town), []);
+  town = removeCivic(town, 'park');
+  assert.deepEqual(town.civic.map((c) => c.kind), ['fire_station']);
 });

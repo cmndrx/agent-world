@@ -19,7 +19,8 @@ persist in gameplay metadata; observation never starts or finishes construction.
 
 Persistent home and agent IDs now supplement legacy project/slot bindings. The four
 building categories are residential, recreational, infrastructure and work. Interest,
-personality and workplace fields remain unconfigured. The first player-led care
+personality and workplace fields remain unconfigured. (Superseded October 27, 2026: care actions and resident
+happiness are retired; layout-based home satisfaction replaces them, see `docs/TOWN_SIM_PLAN.md`.) The first player-led care
 test adds persistent interests and happiness: Encouragement, Snacks and Reading,
 with human Praise, Give snack and Read a book controls. Existing ambient leisure
 does not earn happiness; decay and expanded activities follow later. See
@@ -429,7 +430,14 @@ Codex chats offer Connect an app. Setup uses a separate ephemeral app-server thr
 
 A finished turn is recorded as `idle` (in `normalizeEvent`, so live events and replayed history agree): no "Done, your turn" status, card, toast, chime or Needs-you entry. The agent returns to its idle routine (couch, coffee, books, globe, wandering). Permission requests and questions still wait for the human. Overhead bubbles show only the name and a short status: Working, Needs your OK / Has a question / Needs you, Error, Idle, Off duty, or Traveling while walking (street-life walkers too). Offline bubbles say "Last seen …".
 
-## Local voice messages (2026-10-15)
+## Local voice messages (updated 2026-10-24)
+
+**Voice setup & test** offers a user-approved in-app English model download,
+microphone/transcript and local speaker checks, recovery messages and copyable
+privacy-limited diagnostics. macOS, Windows and Linux use the WASM worker without
+requiring native speech tools or an audio API key. Actual Windows/Bluetooth
+hardware verification remains pending; see `docs/VOICE_RELEASE_CHECKS.md`.
+
 
 Codex and Claude resident chats now use local push-to-talk audio: click the mic,
 Finish recording, review the transcript appended to your draft, then Send.
@@ -503,6 +511,7 @@ Home overview includes **Home level · Testing**: choose levels 1–15 and Apply
 - **2026-10-12 — Projects moved into Plan town:** the sidebar is agents only; projects, permits and adding a project live in Plan town's Projects drawer beside the map they shape (the permit card at its top). Choosing a plot hides the drawer; cancelling returns to it with nothing created.
 - **2026-10-14 — Player-placed civic buildings:** the fixed downtown strip, its eight work businesses, the City census and off-duty street-life walks were removed at the human's request; the player places every building. Civic infrastructure (fire station, police department, library, school, hospital, city dump, water tower, power plant) unlocks by player level (2–10), one of each, placed on 3 × 3 plots in Plan town's Civic tool and saved in town.json. Roles still come from the per-day work ledger.
 - **2026-10-14 — Civic sizes and interiors:** civic buildings have their own footprints (2 × 2 to 4 × 4 tiles), walk-in ground floors that open like homes up close (roof lifts, near walls drop), and rendered pictures in the build list.
+- **2026-10-24 — Recreation venues:** ten placeable venues (park, ice cream parlour, arcade, restaurant, community garden, gym, movie theater, live music lounge, public pool, sports complex) unlock in four tiers by player level through Plan town's Leisure tool. They are scenery that names the catalog interests they serve; they never imply visits or award happiness.
 
 ### Browser observation
 

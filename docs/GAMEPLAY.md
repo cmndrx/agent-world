@@ -38,18 +38,19 @@ neighborhood, and watching projects' houses grow as you accept real work. It nev
 
 **Civic buildings** (`shared/town.mjs` `CIVIC`, `web/src/civic.js`, the Civic tool in `web/src/town-planner.js`). The fixed
 downtown strip, its eight work businesses, the City census and street-life walks were removed on 2026-10-14: the
-player places every building. Civic infrastructure unlocks by player level, one of each:
+player places every building. Civic infrastructure unlocks by town tier (since October 27, 2026; earlier by player level),
+one of each:
 
-| Building | Player level | Plot (tiles, front × depth) | Inside |
+| Building | Town tier | Plot (tiles, front × depth) | Inside |
 | --- | --- | --- | --- |
-| Fire station | 2 | 3 × 2 | Two engine bays with fire engines, lockers, the pole, crew table; hose tower |
-| Police department | 3 | 2 × 2 | Front counter, desks, filing cabinets, two barred holding cells; patrol car |
-| Library | 4 | 3 × 2 | Portico, shelves, reading tables with lamps, librarian's desk, globe; dome |
-| School | 5 | 4 × 3 | Two classrooms off a locker hallway, second storey, bell tower; playground and court |
-| Hospital | 6 | 4 × 4 | Reception, waiting rows, a ward of beds with curtains, nurses' station; four storeys, helipad, ambulance |
-| City dump | 7 | 4 × 3 | A fenced yard of heaps and skips; weighbridge office; bulldozer and truck |
-| Water tower | 8 | 2 × 2 | Pump house with pumps, valves and a control panel; the tank on its legs |
-| Power plant | 10 | 4 × 4 | Turbine hall with two generator sets and a control room; cooling towers, stack, switchyard |
+| Fire station | 1 | 3 × 2 | Two engine bays with fire engines, lockers, the pole, crew table; hose tower |
+| Police department | 2 | 2 × 2 | Front counter, desks, filing cabinets, two barred holding cells; patrol car |
+| Library | 2 | 3 × 2 | Portico, shelves, reading tables with lamps, librarian's desk, globe; dome |
+| School | 3 | 4 × 3 | Two classrooms off a locker hallway, second storey, bell tower; playground and court |
+| Hospital | 4 | 4 × 4 | Reception, waiting rows, a ward of beds with curtains, nurses' station; four storeys, helipad, ambulance |
+| City dump | 4 | 4 × 3 | A fenced yard of heaps and skips; weighbridge office; bulldozer and truck |
+| Water tower | 5 | 2 × 2 | Pump house with pumps, valves and a control panel; the tank on its legs |
+| Power plant | 6 | 4 × 4 | Turbine hall with two generator sets and a control room; cooling towers, stack, switchyard |
 
 Homes are 3 × 3. A building's entrance is the middle of its front edge (for an even width, the tile right of
 centre as seen from the street). Zoomed in, a civic building opens like a home: the roof and any upper storeys
@@ -57,15 +58,63 @@ lift away and the walls facing the camera drop (the Walls setting applies), and 
 snow. The build list shows a rendered picture of each building (made once in the browser, `civicPictures`).
 
 - Stored in `town.json` as `civic: [{ id, kind, i, j, rot }]` ((i, j) is the north-west tile). A building uses its own plot and the entrance rule above; homes, streets and other civic buildings can't overlap it, and removing a street can't cut it off from Main Street.
-- The bridge checks the player level on `place-civic` (moving an already placed building never needs the level again) and accepts `remove-civic`. A level never drops a placed building.
-- The dock's landmark button opens Plan town on the Civic tool, with the list of buildings (Place / Move / Remove, or the level that unlocks it).
-- Scenery only: nothing about civic buildings reflects agent work.
+- The bridge checks the town tier on `place-civic` (moving an already placed building never needs the tier again) and accepts `remove-civic`. A tier never drops, and nothing placed is removed.
+- Civic services can be upgraded to level 2 and 3 with Civic Pride (`upgrade-civic`, `shared/civic-pride.mjs`); each level adds two tiles of service reach (never more noise or smell).
+- The dock's landmark button opens Plan town on the Civic tool, with the list of buildings (Place / Move / Upgrade / Remove, or the tier that unlocks it) and the next tier's checklist.
+- Town simulation (October 27, 2026): civic buildings spread cover over nearby tiles (`shared/town-influence.mjs`) and
+  drive layout-based home satisfaction (`shared/home-satisfaction.mjs`); see [TOWN_SIM_PLAN.md](TOWN_SIM_PLAN.md).
+  A home's satisfaction score is its weakest need measured against that need's own "good" target, so a home whose
+  needs are all good scores 100. In Plan town, the Coverage picker paints any layer (or home satisfaction) as a heatmap, and placing or moving a
+  building lists the homes it would help or hurt before you confirm (`shared/town-preview.mjs`). Town tiers
+  (`shared/town-tiers.mjs`: Hamlet, Village, Town, Borough, City, Metropolis) need homes or residents plus no home with
+  a bad need and a minimum average; they unlock buildings and never drop. Civic Pride (`shared/civic-pride.mjs`) is
+  paid once per milestone (a need first met for a home, a home first fully satisfied, a tier reached) and buys civic
+  upgrades and small props (Plan town · Props, key 7: tree 10, flower bed 15, bench 10, hedge row 15, fountain 30,
+  gazebo 35, statue 40; tiers 1–4). Props add green space to the tiles around them (capped at 0.3, so props alone
+  reach "thin", a park makes it good); hedges also shield neighbouring tiles from noise and smell. Moving a prop is
+  free, removing one refunds half, and a town holds at most 60. Gems stay tied to real work. Nothing about civic
+  buildings or props reflects agent work.
+
+**Recreation venues** (`shared/town.mjs` `RECREATION`, `web/src/recreation.js`, the Leisure tool `6` in
+`web/src/town-planner.js`). Ten of the 75 catalog recreation templates, chosen for the interests they serve. Each
+venue's `interests` are derived from the activity catalog (an interest whose activity lists the venue's template),
+so they follow catalog edits. Venues are grouped as below and unlock by town tier, one of each:
+
+| Group | Venue | Town tier | Plot | Template | Interests served |
+| --- | --- | --- | --- | --- | --- |
+| 1 Neighbourhood | Public park | 1 | 3 × 3 | `park` | Park walks, cycling, outdoor games, jogging, dog companionship, photography |
+| 1 Neighbourhood | Ice cream parlour | 1 | 2 × 2 | `ice_cream_shop` | Ice cream |
+| 1 Neighbourhood | Arcade | 2 | 2 × 2 | `arcade` | Arcade games |
+| 2 Downtown | Restaurant | 3 | 3 × 2 | `restaurant` | Favourite meals, dining out, fine dining, celebrations |
+| 2 Downtown | Community garden | 3 | 3 × 2 | `community_garden` | Gardening |
+| 2 Downtown | Gym | 3 | 3 × 2 | `gym` | Gym workouts |
+| 3 Night out | Movie theater | 4 | 3 × 3 | `movie_theater` | Movies |
+| 3 Night out | Live music lounge | 5 | 3 × 2 | `live_music_lounge` | Music |
+| 3 Night out | Public pool | 5 | 4 × 3 | `public_swimming_pool` | Swimming, poolside relaxation |
+| 4 Landmark | Sports complex | 6 | 4 × 4 | `sports_complex` | Competitive sports, competitions, personal records |
+
+The town square already has a small park and café (milestone commons), so the café was left out and the placeable
+park is the larger 3 × 3 venue. Venues share `town.json`'s `civic` list and the `place-civic` / `remove-civic` actions
+(`PUBLIC_BUILDINGS` holds both groups); the bridge checks the town tier the same way. Each has a walk-in hall or open
+grounds built with the civic kit and one simulated host (`VENUE_STAFF` in `web/src/civic-staff.js`). QA view:
+`/town-character-fixture.html?view=venues` (add `&closed=1` for exteriors).
+
+- A venue in range meets the matching interests of a home's residents (a home need), and parks and gardens add green
+  space. Since October 29, 2026 (street distance), a civic building or venue serves a home only when their entrances are
+  at most its street limit apart along connected streets (its longest cover reach + 4 street tiles); a closer-looking
+  building across a gap gives no cover, and the home's hint suggests a connecting street. Noise and smell still spread
+  by straight-line distance. The planner's coverage heatmaps follow the same rule (each tile is judged from its nearest
+  connected street, a home's tiles from its entrance).
 
 **Roles** (`shared/city.mjs`). The bridge still folds observed events into a ledger of kinds of work by day
 (`~/.agent-world/city.json`, categories only), which gives people their roles:
 - A resident's **role** is their most common kind of work, by days (ties go to the most recent): Tester, Clerk, Shipper, Researcher, Designer, Writer, Analyst or Manager.
 - **Helper types start as interns**. After working on 3 different days in a home they are **hired**: they get a stable staff name ("Eli · Explore helper") and a role of their own.
-- Off-duty residents stay inside their home (a bed when they have one, otherwise an indoor spot; never the yard).
+- Off-duty residents stay inside their home (a bed when they have one, otherwise an indoor spot; never the yard), except
+  venue visits (October 29, 2026): an idle ground-floor resident may occasionally walk along the streets to a placed venue
+  that meets one of their interests, stay 30–60 seconds and walk home (one per home at a time, about a 10-minute
+  cooldown, daytime only; `shared/venue-visits.mjs`, `web/src/visits.js`). Observed work always brings them straight
+  back to their desk. Visits are flavor: not saved, not rewarded, labelled "At the arcade · simulated".
 
 Ideas for later:
 - Click a walker to see the made-up explanation.

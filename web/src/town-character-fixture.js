@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import {CivicBuildings} from './civic.js';
 import {CIVIC_STAFF} from './civic-staff.js';
+import {RECREATION_KINDS} from '../../shared/town.mjs';
 import {BirdFlock} from './birds.js';
 import {Lot} from './lot.js';
 import {Sim} from './sim.js';
@@ -50,23 +51,22 @@ try {
     sim.setTruth({state:'running',since:new Date().toISOString(),detail:{}});run(1);assert(!sim.homeScene&&!lot.homeActivityClaims.has(sim),'home leak');assert(home.held.every(g=>!g.parent),'held prop leak');
   }
   assert(JSON.stringify(character)===metadata,'metadata changed');results.push('home support/props/reservations + metadata unchanged');
-  sim.setTruth(null);character.care={pending:{id:'isolated-care-receipt',startedAt:Date.now(),completesAt:Date.now()+10000}};sim.decide();run(1000);
-  const care=JSON.stringify(character.care);sim.clickReaction.cooldown=0;sim.clickReaction.start(sim,camera,reduced);run(20);assert(JSON.stringify(character.care)===care,'click changed care receipt/timer');run(120);assert(JSON.stringify(character.care)===care,'click completed care');delete character.care;
-  results.push('pending care timer/receipt unchanged');
+  sim.setTruth(null);
   sim.setTruth({state:'editing',since:new Date().toISOString(),detail:{}});sim.observationConnected=false;sim.clickReaction.cooldown=0;sim.clickReaction.start(sim,camera,reduced);assert(sim.clickReaction.active.kind==='friendly','disconnected busy');run(120);assert(!sim.clickReaction.active,'disconnected bounded');sim.observationConnected=true;
   results.push('disconnected friendly');
 }catch(error){report.textContent=`FAIL: ${error.stack}`;throw error;}
 sim.setTruth(null);sim.stopHomeActivity();sim.release();sim.placed=false;
 let draw;
-if(view==='staff'){
-  scene.remove(lot.group);labels.style.display=q.has('kind')?'none':'grid';
-  const kinds=q.has('kind')?[q.get('kind')]:Object.keys(CIVIC_STAFF),panels=[];
+if(view==='staff'||view==='venues'){
+  // view=venues: the ten recreation venues (5 × 2), closed=1 for exteriors.
+  scene.remove(lot.group);labels.style.display=q.has('kind')?'none':'grid';if(view==='venues')labels.style.gridTemplateColumns='repeat(5,1fr)';
+  const kinds=q.has('kind')?[q.get('kind')]:view==='venues'?RECREATION_KINDS:Object.keys(CIVIC_STAFF),panels=[];
   for(const kind of kinds){const s=new THREE.Scene();light(s);const civic=new CivicBuildings(s);civic.setTown({civic:[{kind,i:0,j:0,rot:Number(q.get('rot')||0)}]});civic.wallMode=q.get('closed')==='1'?'up':'down';const it=civic.items.get(kind),c=new THREE.PerspectiveCamera(40,1,.05,400);it.root.updateWorldMatrix(true,true);const at=it.staff.root.getWorldPosition(new THREE.Vector3());
     const offset=(kind==='power_plant'?new THREE.Vector3(1.4,3,1.1):new THREE.Vector3(2.7,3,4.3)).applyAxisAngle(new THREE.Vector3(0,1,0),it.yaw);c.position.copy(at).add(offset);c.lookAt(at.clone().add(new THREE.Vector3(0,.9,0)));
-    if(q.get('closed')==='1'){c.position.copy(it.root.position).add(new THREE.Vector3(32,38,48));c.lookAt(it.root.position);}
+    if(q.get('closed')==='1'){c.position.copy(it.root.position).add(new THREE.Vector3(32,38,48).multiplyScalar(view==='venues'?Math.max(it.W,it.D)/24:1));c.lookAt(it.root.position);}
     panels.push({s,c,civic});const span=document.createElement('span');span.textContent=`${kind} · simulated`;labels.append(span);
   }
-  draw=t=>{renderer.setScissorTest(true);panels.forEach(({s,c,civic},i)=>{const cols=panels.length===1?1:4,rows=panels.length===1?1:2,w=innerWidth/cols,h=(innerHeight-90)/rows,x=i%cols*w,y=(rows-1-Math.floor(i/cols))*h;c.aspect=w/h;c.updateProjectionMatrix();civic.update(1/60,reduced?1:t,{camera:c,target:new THREE.Vector3()});renderer.setViewport(x,y,w,h);renderer.setScissor(x,y,w,h);renderer.render(s,c);});};
+  draw=t=>{renderer.setScissorTest(true);panels.forEach(({s,c,civic},i)=>{const cols=panels.length===1?1:panels.length>8?5:4,rows=panels.length===1?1:2,w=innerWidth/cols,h=(innerHeight-90)/rows,x=i%cols*w,y=(rows-1-Math.floor(i/cols))*h;c.aspect=w/h;c.updateProjectionMatrix();civic.update(1/60,reduced?1:t,{camera:c,target:new THREE.Vector3()});renderer.setViewport(x,y,w,h);renderer.setScissor(x,y,w,h);renderer.render(s,c);});};
 }else if(view==='birds'){
   scene.remove(lot.group);labels.remove();const flock=new BirdFlock();scene.add(flock.root);const from=new THREE.Vector3(0,0,0),dir=new THREE.Vector3(1,0,0);
   // Baseline geometry copied exactly from the previous implementation for visual comparison.

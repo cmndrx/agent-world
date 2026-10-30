@@ -9,9 +9,14 @@
 // adjoin a street tile. Rotation `rot` is quarter turns: 0 faces +z (south), 1 +x (east), 2 −z, 3 −x.
 // Civic buildings (fire station, hospital, …) have their own footprints (w tiles across the front, d deep, from a
 // 2 × 2 police station to a 4 × 4 hospital) and the same entrance rule: the middle of the front edge (for an even
-// width, the tile right of centre as seen from the street) adjoins a street. One of each, unlocked by player level.
+// width, the tile right of centre as seen from the street) adjoins a street. One of each, unlocked by town tier
+// (`townTier`; tiers come from shared/town-tiers.mjs).
+// Recreation venues (park, arcade, cinema, …) follow exactly the same rules and share the saved `town.civic` list:
+// it holds every public building, and each kind's definition says which group it belongs to.
 
 import { experience, xpLevel } from './experience.mjs';
+import { ACTIVITIES } from './catalogs/activities.js';
+import { INTERESTS } from './catalogs/intrests.js';
 
 export const TOWN_VERSION = 2;
 export const TILE = 8;
@@ -25,19 +30,72 @@ export const PROTECTED = [
   { id: 'town-square', name: 'the town square and Town Hall', i0: -6, j0: -4, i1: -2, j1: 0 },
 ];
 
-/** City infrastructure the player places themselves: one of each, unlocked by player level. */
+/** City infrastructure the player places themselves: one of each, unlocked by town tier. */
 export const CIVIC = {
-  fire_station: { name: 'Fire station', level: 2, icon: 'flame', color: 0xd9483b, size: { w: 3, d: 2 }, height: 11 },
-  police: { name: 'Police department', level: 3, icon: 'shield', color: 0x3c64b4, size: { w: 2, d: 2 }, height: 8 },
-  library: { name: 'Library', level: 4, icon: 'bookOpen', color: 0x8a6ccf, size: { w: 3, d: 2 }, height: 10 },
-  school: { name: 'School', level: 5, icon: 'graduationCap', color: 0xe0a83a, size: { w: 4, d: 3 }, height: 11 },
-  hospital: { name: 'Hospital', level: 6, icon: 'heartPulse', color: 0x4fb3a5, size: { w: 4, d: 4 }, height: 17 },
-  city_dump: { name: 'City dump', level: 7, icon: 'trash', color: 0x7f8a5a, size: { w: 4, d: 3 }, height: 5 },
-  water_tower: { name: 'Water tower', level: 8, icon: 'droplet', color: 0x5aa3d9, size: { w: 2, d: 2 }, height: 19 },
-  power_plant: { name: 'Power plant', level: 10, icon: 'zap', color: 0xe8c547, size: { w: 4, d: 4 }, height: 15 },
+  fire_station: { name: 'Fire station', townTier: 1, icon: 'flame', color: 0xd9483b, size: { w: 3, d: 2 }, height: 11 },
+  police: { name: 'Police department', townTier: 2, icon: 'shield', color: 0x3c64b4, size: { w: 2, d: 2 }, height: 8 },
+  library: { name: 'Library', townTier: 2, icon: 'bookOpen', color: 0x8a6ccf, size: { w: 3, d: 2 }, height: 10 },
+  school: { name: 'School', townTier: 3, icon: 'graduationCap', color: 0xe0a83a, size: { w: 4, d: 3 }, height: 11 },
+  hospital: { name: 'Hospital', townTier: 4, icon: 'heartPulse', color: 0x4fb3a5, size: { w: 4, d: 4 }, height: 17 },
+  city_dump: { name: 'City dump', townTier: 4, icon: 'trash', color: 0x7f8a5a, size: { w: 4, d: 3 }, height: 5 },
+  water_tower: { name: 'Water tower', townTier: 5, icon: 'droplet', color: 0x5aa3d9, size: { w: 2, d: 2 }, height: 19 },
+  power_plant: { name: 'Power plant', townTier: 6, icon: 'zap', color: 0xe8c547, size: { w: 4, d: 4 }, height: 15 },
 };
 /** Civic building kinds in unlock order. */
-export const CIVIC_KINDS = Object.keys(CIVIC).sort((a, b) => CIVIC[a].level - CIVIC[b].level);
+export const CIVIC_KINDS = Object.keys(CIVIC).sort((a, b) => CIVIC[a].townTier - CIVIC[b].townTier);
+
+/** Recreation groups shown together in the planner (venues inside open by town tier). */
+export const RECREATION_TIERS = [
+  { tier: 1, name: 'Neighbourhood', blurb: 'Everyday places to unwind close to home' },
+  { tier: 2, name: 'Downtown', blurb: 'Meals, gardens and workouts around town' },
+  { tier: 3, name: 'Night out', blurb: 'Films, live music and long afternoons by the pool' },
+  { tier: 4, name: 'Landmark', blurb: 'A destination the whole town plays at' },
+];
+
+/**
+ * Where residents could spend free time: one of each, unlocked by town tier. `venue` is the catalog
+ * template (shared/catalogs/buildings.js); the interests each one serves come from the activity catalog, so they
+ * stay in step with what residents like to do. Placing one is scenery: it grants no happiness by itself and never
+ * implies that an agent went there.
+ */
+const VENUES = {
+  park: { name: 'Public park', tier: 1, townTier: 1, icon: 'trees', color: 0x5fae5a, size: { w: 3, d: 3 }, height: 7, venue: 'park' },
+  ice_cream: { name: 'Ice cream parlour', tier: 1, townTier: 1, icon: 'iceCreamCone', color: 0xf08bb4, size: { w: 2, d: 2 }, height: 7, venue: 'ice_cream_shop' },
+  arcade: { name: 'Arcade', tier: 1, townTier: 2, icon: 'gamepad', color: 0x7a4fd6, size: { w: 2, d: 2 }, height: 8, venue: 'arcade' },
+  restaurant: { name: 'Restaurant', tier: 2, townTier: 3, icon: 'utensils', color: 0xc8553d, size: { w: 3, d: 2 }, height: 8, venue: 'restaurant' },
+  community_garden: { name: 'Community garden', tier: 2, townTier: 3, icon: 'sprout', color: 0x8cbf4a, size: { w: 3, d: 2 }, height: 5, venue: 'community_garden' },
+  gym: { name: 'Gym', tier: 2, townTier: 3, icon: 'dumbbell', color: 0x2f8fce, size: { w: 3, d: 2 }, height: 8, venue: 'gym' },
+  cinema: { name: 'Movie theater', tier: 3, townTier: 4, icon: 'clapperboard', color: 0xb83a52, size: { w: 3, d: 3 }, height: 12, venue: 'movie_theater' },
+  music_lounge: { name: 'Live music lounge', tier: 3, townTier: 5, icon: 'music', color: 0xd9822b, size: { w: 3, d: 2 }, height: 8, venue: 'live_music_lounge' },
+  pool: { name: 'Public pool', tier: 3, townTier: 5, icon: 'wavesLadder', color: 0x3fb6d3, size: { w: 4, d: 3 }, height: 6, venue: 'public_swimming_pool' },
+  sports_complex: { name: 'Sports complex', tier: 4, townTier: 6, icon: 'trophy', color: 0xe0a83a, size: { w: 4, d: 4 }, height: 12, venue: 'sports_complex' },
+};
+/** Interest ids whose activity can happen at a venue template. */
+export const venueInterests = (venue) => INTERESTS
+  .filter((i) => i.relatedActivities.some((a) => ACTIVITIES.find((x) => x.id === a)?.buildingIds.includes(venue)))
+  .map((i) => i.id);
+export const RECREATION = Object.fromEntries(Object.entries(VENUES).map(([k, v]) => [k, { ...v, group: 'recreation', interests: venueInterests(v.venue) }]));
+/** Recreation kinds in unlock order. */
+export const RECREATION_KINDS = Object.keys(RECREATION).sort((a, b) => RECREATION[a].townTier - RECREATION[b].townTier);
+/** Every public building (civic services and recreation): what `town.civic` may hold. */
+export const PUBLIC_BUILDINGS = { ...Object.fromEntries(Object.entries(CIVIC).map(([k, v]) => [k, { ...v, group: 'civic' }])), ...RECREATION };
+export const PUBLIC_KINDS = [...CIVIC_KINDS, ...RECREATION_KINDS];
+
+/**
+ * Small 1×1 town props bought with Civic Pride (shared/civic-pride.mjs): many of each, no street needed, unlocked by
+ * town tier. Their green space and noise buffer live in shared/town-influence.mjs (`PROP_RULES`).
+ */
+export const TOWN_PROPS = {
+  tree: { name: 'Tree', townTier: 1, cost: 10, icon: 'treeDeciduous', color: 0x4f9a4a },
+  flower_bed: { name: 'Flower bed', townTier: 1, cost: 15, icon: 'flower', color: 0xe887b8 },
+  bench: { name: 'Bench', townTier: 1, cost: 10, icon: 'armchair', color: 0x9a6b43 },
+  hedge: { name: 'Hedge row', townTier: 2, cost: 15, icon: 'leaf', color: 0x3f7d3a },
+  fountain: { name: 'Fountain', townTier: 2, cost: 30, icon: 'droplet', color: 0x7cc4e4 },
+  gazebo: { name: 'Gazebo', townTier: 3, cost: 35, icon: 'house', color: 0xf2e6cf },
+  statue: { name: 'Statue', townTier: 4, cost: 40, icon: 'trophy', color: 0xc9c3b6 },
+};
+export const PROP_KINDS = Object.keys(TOWN_PROPS);
+export const MAX_PROPS = 60;
 export const DEFAULT_STREETS = ['Main Street', 'Oak Avenue', 'Maple Lane', 'Cedar Road', 'Willow Way', 'Birch Boulevard', 'Elm Court', 'Aspen Drive', 'Juniper Street', 'Linden Row'];
 const MAX_ROADS = 400;
 
@@ -58,7 +116,7 @@ export function segTiles(s) {
 }
 
 /** A building's size in tiles: w across its front, d deep (homes 3 × 3; civic buildings by kind). */
-export const footprintSize = (b) => CIVIC[b?.kind]?.size || { w: HOME_TILES, d: HOME_TILES };
+export const footprintSize = (b) => PUBLIC_BUILDINGS[b?.kind]?.size || { w: HOME_TILES, d: HOME_TILES };
 /** Its extent on the grid once turned: ex tiles along x, ez along z. */
 export function extents(b) {
   const { w, d } = footprintSize(b);
@@ -130,7 +188,7 @@ export function tilesRect(i0, j0, i1, j1) {
 
 /** An empty town: just Main Street. */
 export function emptyTown() {
-  return { version: TOWN_VERSION, revision: 0, roads: [{ ...MAIN_STREET }], homes: [], civic: [], retired: [], pendingRemoval: {}, activeChoice: null };
+  return { version: TOWN_VERSION, revision: 0, roads: [{ ...MAIN_STREET }], homes: [], civic: [], props: [], retired: [], pendingRemoval: {}, activeChoice: null };
 }
 
 /** Map of road tiles: "i,j" → road segment id. */
@@ -141,7 +199,7 @@ export function roadMap(town) {
 }
 
 /** What occupies each tile ("i,j" → { kind, id, project? }), optionally ignoring one home or civic building (when moving it). */
-export function occupancy(town, { exceptProject = null, exceptCivic = null } = {}) {
+export function occupancy(town, { exceptProject = null, exceptCivic = null, exceptProp = null } = {}) {
   const m = new Map();
   for (const h of town.homes || []) {
     if (h.project === exceptProject || h.i == null) continue;
@@ -149,7 +207,11 @@ export function occupancy(town, { exceptProject = null, exceptCivic = null } = {
   }
   for (const c of town.civic || []) {
     if (c.kind === exceptCivic) continue;
-    for (const [i, j] of homeTiles(c)) m.set(key(i, j), { kind: 'civic', id: c.id, name: CIVIC[c.kind]?.name });
+    for (const [i, j] of homeTiles(c)) m.set(key(i, j), { kind: 'civic', id: c.id, name: PUBLIC_BUILDINGS[c.kind]?.name });
+  }
+  for (const p of town.props || []) {
+    if (p.id === exceptProp || p.i == null) continue;
+    m.set(key(p.i, p.j), { kind: 'prop', id: p.id, name: TOWN_PROPS[p.kind]?.name || 'Prop' });
   }
   for (const r of town.roads || []) for (const [i, j] of segTiles(r)) if (!m.has(key(i, j))) m.set(key(i, j), { kind: 'road', id: r.id });
   return m;
@@ -173,6 +235,28 @@ export function connectedRoads(town, roads = roadMap(town)) {
   return seen;
 }
 
+/**
+ * Street distance (in tiles, 4-neighbour) from one street tile to every connected street tile: "i,j" → steps.
+ * Empty when `from` is not a connected street. Town simulation uses it so services reach homes along the streets.
+ */
+export function streetDistances(town, from, roads = roadMap(town)) {
+  const reach = connectedRoads(town, roads);
+  const start = key(from.i, from.j);
+  const dist = new Map();
+  if (!reach.has(start)) return dist;
+  dist.set(start, 0);
+  const queue = [start];
+  while (queue.length) {
+    const k = queue.shift();
+    const [i, j] = k.split(',').map(Number);
+    for (const [di, dj] of FACING) {
+      const n = key(i + di, j + dj);
+      if (reach.has(n) && !dist.has(n)) { dist.set(n, dist.get(k) + 1); queue.push(n); }
+    }
+  }
+  return dist;
+}
+
 /** Shape of a street tile for rendering: which neighbours are street too. */
 export function roadShape(roads, i, j) {
   const n = roads.has(key(i, j - 1)), s = roads.has(key(i, j + 1)), w = roads.has(key(i - 1, j)), e = roads.has(key(i + 1, j));
@@ -180,7 +264,8 @@ export function roadShape(roads, i, j) {
   return { n, s, e, w, count, kind: count >= 3 ? (count === 4 ? 'cross' : 'tee') : count === 2 ? ((n && s) || (e && w) ? 'straight' : 'corner') : count === 1 ? 'end' : 'single' };
 }
 
-const label = (o) => (o.kind === 'home' ? 'a home' : o.kind === 'road' ? 'a street' : o.kind === 'civic' ? `the ${String(o.name || 'civic building').toLowerCase()}` : o.name || 'protected land');
+const label = (o) => (o.kind === 'home' ? 'a home' : o.kind === 'road' ? 'a street' : o.kind === 'civic' ? `the ${String(o.name || 'civic building').toLowerCase()}`
+  : o.kind === 'prop' ? `a ${String(o.name).toLowerCase()}` : o.name || 'protected land');
 
 /**
  * Plan a straight street or one 90° turn from `a` to `b` (tiles). `bend` chooses the turn: 'x' runs east–west
@@ -279,7 +364,7 @@ export function planRoadRemoval(town, a, b) {
   const affected = reason ? [] : cutOffHomes(town, removing).filter(linked);
   const civic = reason ? [] : cutOffCivic(town, removing).filter(linked);
   if (!reason && affected.length) reason = affected.length === 1 ? 'A home would lose its connection to Main Street.' : `${affected.length} homes would lose their connection to Main Street.`;
-  else if (!reason && civic.length) reason = civic.length === 1 ? `The ${CIVIC[civic[0].kind].name.toLowerCase()} would lose its connection to Main Street.` : `${civic.length} civic buildings would lose their connection to Main Street.`;
+  else if (!reason && civic.length) reason = civic.length === 1 ? `The ${PUBLIC_BUILDINGS[civic[0].kind].name.toLowerCase()} would lose its connection to Main Street.` : `${civic.length} public buildings would lose their connection to Main Street.`;
   return { ok: !reason, reason, tiles, affected: affected.map((h) => h.project), civic: civic.map((c) => c.kind) };
 }
 
@@ -294,7 +379,7 @@ export function checkPlacement(town, p, { project = p.project, civic = null } = 
     const t = { i, j, ok: true };
     if (!inBuildable(i, j)) [t.ok, t.reason] = [false, 'Part of the plot is outside buildable land.'];
     else if (pr) [t.ok, t.reason] = [false, `The plot overlaps ${pr.name}.`];
-    else if (o) [t.ok, t.reason] = [false, o.kind === 'road' ? 'The plot overlaps a street.' : o.kind === 'civic' ? `The plot overlaps ${label(o)}.` : 'The plot overlaps another home.'];
+    else if (o) [t.ok, t.reason] = [false, o.kind === 'road' ? 'The plot overlaps a street.' : o.kind === 'civic' || o.kind === 'prop' ? `The plot overlaps ${label(o)}.` : 'The plot overlaps another home.'];
     if (!t.ok && !reasons.includes(t.reason)) reasons.push(t.reason);
     return t;
   });
@@ -336,7 +421,7 @@ const uid = (prefix, taken) => {
     if (!taken.has(id)) return id;
   }
 };
-const ids = (town) => new Set([...(town.roads || []).map((r) => r.id), ...(town.homes || []).map((h) => h.id), ...(town.civic || []).map((c) => c.id)]);
+const ids = (town) => new Set([...(town.roads || []).map((r) => r.id), ...(town.homes || []).map((h) => h.id), ...(town.civic || []).map((c) => c.id), ...(town.props || []).map((p) => p.id)]);
 const nextName = (town) => DEFAULT_STREETS.find((n) => !(town.roads || []).some((r) => r.name === n)) || `Street ${(town.roads || []).length + 1}`;
 
 /** With connectivity recorded on every road and home (persisted alongside the layout). */
@@ -418,15 +503,20 @@ export function placeHome(town, project, p) {
   return withNetwork({ ...town, homes: clean, retired: (town.retired || []).filter((r) => r.project !== project), revision: town.revision + 1 });
 }
 
-/** Civic buildings the player's level unlocks, in unlock order. */
-export const civicUnlocked = (level) => CIVIC_KINDS.filter((k) => CIVIC[k].level <= Math.max(1, Math.floor(Number(level)) || 1));
+const tierOf = (tier) => Math.max(1, Math.floor(Number(tier)) || 1);
+/** Civic buildings a town tier unlocks, in unlock order. */
+export const civicUnlocked = (tier) => CIVIC_KINDS.filter((k) => CIVIC[k].townTier <= tierOf(tier));
+/** Recreation venues a town tier unlocks, in unlock order. */
+export const recreationUnlocked = (tier) => RECREATION_KINDS.filter((k) => RECREATION[k].townTier <= tierOf(tier));
+/** The highest recreation group with at least one venue open at this town tier. */
+export const recreationTier = (tier) => Math.max(0, ...recreationUnlocked(tier).map((k) => RECREATION[k].tier));
 
-/** Place a civic building, or move one already placed. One of each kind; `level` is the player's level. */
-export function placeCivic(town, kind, p, { level = 1 } = {}) {
-  const def = CIVIC[kind];
+/** Place a civic building or recreation venue, or move one already placed. One of each kind; `tier` is the town tier. */
+export function placeCivic(town, kind, p, { tier = 1 } = {}) {
+  const def = Object.hasOwn(PUBLIC_BUILDINGS, kind) ? PUBLIC_BUILDINGS[kind] : null;
   if (!def) throw Error('Choose a civic building.');
   const existing = (town.civic || []).find((c) => c.kind === kind);
-  if (!existing && def.level > level) throw Error(`The ${def.name.toLowerCase()} unlocks at player level ${def.level}.`);
+  if (!existing && def.townTier > tier) throw Error(`The ${def.name.toLowerCase()} unlocks at town tier ${def.townTier}.`);
   const check = checkPlacement(town, p, { civic: kind });
   if (!check.ok) throw Error(check.reason);
   const at = { i: check.placement.i, j: check.placement.j, rot: check.placement.rot };
@@ -440,6 +530,45 @@ export function placeCivic(town, kind, p, { level = 1 } = {}) {
 export function removeCivic(town, kind) {
   if (!(town.civic || []).some((c) => c.kind === kind)) throw Error('That building isn’t in your town.');
   return withNetwork({ ...town, civic: town.civic.filter((c) => c.kind !== kind), revision: town.revision + 1 });
+}
+
+// ---- Props: 1×1, many of each, no street needed ------------------------------------------------------
+
+/** Can a prop stand on this tile? `exceptId` ignores the prop being moved. */
+export function checkProp(town, at, { exceptId = null } = {}) {
+  const i = Math.round(Number(at?.i)), j = Math.round(Number(at?.j));
+  const o = occupancy(town, { exceptProp: exceptId }).get(key(i, j));
+  const pr = protectedAt(i, j);
+  const reason = !Number.isFinite(i) || !Number.isFinite(j) || !inBuildable(i, j) ? 'That tile is outside buildable land.'
+    : pr ? `Keeps clear of ${pr.name}.` : o ? `That tile has ${label(o)}.` : '';
+  return { ok: !reason, reason, i, j };
+}
+
+/** Place a new prop of `kind` (tier-checked, at most MAX_PROPS). Civic Pride is charged by shared/civic-pride.mjs. */
+export function placeProp(town, kind, at, { tier = 1 } = {}) {
+  const def = Object.hasOwn(TOWN_PROPS, kind) ? TOWN_PROPS[kind] : null;
+  if (!def) throw Error('Choose a prop.');
+  if (def.townTier > tier) throw Error(`The ${def.name.toLowerCase()} unlocks at town tier ${def.townTier}.`);
+  if ((town.props || []).length >= MAX_PROPS) throw Error(`Your town has the most props it can hold (${MAX_PROPS}). Remove one first.`);
+  const check = checkProp(town, at);
+  if (!check.ok) throw Error(check.reason);
+  const prop = { id: uid('prop', ids(town)), kind, i: check.i, j: check.j, placedAt: new Date().toISOString() };
+  return { ...town, props: [...(town.props || []), prop], revision: town.revision + 1 };
+}
+
+/** Move a placed prop to another free tile (free of charge). */
+export function moveProp(town, id, at) {
+  const prop = (town.props || []).find((p) => p.id === id);
+  if (!prop) throw Error('That prop isn’t in your town.');
+  const check = checkProp(town, at, { exceptId: id });
+  if (!check.ok) throw Error(check.reason);
+  return { ...town, props: town.props.map((p) => (p.id === id ? { ...p, i: check.i, j: check.j, movedAt: new Date().toISOString() } : p)), revision: town.revision + 1 };
+}
+
+/** Take a prop off the map (shared/civic-pride.mjs refunds half its cost). */
+export function removeProp(town, id) {
+  if (!(town.props || []).some((p) => p.id === id)) throw Error('That prop isn’t in your town.');
+  return { ...town, props: town.props.filter((p) => p.id !== id), revision: town.revision + 1 };
 }
 
 /** Take a home off the grid (its project became inactive). Its last plot is remembered as a suggestion. */
@@ -562,11 +691,18 @@ export function layoutProblems(town) {
   }
   const kinds = new Set();
   for (const b of town.civic || []) {
-    if (!CIVIC[b.kind]) { problems.push(`Unknown civic building ${b.kind}.`); continue; }
-    if (kinds.has(b.kind)) problems.push(`Two ${CIVIC[b.kind].name.toLowerCase()} buildings.`);
+    const def = Object.hasOwn(PUBLIC_BUILDINGS, b.kind) ? PUBLIC_BUILDINGS[b.kind] : null;
+    if (!def) { problems.push(`Unknown civic building ${b.kind}.`); continue; }
+    if (kinds.has(b.kind)) problems.push(`Two ${def.name.toLowerCase()} buildings.`);
     kinds.add(b.kind);
     const c = checkPlacement(town, b, { civic: b.kind });
-    if (!c.ok) problems.push(`${CIVIC[b.kind].name}: ${c.reason}`);
+    if (!c.ok) problems.push(`${def.name}: ${c.reason}`);
   }
+  for (const p of town.props || []) {
+    if (!Object.hasOwn(TOWN_PROPS, p.kind)) { problems.push(`Unknown prop ${p.kind}.`); continue; }
+    const c = checkProp(town, p, { exceptId: p.id });
+    if (!c.ok) problems.push(`${TOWN_PROPS[p.kind].name}: ${c.reason}`);
+  }
+  if ((town.props || []).length > MAX_PROPS) problems.push(`More than ${MAX_PROPS} props.`);
   return [...new Set(problems)];
 }

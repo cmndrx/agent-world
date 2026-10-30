@@ -13,9 +13,23 @@ export const CIVIC_STAFF=Object.freeze({
   water_tower:{role:'Pump technician',at:[-2,.14,.90],shirt:0x5aa3d9,pants:0x3977a3,helmet:0xeee5d0,stripe:0xeee5d0},
   power_plant:{role:'Control operator',at:[4.4,.14,2.55],shirt:0x3b4149,pants:0x3b4149,helmet:0xeee5d0,stripe:0xe8c547,seated:true,headphones:true},
 });
+// Recreation venues (recreation.js): one host each, in the same building-local frame. Scenery only.
+export const VENUE_STAFF=Object.freeze({
+  park:{role:'Park ranger',at:[2.4,.04,7.6],yaw:0,shirt:0x5f8f4a,pants:0x6b5a3a,cap:true},
+  ice_cream:{role:'Ice cream scooper',at:[-2,.14,-4.6],yaw:0,shirt:0xf3a6c0,pants:0x3d4050,cap:true},
+  arcade:{role:'Prize counter attendant',at:[3.6,.14,-.6],yaw:0,shirt:0x7a4fd6,pants:0x26213a,headphones:true},
+  restaurant:{role:'Chef',at:[5,.14,-5.6],shirt:0xf2f2ee,pants:0x2a2f3c},
+  community_garden:{role:'Gardener',at:[2.1,.04,1.4],yaw:Math.PI/2,shirt:0x8cbf4a,pants:0x5b4332,cap:true},
+  gym:{role:'Fitness trainer',at:[.8,.14,-3.6],yaw:-Math.PI/2,shirt:0x2f8fce,pants:0x2a2f3c},
+  cinema:{role:'Concessions usher',at:[-4.4,.14,.3],yaw:0,shirt:0xc0303e,pants:0x2a2f3c,cap:true},
+  music_lounge:{role:'Bartender',at:[8.45,.14,-1.8],yaw:-Math.PI/2,shirt:0x3a2219,pants:0x2a2f3c},
+  pool:{role:'Lifeguard',at:[10.6,1.39,-2.6],yaw:-Math.PI/2,shirt:0xd94f4f,pants:0xd94f4f,cap:true,seated:true},
+  sports_complex:{role:'Coach',at:[3,.07,-2.5],shirt:0x2f5d8a,pants:0x2a2f3c,cap:true},
+});
+export const hasStaff=kind=>Object.hasOwn(CIVIC_STAFF,kind)||Object.hasOwn(VENUE_STAFF,kind);
 export class CivicStaff {
   constructor(kind,seed=1) {
-    this.def=CIVIC_STAFF[kind];this.kind=kind;const d=this.def;
+    this.def=CIVIC_STAFF[kind]||VENUE_STAFF[kind];this.kind=kind;const d=this.def;
     this.parts=buildPerson({...lookFromSeed(seed),shirt:d.shirt,pants:d.pants,shoes:0x2a2f3c,top:'long',...(d.helmet?{hairStyle:0}:{}),accessory:d.cap?'cap':d.headphones?'headphones':'none'});
     this.root=this.parts.root;this.root.name=`${d.role} · simulated town staff`;this.root.position.set(...d.at);this.root.rotation.y=d.yaw??Math.PI;
     this.parts.badge.visible=false;this.owned=new Set();this.phase=seed*.731;

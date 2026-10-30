@@ -30,13 +30,12 @@ export function responseText(run){
     const pending=['running','approved'].includes(run.status);
     return [pending?'Working on your message…':'No response was returned for this message.',run.error].filter(Boolean).join('\n\n');
   }
-  const {summary,checks=[],limitations=[],next}=run.result;
-  return [run.status==='failed'?run.error:'',summary,checks.length?`Checks\n${checks.map(c=>`• ${c}`).join('\n')}`:'',limitations.length?`Limitations\n${limitations.map(c=>`• ${c}`).join('\n')}`:'',next?`Next\n${next.title}\n${next.instruction}`:''].filter(Boolean).join('\n\n');
+  return [run.status==='failed'?run.error:'',run.result.summary].filter(Boolean).join('\n\n');
 }
 export function chatMessages(runs,proposals){
   const messages=runs.flatMap(run=>run.voice ? [...(run.voiceMessages||[]).map(m=>({...m,id:run.id+'-'+m.id,provider:'codex',voice:true})),...(run.status==='failed'?[{id:run.id+'-error',role:'assistant',text:run.error,failed:true,voice:true}]:[])] : [
     {id:run.id+'-user',role:'user',author:run.teamFinal?'Team report request':run.teamParent?(run.teamFromName||'Teammate')+' · handoff':null,text:run.instruction||run.title||'Prompt text unavailable',execution:run.execution,reviewScope:run.reviewScope,attachments:run.attachments||[]},
-    {id:run.id+'-assistant',role:'assistant',runId:run.id,workspace:run.workspace,findings:run.result?.findings,stopping:!!run.stopRequestedAt,provider:run.provider||'codex',text:run.status==='running'&&run.stopRequestedAt?'Stopping this run…':responseText(run),pending:run.status==='running',failed:['failed','interrupted'].includes(run.status),reasoningSummaries:(run.reasoningSummaries||[]).map(s=>({id:s.id,text:s.text}))}
+    {id:run.id+'-assistant',role:'assistant',runId:run.id,workspace:run.workspace,findings:run.result?.findings,stopping:!!run.stopRequestedAt,provider:run.provider||'codex',text:run.status==='running'&&run.stopRequestedAt?'Stopping this run…':responseText(run),pending:run.status==='running',failed:['failed','interrupted'].includes(run.status),report:run.result,reasoningSummaries:(run.reasoningSummaries||[]).map(s=>({id:s.id,text:s.text,...(s.kind?{kind:s.kind}:{})}))}
   ]);
   // Approval may be observed before the runner has created its run record.
   for(const proposal of (Array.isArray(proposals)?proposals:[proposals]))if(proposal?.status==='approved'&&!runs.some(r=>r.proposalId===proposal.id)){

@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@fontsource-variable/nunito": "^5.3.0",
+    "@huggingface/transformers": "3.8.1",
     "lucide-static": "^1.52.0",
     "three": "^0.169.0"
   },
@@ -64,10 +65,17 @@
       "category": "public.app-category.developer-tools",
       "icon": "electron/build/icon.icns",
       "identity": "-",
+      "entitlements": "electron/entitlements.mac.plist",
+      "entitlementsInherit": "electron/entitlements.mac.plist",
       "extendInfo": {
         "NSMicrophoneUsageDescription": "Record local voice messages for your agents in Agent World."
       }
     },
     "npmRebuild": false
+  },
+  "overrides": {
+    "@huggingface/transformers": {
+      "sharp": "0.35.5"
+    }
   }
 }

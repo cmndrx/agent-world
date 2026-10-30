@@ -1,6 +1,6 @@
 # Agent World working instructions
 
-Read `CONCEPT.md` and `README.md` before changing the project. Read `docs/NEXT_PASS.md` for the latest handoff, then verify current files, Git changes and server state.
+Read `CONCEPT.md` and `README.md` before changing the project. Read `docs/NEXT_PASS.md` for the latest handoff, then verify current files, Git changes and server state. For the town simulation (city-builder game layer), also read `docs/TOWN_SIM_PLAN.md` ("Start here"); after every pass, update its status table and next-pass brief as well as `docs/NEXT_PASS.md`.
 
 Use `skills/agent-world/SKILL.md` when navigating Agent World, managing its authorized project tasks or continuing development. Its references explain controls, the local API and evidence-based handoffs. The same skill is discoverable by Codex and Claude Code through repository skill links.
 

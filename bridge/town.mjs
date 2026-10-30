@@ -56,7 +56,7 @@ export class TownStore {
       }
     }
     if (saved) {
-      this.town = { ...emptyTown(), ...saved, civic: Array.isArray(saved.civic) ? saved.civic : [], pendingRemoval: saved.pendingRemoval || {}, retired: saved.retired || [] };
+      this.town = { ...emptyTown(), ...saved, civic: Array.isArray(saved.civic) ? saved.civic : [], props: Array.isArray(saved.props) ? saved.props : [], pendingRemoval: saved.pendingRemoval || {}, retired: saved.retired || [] };
       this.problems = layoutProblems(this.town);
       return this.town;
     }

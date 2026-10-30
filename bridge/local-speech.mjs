@@ -35,7 +35,7 @@ export class LocalSpeech {
     const settings=this.settings();
     if(settings.url)return {backend:'voicestudio',configured:true,message:'VoiceStudio local backend selected. Models must be installed in VoiceStudio.'};
     const transcribe=!!this.command('whisper-cli')&&fs.existsSync(settings.model),speak=this.platform==='darwin'&&fs.existsSync('/usr/bin/say')&&!!this.command('ffmpeg');
-    return {backend:'native',configured:transcribe&&speak,transcribe,speak,message:transcribe&&speak?'Local Whisper · macOS voice':!transcribe?'Local speech needs whisper-cli and a Whisper model. See docs/LOCAL_VOICE.md.':'Local spoken replies need macOS say and ffmpeg, or a configured VoiceStudio backend.'};
+    return {backend:'native',configured:transcribe&&speak,transcribe,speak,platform:this.platform,tools:{whisper:!!this.command('whisper-cli'),model:fs.existsSync(settings.model),ffmpeg:!!this.command('ffmpeg')},message:transcribe&&speak?'Local Whisper · macOS voice':!transcribe?'Local speech needs setup. Choose Install local voice to download an in-app model. No API key is needed.':'Choose Install local voice to use an installed local system voice.'};
   }
   async remote(route,options,signal){
     const timeout=AbortSignal.timeout(90000);

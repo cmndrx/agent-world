@@ -1,8 +1,6 @@
 import { mountedTV } from '../../shared/tv-mounts.mjs';
 import { interestForActivity } from '../../shared/interest-care.mjs';
-import { CARE_ACTIONS } from '../../shared/care.mjs';
 import { assignedRole } from '../../shared/team.mjs';
-import { CareFeedback } from './care-feedback.js';
 import {canPromptFromStatus} from '../../shared/agent-view.mjs';
 import { observedLabel } from '../../shared/freshness.mjs';
 // A Sim: one persistent character (or a visiting sub-agent) in a lot.
@@ -123,7 +121,6 @@ export class Sim {
     this.clickReaction = new ClickReaction();
     this.lot = lot;
     this.character = character;
-    this.careFeedback = new CareFeedback(character);
     this.parent = parent;
     this.isVisitor = !!parent;
     this.hash = hashStr(key);
@@ -237,10 +234,6 @@ export class Sim {
     const prevState = this.state;
     const prevAt = this.act.at;
     this.truth = session;
-    if (session && !['idle','done'].includes(session.state) && this.careCheerUntil > performance.now() / 1000) {
-      this.careCheerUntil = 0;
-      this.popT = undefined; // observed work interrupts the care animation
-    }
     if (this.isVisitor && !this.roleName && session?.detail?.target) this.roleName = session.detail.target;
 
     const color = PLUMBOB_COLORS[plumbobFor(this.state)];
@@ -359,16 +352,13 @@ export class Sim {
 
   decide() {
     if (this.leaving) return;
+    // A venue visit (town simulation) continues through idle/off-duty changes; observed work ends it at once.
+    if (this.visit) {
+      if (!this.truthTarget()) return;
+      this.endVisit(true);
+    }
     this.stopHomeActivity();
-    const care = this.character?.care?.pending;
-    const canCare = care && (!this.truth || ['idle','done'].includes(this.state));
     const target = this.truthTarget();
-    if (!target && canCare) {
-      if (this.startHomeActivity(CARE_ACTIONS[care.action]?.activityId, care)) return;
-      this.careError = 'Care cancelled: the reserved station or its approach is blocked.';
-      this.activity = {spot:this.standingSpot(this.desk().chair),pose:'stand',careId:care.id,flavor:false};
-      this.cancelBlockedCare(care);
-    } else
     if (target) {
       // Real work and off-duty spots take priority: an idle Sim relaxing there moves on.
       const holder = this.holder(target.spot);
@@ -451,6 +441,51 @@ export class Sim {
     this.arrived = false;
   }
 
+  /**
+   * Town simulation (flavor, docs/TOWN_SIM_PLAN.md Phase 5): walk out of the front door and along the streets to a
+   * venue, stay a while, walk home. `plan` = { venue, label, out, back, stayMs, face } with lot-local points.
+   * Only for idle ground-floor residents; observed work ends it at once (decide → endVisit).
+   */
+  startVisit(plan) {
+    if (this.isVisitor || this.leaving || this.visit || this.truthTarget() || this.floor || !this.placed) return false;
+    this.stopHomeActivity();
+    this.release();
+    const door = this.stations.entrance;
+    const inside = this.lot.getNav(0, this).findPath({ x: this.pos.x, z: this.pos.y }, door);
+    this.visit = { ...plan, phase: 'out' };
+    this.activity = { spot: plan.out.at(-1), pose: 'stand', flavor: true, kind: 'visit', label: `Walking to the ${plan.label} · simulated` };
+    this.flavorUntil = Infinity;
+    this.path = [...inside, ...plan.out];
+    this.arrived = false;
+    return true;
+  }
+
+  /** Advance a visit when the resident arrives somewhere: stay at the venue, then walk home, then resume home life. */
+  updateVisit(now) {
+    const v = this.visit;
+    if (!this.arrived) return;
+    if (v.phase === 'out') {
+      v.phase = 'stay';
+      v.until = now + v.stayMs / 1000;
+      this.activity.label = `At the ${v.label} · simulated`;
+      if (v.face !== undefined) this.targetFacing = v.face;
+    } else if (v.phase === 'stay' && now > v.until) {
+      v.phase = 'back';
+      this.activity.label = 'Walking home · simulated';
+      this.path = [...v.back, this.stations.entrance];
+      this.arrived = false;
+    } else if (v.phase === 'back') this.endVisit(false);
+  }
+
+  /** End a visit; `snap` puts the resident straight back home (observed work, layout change). */
+  endVisit(snap) {
+    const v = this.visit;
+    this.visit = null;
+    this.activity = null;
+    if (snap) { this.path = []; this.placed = false; this.arrived = true; }
+    this.onVisitEnd?.(this, v);
+  }
+
   stopHomeActivity() {
     const hadScene=!!this.homeScene;
     this.homeScene?.dispose();
@@ -463,23 +498,12 @@ export class Sim {
   }
 
   /** Simulation only; intentionally has no API/persistence/reward effect. Observed work always wins. */
-  startHomeActivity(id, care = null) {
-    if (this.isVisitor || this.leaving || (this.truth && !['idle','done'].includes(this.state)) || (this.character?.care?.pending && !care)) return false;
+  startHomeActivity(id) {
+    if (this.isVisitor || this.leaving || (this.truth && !['idle','done'].includes(this.state))) return false;
     if (!homeActivity(id)) return false;
     let floor = this.lot.building?.floors[this.floor];
     if (!floor) return false;
     if(!this.floor) floor={...floor,items:[...(this.lot.homeActivityItems || floor.items),...this.lot.decor.items.flatMap(d=>{const m=d.item==='fireplace_tv'?mountedTV(d,floor.items):null;if(d.item==='fireplace_tv'&&!m)return [];return [{kind:m?'television':d.item,x:m?.screenX??d.x,z:m?.screenZ??d.z,facing:m?.facing || ['s','w','n','e'][d.rot],floor:0}];})]};
-    // Player care owns its server-reserved envelope ahead of passive simulation.
-    if(care?.plan) for(const [sim,p] of [...(this.lot.homeActivityClaims || [])]) {
-      if(sim!==this && p.floor===this.floor && sim.activity?.flavor && overlaps(p.rect,care.plan.rect)) {
-        sim.stopHomeActivity();sim.release();sim.activity=null;sim.path=[];
-      }
-    }
-    if(care?.plan) for(const [spot,sim] of [...(this.lot.claims || [])]) {
-      if(sim!==this && sim.floor===this.floor && sim.activity?.flavor && overlaps([spot.x-.45,spot.z-.45,spot.x+.45,spot.z+.45],care.plan.rect)) {
-        sim.stopHomeActivity();sim.release();sim.activity=null;sim.path=[];
-      }
-    }
     const nav = this.lot.getNav(this.floor,this);
     const protectedSpots = (this.lot.desks || []).filter(d=>(d.floor || 0)===this.floor)
       .flatMap(d=>[d.chair,d.wait,d.visitorWait,...d.guests,d.entrance].filter(Boolean));
@@ -489,14 +513,12 @@ export class Sim {
     for (const [sim,p] of this.lot.homeActivityClaims || []) if(sim!==this && p.floor===this.floor) occupied.push(p.rect);
     const from=this.placed?{x:this.pos.x,z:this.pos.y}:this.desk().entrance || floor.stations.entrance;
     const solidRects=this.floor ? floor.obstacles : [...this.obstaclesForHomeActivity()];
-    const plan=care?.plan || planHomeActivity({id,floor,nav,from,pet:this.lot.pet?.kind,protectedSpots,occupied,solidRects});
+    const plan=planHomeActivity({id,floor,nav,from,pet:this.lot.pet?.kind,protectedSpots,occupied,solidRects});
     if (!plan) return false;
-    const [pi,pj]=nav.toCell(plan.spot.x,plan.spot.z);
-    if(care && (care.floor!==this.floor || this.holder(plan.spot) || occupied.some(r=>overlaps(r,plan.rect)) || !nav.walkable(plan.spot.x,plan.spot.z) || !nav.reachableFrom(from)[pj*nav.w+pi])) return false;
     this.stopHomeActivity();this.release();
     this.homeUnavailable=null;this.homePlan=plan;
     (this.lot.homeActivityClaims ??= new Map()).set(this,{...plan,floor:this.floor});
-    this.activity={spot:plan.spot,pose:'home',homeId:id,flavor:!care,careId:care?.id,label:plan.def.label,kind:id};
+    this.activity={spot:plan.spot,pose:'home',homeId:id,flavor:true,label:plan.def.label,kind:id};
     this.claim(plan.spot);
     this.flavorUntil=Infinity; // duration starts on arrival, not while walking
     if(!this.placed){this.pos.set(from.x,from.z);this.placed=true;}
@@ -515,15 +537,10 @@ export class Sim {
       this.layoutVersion = this.lot.layoutVersion;
       this.clickReaction.cancel();this.staleReactionRestore=0;
       this.stopHomeActivity();this.release();this.activity=null;this.path=[];this.placed=false;
+      if(this.visit)this.endVisit(true);
     }
     if(this.clickReaction.active){this.staleReactionRestore=1;this.staleClickBase=this.clickReaction.active.baseJoints;this.staleClickYaw=this.clickReaction.active.baseYaw;}
     this.clickReaction.tick(dt,this);
-    if(this.observationConnected===false && (this.character?.care?.pending || this.activity?.careId)) {
-      // Offline scenes cannot earn progress or keep a household station locked.
-      // The bridge owns expiry/restart cancellation; never send an offline reward.
-      this.stopHomeActivity();this.release();this.activity=null;this.path=[];
-      if(!this.truth){this.updateLabel();return;}
-    }
     if (this.truth && this.observationConnected === false) {
       this.plumbob.userData.material.color.setHex(0x9299a5);this.plumbob.userData.material.emissive.setHex(0x9299a5);this.plumbob.userData.material.emissiveIntensity=.25;
       if(this.staleReactionRestore>0){
@@ -534,12 +551,11 @@ export class Sim {
       this.updateLabel();return;
     }
     if (!this.activity) this.decide();
-    const careId = this.character?.care?.pending?.id;
-    if ((this.activity?.careId || null) !== (careId && (!this.truth || ['idle','done'].includes(this.state)) ? careId : null)) this.decide();
     const now = performance.now() / 1000;
     this.needs.energy = Math.max(0, this.needs.energy - dt * 0.012);
     this.needs.fun = Math.max(0, this.needs.fun - dt * 0.009);
 
+    if (this.visit) this.updateVisit(now);
     if (!this.clickReaction.active && this.activity?.flavor && this.arrived && now > this.flavorUntil) {
       if (this.activity.kind === 'coffee') this.needs.energy = 1;
       if (this.activity.kind === 'couch') this.needs.fun = 1;
@@ -617,7 +633,6 @@ export class Sim {
     this.animate(pose, t, dt);
     // Reapply structural sleep/bath support even while choreography time is frozen.
     if(pose==='home')this.homeScene?.update(this.clickReaction.active?0:dt,matchMedia('(prefers-reduced-motion: reduce)').matches);
-    this.pulseCareScene(pose==='home' && !walking && !this.clickReaction.active);
     if (pose === 'globe') this.lot.globeSpin = 1;
     if (pose === 'sip') this.lot.coffeeBusy = 1;
     if (this.laptop) this.laptop.visible = !['wave', 'cheer'].includes(pose);
@@ -635,39 +650,9 @@ export class Sim {
     this.updateLabel();
   }
 
-  pulseCareScene(active) {
-    const p=this.character?.care?.pending;
-    if(!active || !p || this.activity?.careId!==p.id || document.hidden || this.observationConnected===false || this.carePulseSending || performance.now()<(this.nextCarePulse || 0)) return;
-    this.nextCarePulse=performance.now()+750;this.carePulseSending=true;
-    fetch('/api/care',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({project:this.lot.project,agentId:this.character.id,action:'scene',pendingId:p.id,sequence:p.sequence+1,floor:this.floor,x:this.pos.x,z:this.pos.y})})
-      .then(async r=>{const data=await r.json();if(!r.ok)throw Error(data.error || 'Care scene request failed.');this.careError=null;this.receiveCare(data.character);if(data.character.care.revision>=this.character.care.revision)this.character=data.character;})
-      .catch(error=>{this.careError=error.message || 'Care scene connection failed.';this.nextCarePulse=performance.now()+750;})
-      .finally(()=>{this.carePulseSending=false;});
-  }
-
-  cancelBlockedCare(pending) {
-    if(this.cancellingCare===pending.id)return;
-    this.cancellingCare=pending.id;
-    fetch('/api/care',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({project:this.lot.project,agentId:this.character.id,action:'cancel',id:crypto.randomUUID(),revision:this.character.care.revision})})
-      .then(async r=>{const data=await r.json();if(!r.ok)throw Error(data.error || 'Care cancellation failed.');if(data.character.care.revision>=this.character.care.revision)this.character=data.character;})
-      .catch(error=>{this.careError+=' '+error.message;})
-      .finally(()=>{this.cancellingCare=null;});
-  }
-
-  receiveCare(character, replay = false) {
-    if (!this.careFeedback.receive(character, replay)) return;
-    const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    this.careReceivedUntil = performance.now() / 1000 + 1.8;
-    if (!reducedMotion && (!this.truth || ['idle', 'done'].includes(this.state))) {
-      this.careCheerUntil = this.careReceivedUntil;
-      this.popT = 0;
-    }
-  }
-
   /** Which pose to play right now: walking, a truth-driven desk pose (with lead-in), or flavor. */
   currentPose(walking, now) {
     if (walking) return this.isVisitor ? 'laptop_walk' : 'walk';
-    if (now < this.careCheerUntil && (!this.truth || ['idle','done'].includes(this.state))) return 'cheer';
     if (now < this.cheerUntil) return 'cheer';
     const a = this.activity;
     if (!a) return 'stand';
@@ -973,13 +958,12 @@ export class Sim {
     // Every bubble is just the name and a short status (icons only when zoomed far out).
     const chip = this.observationConnected !== false && this.labelMode === 'chip' && !compact;
     const stateIcon = icon(this.walking && !stale ? 'navigation' : STATE_ICON[state]);
-    const careReceived = performance.now() / 1000 < this.careReceivedUntil && !stale && !['waiting_for_user','error'].includes(state);
-    const homeLabel = !stale && (this.activity?.homeId ? (this.walking ? `Approaching · ${homeActivity(this.activity.homeId)?.label}` : homeActivity(this.activity.homeId)?.label) : this.homeUnavailable);
-    const detail = this.selected && !this.detailSuppressed && !stale && this.labelMode === 'full' && !['waiting_for_user','error'].includes(state) ? `<span class="b-resident-detail">${escapeHtml(assignedRole(this.character?.assignedRole)?.title || '')}${this.character?.care ? `<small>Lv ${this.residentLevel || 1} &middot; Happiness ${this.character.happiness}/100 (simulated)</small>` : ''}</span>` : '';
+    const homeLabel = !stale && (this.visit ? this.activity?.label : this.activity?.homeId ? (this.walking ? `Approaching · ${homeActivity(this.activity.homeId)?.label}` : homeActivity(this.activity.homeId)?.label) : this.homeUnavailable);
+    const detail = this.selected && !this.detailSuppressed && !stale && this.labelMode === 'full' && !['waiting_for_user','error'].includes(state) ? `<span class="b-resident-detail">${escapeHtml(assignedRole(this.character?.assignedRole)?.title || '')}${this.character ? `<small>Lv ${this.residentLevel || 1}</small>` : ''}</span>` : '';
     const html = compact
       ? `<span class="b-icon">${stateIcon}</span>`
       : `<span class="b-icon">${stateIcon}</span>` +
-        `<span class="b-text"><b>${escapeHtml(this.name)}</b>${detail}${canPromptFromStatus(this.truth)?`<button type="button" class="b-state" data-prompt-sim aria-label="${escapeHtml(text)} · Open chat">${escapeHtml(text)}</button>`:`<span class="b-state">${escapeHtml(text)}</span>`}${homeLabel ? `<small>${escapeHtml(homeLabel)}</small>` : ''}${careReceived ? '<small class="b-care-feedback">Care received &middot; simulated</small>' : ''}</span>`;
+        `<span class="b-text"><b>${escapeHtml(this.name)}</b>${detail}${canPromptFromStatus(this.truth)?`<button type="button" class="b-state" data-prompt-sim aria-label="${escapeHtml(text)} · Open chat">${escapeHtml(text)}</button>`:`<span class="b-state">${escapeHtml(text)}</span>`}${homeLabel ? `<small>${escapeHtml(homeLabel)}</small>` : ''}</span>`;
     if (html !== this.labelHtml) {
       this.bubbleEl.innerHTML = html;
       this.labelHtml = html;

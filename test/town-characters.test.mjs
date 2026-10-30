@@ -41,6 +41,19 @@ test('all civic kinds, four rotations, idempotence, move/remove/rebuild and cuta
     c.setTown({civic:[]});assert.equal(c.items.size,0);assert.ok(before.every(it=>!it.root.parent&&!it.staff.root.parent));
   }
 });
+test('every recreation venue builds in its frame with one host inside its footprint',async()=>{
+  const {RECREATION,RECREATION_KINDS}=await import('../shared/town.mjs');const {VENUE_STAFF}=await import('../web/src/civic-staff.js');
+  assert.deepEqual(Object.keys(VENUE_STAFF).sort(),[...RECREATION_KINDS].sort());
+  const scene=new THREE.Scene(),c=new CivicBuildings(scene);
+  c.setTown({civic:RECREATION_KINDS.map((kind,i)=>({kind,i:i*5,j:0,rot:i%4}))});assert.equal(c.items.size,RECREATION_KINDS.length);
+  for(const [kind,it] of c.items){
+    const {w,d}=RECREATION[kind].size,[x,,z]=VENUE_STAFF[kind].at;
+    assert.equal(it.staff.root.parent,it.root);assert.ok(Math.abs(x)<w*4-.5&&Math.abs(z)<d*4-.5,kind);
+    const box=new THREE.Box3().setFromObject(it.root),size=box.getSize(new THREE.Vector3());
+    assert.ok(Math.min(size.x,size.z)<=Math.max(w,d)*8+.5,`${kind} stays on its plot`);assert.ok(it.top>2,kind);
+  }
+  c.setTown({civic:[]});assert.equal(c.items.size,0);
+});
 function rig(){const parts=buildPerson(lookFromSeed(42)),parent=new THREE.Group();parent.rotation.y=Math.PI/2;parent.position.y=12;parent.add(parts.root);return {parts,root:parts.root,truth:null,state:'off_duty',observationConnected:true,seated:false};}
 const target=()=>({headX:0,headY:0,twist:0,lean:0,armRx:0,armRz:0,elbowR:0,armLx:0,armLz:0,elbowL:0});
 test('click classification, coalescing, truth interruption, urgency and bounded cooldown',()=>{

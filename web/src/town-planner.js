@@ -1,19 +1,27 @@
 // Plan town (simulation layer): a SimCity-style planning view over the town grid (shared/town.mjs). Draw
-// streets, remove streets, move or turn homes, place civic buildings (fire station, hospital, …) as player levels
-// unlock them, and choose a plot for a new project's home. Every action is a
+// streets, remove streets, move or turn homes, place civic buildings (fire station, hospital, …) and recreation
+// venues (park, arcade, cinema, …) as town tiers unlock them, and choose a plot for a new project's home. Every action is a
 // preview until you confirm; the bridge validates it again with the same rules before saving. Interior
 // decoration stays in Decorate (build.js). Streets and traffic are scenery and never reflect agent work.
+// Coverage layers (town simulation, docs/TOWN_SIM_PLAN.md) paint the grid as a heatmap, and placing a civic building
+// or venue previews which homes it would change before you confirm.
 //
-// Controls: 1–5 pick a tool · click to start, click to finish · R turns a home or flips a street's corner ·
+// Controls: 1–7 pick a tool · click to start, click to finish · R turns a home or flips a street's corner ·
 // Enter confirms · Esc cancels the preview, then leaves · M toggles Plan town · drag or WASD pans.
 
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import {
-  BUILDABLE, CIVIC, CIVIC_KINDS, FACING, PROTECTED, TILE, centeredAt, checkPlacement, civicTransform, extents, connectedRoads, eligiblePlots, entranceTile, homeTiles, homeTransform, key,
+  BUILDABLE, CIVIC, CIVIC_KINDS, FACING, MAX_PROPS, PROP_KINDS, PUBLIC_BUILDINGS, TOWN_PROPS, checkProp, RECREATION, RECREATION_KINDS, RECREATION_TIERS, PROTECTED, TILE, centeredAt, checkPlacement, civicTransform, extents, connectedRoads, eligiblePlots, entranceTile, homeTiles, homeTransform, key,
   planRoad, planRoadRemoval, roadMap, tileAt, tileCenter, tilesRect,
 } from '../../shared/town.mjs';
 import { civicPictures } from './civic.js';
+import { HEAT_LAYERS, heatLayer, heatPixels, placementPreview, previewHeadline, previewLines, primaryLayer, propPreview, withBuilding, withProp } from '../../shared/town-preview.mjs';
+import { townSatisfaction } from '../../shared/home-satisfaction.mjs';
+import { tierName } from '../../shared/town-tiers.mjs';
+import { nextUpgrade, propRefund, upgradable } from '../../shared/civic-pride.mjs';
+import { PROP_RULES, upgradeLevel } from '../../shared/town-influence.mjs';
+import { INTEREST_BY_ID } from '../../shared/catalogs/index.js';
 import { icon } from './icons.js';
 import { escapeHtml as esc } from './sim.js';
 
@@ -22,10 +30,15 @@ const TOOLS = {
   road: { label: 'Road', long: 'Draw road', icon: 'route', key: '1', help: 'Click a start tile, then an end tile. Streets snap to the grid, make at most one 90° turn and must join an existing street. Basic streets are free.' },
   remove: { label: 'Bulldoze', long: 'Remove road', icon: 'eraser', key: '2', help: 'Click the first and last tile of a straight stretch of street. Main Street stays, and every home keeps its connection.' },
   move: { label: 'Move', long: 'Move building', icon: 'move', key: '3', help: 'Click a home or civic building to pick it up, then click its new plot. R turns it; the arrow is its entrance.' },
-  civic: { label: 'Civic', long: 'Civic buildings', icon: 'landmark', key: '5', help: 'Choose a building from the list, then a plot beside a connected street. New ones unlock as you level up.' },
+  civic: { label: 'Civic', long: 'Civic buildings', icon: 'landmark', key: '5', help: 'Choose a building from the list, then a plot beside a connected street. New ones unlock as your town reaches new tiers.' },
+  leisure: { label: 'Leisure', long: 'Recreation', icon: 'ferrisWheel', key: '6', help: 'Choose a venue from the list, then a plot beside a connected street. More open as your town reaches new tiers.' },
+  props: { label: 'Props', long: 'Town props', icon: 'treeDeciduous', key: '7', help: 'Choose a prop from the list, then a free tile. Props add a little green space; hedges also shield nearby homes from noise. Click a placed prop to move or remove it.' },
   place: { label: 'Place', long: 'Place home', icon: 'house', key: '4', help: 'Choose a plot beside a connected street (green marks show frontage). R turns the home.' },
 };
 const FACE = ['south', 'east', 'north', 'west'];
+/** Tools that place public buildings: civic services and recreation venues share one draft and save path. */
+const isBuildTool = (tool) => tool === 'civic' || tool === 'leisure';
+const toolFor = (kind) => (PUBLIC_BUILDINGS[kind]?.group === 'recreation' ? 'leisure' : 'civic');
 
 /** Canvas textures shared by every overlay: a rounded tile with a bright rim, a grid cell and a hatch. */
 function canvasTexture(draw, size = 64) {
@@ -93,6 +106,7 @@ export class TownPlanner {
    * @param {() => object} o.town the current town layout
    * @param {(project: string) => string} o.homeName
    * @param {(project: string) => number} [o.homeHeight] how tall a home's current tier stands (for its ghost)
+   * @param {() => Map<string, object>} [o.households] households by project (for home satisfaction and previews)
    * @param {(action: object) => Promise<any>} o.save POST /api/town
    * @param {() => boolean} [o.suppressed] true for the click that ends a camera drag
    * @param {(active: boolean, center: THREE.Vector3|null, distance: number) => void} o.onToggle
@@ -120,6 +134,10 @@ export class TownPlanner {
     this.guides = new THREE.Group(); // grid, civic land, network, footprints (rebuilt when the town changes)
     this.preview = new THREE.Group(); // the draft (rebuilt as the pointer moves)
     this.overlay.add(this.guides, this.preview);
+    // Coverage heatmap: one texture over the buildable grid (one draw call), rebuilt only when its inputs change.
+    this.heatChoice = null; // a HEAT_LAYERS id, or null: show the placed building's own layer while placing
+    this.heat = this.heatMesh();
+    this.overlay.add(this.heat);
 
     this.el = document.createElement('div');
     this.el.id = 'town-planner';
@@ -130,6 +148,7 @@ export class TownPlanner {
       <nav class="tp-dock" data-part="dock" role="toolbar" aria-label="Town planning tools"></nav>
       <div class="tp-flash" data-part="flash" role="status" hidden></div>
       <aside class="tp-civic" data-part="civic" aria-label="Civic buildings" hidden></aside>
+      <aside class="tp-layers" data-part="layers" aria-label="Coverage layers"></aside>
       <aside class="tp-ledger" aria-label="Projects">
         <button type="button" class="tp-ledger-tab" data-ledger-toggle data-part="ledgerTab" aria-expanded="true"></button>
         <div class="tp-ledger-body" data-part="ledgerBody"></div>
@@ -146,6 +165,11 @@ export class TownPlanner {
     this.html = {};
     this.el.addEventListener('click', (e) => this.onPanelClick(e));
     this.el.addEventListener('submit', (e) => { e.preventDefault(); this.saveStreetName(); });
+    this.el.addEventListener('change', (e) => {
+      if (!e.target.matches('[data-heat]')) return;
+      this.heatChoice = e.target.value || null;
+      this.refresh(false);
+    });
     this.el.addEventListener('keydown', (e) => {
       if (e.target.name === 'street' && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.renaming = null; this.refresh(); }
     });
@@ -211,6 +235,11 @@ export class TownPlanner {
     this.renaming = null;
     this.civicKind = null;
     this.removingCivic = null;
+    this.propKind = null;
+    this.removingProp = null;
+    // Below ~1500 px both side panels would squeeze the card: a building or prop list makes the Projects drawer step
+    // aside (its tab brings it back).
+    if ((isBuildTool(tool) || tool === 'props') && innerWidth < 1500) this.ledgerOpen = false;
     // Coming back to Place keeps a ghost under the pointer (or on the best plot).
     if (tool === 'place') {
       const t = this.hover;
@@ -269,12 +298,40 @@ export class TownPlanner {
   /** Pick a civic building from the list: a new one follows the pointer; a placed one starts from where it stands. */
   pickCivic(kind) {
     const placed = this.town().civic?.find((c) => c.kind === kind);
-    this.setTool('civic');
+    this.setTool(toolFor(kind));
     this.civicKind = kind;
     this.rot = placed?.rot || 0;
     const at = placed || (this.hover ? centeredAt(this.hover, this.rot, kind) : eligiblePlots(this.town(), { civic: kind, limit: 1 })[0]);
     if (at) this.draft = { kind: 'civic', civic: kind, at: { i: at.i, j: at.j, rot: this.rot }, fixed: false };
     this.refresh();
+  }
+
+  /** Choose a prop to place; it follows the pointer until a tile is clicked. */
+  pickProp(kind) {
+    this.setTool('props');
+    this.propKind = kind;
+    if (this.hover) this.draft = { kind: 'prop', prop: kind, at: { i: this.hover.i, j: this.hover.j }, moving: null, fixed: false };
+    this.refresh();
+  }
+
+  /** The placed prop on a tile, if any. */
+  propAt(t) {
+    return (this.town().props || []).find((p) => p.i === t.i && p.j === t.j) || null;
+  }
+
+  /** Remove the prop being moved (two clicks); half its cost comes back. */
+  async removePropDraft() {
+    const d = this.draft;
+    if (d?.kind !== 'prop' || !d.moving) return;
+    if (this.removingProp !== d.moving) { this.removingProp = d.moving; return this.render(); }
+    this.removingProp = null;
+    this.busy = true;
+    try {
+      await this.save({ action: 'remove-prop', id: d.moving, revision: this.town().revision });
+      this.toast(`${TOWN_PROPS[d.prop].name} removed · +${propRefund(d.prop)} Civic Pride back`, true);
+      this.draft = null;
+    } catch (err) { this.message = err.message; }
+    finally { this.busy = false; this.refresh(); }
   }
 
   async removeCivicBuilding(kind) {
@@ -283,8 +340,19 @@ export class TownPlanner {
     this.busy = true;
     try {
       await this.save({ action: 'remove-civic', kind, revision: this.town().revision });
-      this.toast(`${CIVIC[kind].name} removed · you can place it again any time`, true);
+      this.toast(`${PUBLIC_BUILDINGS[kind].name} removed · you can place it again any time`, true);
       if (this.civicKind === kind) { this.civicKind = null; this.draft = null; }
+    } catch (err) { this.message = err.message; }
+    finally { this.busy = false; this.refresh(); }
+  }
+
+  /** Spend Civic Pride on the next upgrade (more reach); the bridge checks the balance again. */
+  async upgradeCivicBuilding(kind) {
+    this.busy = true;
+    try {
+      const before = (this.town().civic || []).find((c) => c.kind === kind);
+      await this.save({ action: 'upgrade-civic', kind, revision: this.town().revision });
+      this.toast(`${PUBLIC_BUILDINGS[kind].name} upgraded to level ${upgradeLevel(before) + 1} · wider cover`, true);
     } catch (err) { this.message = err.message; }
     finally { this.busy = false; this.refresh(); }
   }
@@ -330,8 +398,10 @@ export class TownPlanner {
       // A home follows the pointer by its centre tile.
       if (d.kind === 'move' || d.kind === 'place') d.at = { i: t.i - 1, j: t.j - 1, rot: this.rot };
       if (d.kind === 'civic') d.at = centeredAt(t, this.rot, d.civic);
-    } else if (!d && this.tool === 'place') this.draft = { kind: 'place', at: { i: t.i - 1, j: t.j - 1, rot: this.rot }, fixed: false };
-    else if (!d && this.tool === 'civic' && this.civicKind) this.draft = { kind: 'civic', civic: this.civicKind, at: centeredAt(t, this.rot, this.civicKind), fixed: false };
+      if (d.kind === 'prop') d.at = { i: t.i, j: t.j };
+    } else if (!d && this.tool === 'props' && this.propKind) this.draft = { kind: 'prop', prop: this.propKind, at: { i: t.i, j: t.j }, moving: null, fixed: false };
+    else if (!d && this.tool === 'place') this.draft = { kind: 'place', at: { i: t.i - 1, j: t.j - 1, rot: this.rot }, fixed: false };
+    else if (!d && isBuildTool(this.tool) && this.civicKind) this.draft = { kind: 'civic', civic: this.civicKind, at: centeredAt(t, this.rot, this.civicKind), fixed: false };
     this.refresh(false);
   }
 
@@ -345,7 +415,14 @@ export class TownPlanner {
     if (this.tool === 'road' || this.tool === 'remove') {
       if (!d || d.fixed) this.draft = { kind: this.tool, from: t, to: t, fixed: false };
       else { d.to = t; d.fixed = true; }
-    } else if (this.tool === 'civic' || d?.kind === 'civic') {
+    } else if (this.tool === 'props') {
+      if (d) { d.at = { i: t.i, j: t.j }; d.fixed = true; }
+      else {
+        const p = this.propAt(t);
+        if (!p) { this.message = 'Choose a prop from the list, or click a placed prop to move it.'; return this.refresh(); }
+        this.draft = { kind: 'prop', prop: p.kind, at: { i: p.i, j: p.j }, moving: p.id, fixed: false };
+      }
+    } else if (isBuildTool(this.tool) || d?.kind === 'civic') {
       if (d) { d.at = centeredAt(t, this.rot, d.civic); d.fixed = true; }
       else {
         const b = this.civicAt(t);
@@ -393,7 +470,8 @@ export class TownPlanner {
       // Escape cancels the preview first, then leaves planning.
       if (this.renaming) { this.renaming = null; this.refresh(); }
       else if (this.removingCivic) { this.removingCivic = null; this.render(); }
-      else if (this.draft && (this.draft.fixed || this.tool === 'road' || this.tool === 'remove' || this.tool === 'move' || this.tool === 'civic')) this.cancelDraft();
+      else if (this.draft && (this.draft.fixed || this.tool === 'road' || this.tool === 'remove' || this.tool === 'move' || this.tool === 'props' || isBuildTool(this.tool))) this.cancelDraft();
+      else if (this.tool === 'props' && this.propKind) this.cancelDraft(); // a chosen prop with no ghost yet: put it down first
       else if (this.placing) this.cancelPlacing();
       else this.exit();
     } else if (e.key === 'r' || e.key === 'R') {
@@ -442,6 +520,8 @@ export class TownPlanner {
     const placing = this.tool === 'place' && this.placing;
     this.draft = null;
     this.civicKind = null;
+    this.propKind = null;
+    this.removingProp = null;
     this.message = 'Cancelled. Nothing changed.';
     if (placing && !this.hover) return this.cancelPlacing();
     if (placing) this.draft = { kind: 'place', at: { i: this.hover.i - 1, j: this.hover.j - 1, rot: this.rot }, fixed: false };
@@ -459,6 +539,9 @@ export class TownPlanner {
     if (b.closest('.tp-ledger-body')) return; // the Projects panel handles its own buttons
     if (b.dataset.civicPick) return this.pickCivic(b.dataset.civicPick);
     if (b.dataset.civicRemove) return this.removeCivicBuilding(b.dataset.civicRemove);
+    if (b.dataset.civicUpgrade) return this.upgradeCivicBuilding(b.dataset.civicUpgrade);
+    if (b.dataset.propPick) return this.pickProp(b.dataset.propPick);
+    if (b.hasAttribute('data-prop-remove')) return this.removePropDraft();
     if (b.dataset.tool) { this.setTool(b.dataset.tool); this.refresh(); }
     else if (b.hasAttribute('data-done')) this.placing ? this.cancelPlacing() : this.exit();
     else if (b.hasAttribute('data-cancel')) this.cancelDraft();
@@ -512,15 +595,30 @@ export class TownPlanner {
     if (d.kind === 'remove') {
       const plan = planRoadRemoval(town, d.from, d.to);
       const n = plan.tiles.filter((t) => t.state === 'remove').length;
-      const who = [...plan.affected.map((p) => this.homeName(p)), ...(plan.civic || []).map((k) => CIVIC[k].name)].join(', ');
+      const who = [...plan.affected.map((p) => this.homeName(p)), ...(plan.civic || []).map((k) => PUBLIC_BUILDINGS[k].name)].join(', ');
       return { ...plan, short: plan.ok ? `−${n} tile${n === 1 ? '' : 's'}` : plan.reason, summary: plan.ok ? `Removes ${n} street tile${n === 1 ? '' : 's'}` : `${plan.reason}${who ? ` · ${who}` : ''}` };
     }
+    if (d.kind === 'prop') {
+      const def = TOWN_PROPS[d.prop];
+      const check = checkProp(town, d.at, { exceptId: d.moving });
+      const tile = { i: check.i, j: check.j, ok: check.ok };
+      const was = d.moving && (town.props || []).find((p) => p.id === d.moving);
+      if (was && was.i === check.i && was.j === check.j) return { ok: false, same: true, tiles: [tile], short: 'Already here', summary: 'That is where it stands now. Pick another tile, or remove it.' };
+      if (!d.moving) {
+        const tier = town.tier?.current ?? 1, balance = town.pride?.balance ?? 0;
+        if (def.townTier > tier) return { ok: false, tiles: [tile], short: `Unlocks at tier ${def.townTier}`, summary: `The ${def.name.toLowerCase()} unlocks at town tier ${def.townTier} · ${tierName(def.townTier)}.` };
+        if ((town.props || []).length >= MAX_PROPS) return { ok: false, tiles: [tile], short: `${MAX_PROPS} props max`, summary: `Your town holds at most ${MAX_PROPS} props. Remove one first.` };
+        if (balance < def.cost) return { ok: false, tiles: [tile], short: `Needs ${def.cost} Civic Pride`, summary: `The ${def.name.toLowerCase()} costs ${def.cost} Civic Pride; you have ${balance}.` };
+      }
+      return { ok: check.ok, tiles: [tile], placement: { i: check.i, j: check.j }, short: check.ok ? (d.moving ? 'Move here · free' : `${def.cost} Civic Pride`) : check.reason,
+        summary: check.ok ? `${def.name} · ${d.moving ? 'moves here for free' : `costs ${def.cost} Civic Pride`}` : check.reason };
+    }
     if (d.kind === 'civic') {
-      const def = CIVIC[d.civic];
+      const def = PUBLIC_BUILDINGS[d.civic];
       const check = checkPlacement(town, d.at, { civic: d.civic });
       const placed = town.civic?.find((c) => c.kind === d.civic);
-      const level = town.permits?.level ?? 1;
-      if (!placed && def.level > level) return { ...check, ok: false, short: `Unlocks at level ${def.level}`, summary: `The ${def.name.toLowerCase()} unlocks at player level ${def.level}.` };
+      const tier = town.tier?.current ?? 1;
+      if (!placed && def.townTier > tier) return { ...check, ok: false, short: `Unlocks at tier ${def.townTier}`, summary: `The ${def.name.toLowerCase()} unlocks at town tier ${def.townTier} · ${tierName(def.townTier)}.` };
       if (placed && placed.i === check.placement.i && placed.j === check.placement.j && (placed.rot || 0) === check.placement.rot) {
         return { ...check, ok: false, same: true, short: 'Already here', summary: 'That is where it stands now. Pick another plot or press R to turn it.' };
       }
@@ -543,17 +641,24 @@ export class TownPlanner {
     const ev = this.evaluate();
     if (!ev.ok) { this.message = ev.summary; return this.refresh(); }
     this.busy = true;
-    this.message = d.kind === 'place' || (d.kind === 'civic' && !this.town().civic?.some((c) => c.kind === d.civic)) ? 'Breaking ground…' : 'Saving…';
+    this.message = d.kind === 'place' || (d.kind === 'civic' && !this.town().civic?.some((c) => c.kind === d.civic)) ? 'Breaking ground…' : d.kind === 'prop' && !d.moving ? 'Planting…' : 'Saving…';
     this.refresh();
     const revision = this.town().revision;
     try {
       if (d.kind === 'road') await this.save({ action: 'add-road', from: d.from, to: d.to, bend: this.bend(d), revision });
       else if (d.kind === 'remove') await this.save({ action: 'remove-road', from: d.from, to: d.to, revision });
       else if (d.kind === 'move') await this.save({ action: 'move-home', project: d.project, ...d.at, revision });
+      else if (d.kind === 'prop') {
+        await this.save(d.moving ? { action: 'move-prop', id: d.moving, i: d.at.i, j: d.at.j, revision } : { action: 'place-prop', kind: d.prop, i: d.at.i, j: d.at.j, revision });
+        this.toast(d.moving ? `${TOWN_PROPS[d.prop].name} moved` : `${TOWN_PROPS[d.prop].name} placed · −${TOWN_PROPS[d.prop].cost} Civic Pride`, true);
+        this.message = '';
+        this.draft = null; // the chosen prop stays picked, so the next one follows the pointer
+        return;
+      }
       else if (d.kind === 'civic') {
         const moved = this.town().civic?.some((c) => c.kind === d.civic);
         await this.save({ action: 'place-civic', kind: d.civic, ...d.at, revision });
-        this.toast(`${CIVIC[d.civic].name} ${moved ? 'moved' : 'built'}`, true);
+        this.toast(`${PUBLIC_BUILDINGS[d.civic].name} ${moved ? 'moved' : 'built'}`, true);
         this.message = '';
         this.draft = null;
         this.civicKind = null;
@@ -591,7 +696,86 @@ export class TownPlanner {
       this.buildGuides(town);
     }
     this.buildPreview();
+    this.updateHeat(town);
     this.render();
+  }
+
+  // ---- Coverage layers (town simulation) ---------------------------------------------------------
+
+  heatMesh() {
+    const w = BUILDABLE.i1 - BUILDABLE.i0 + 1, h = BUILDABLE.j1 - BUILDABLE.j0 + 1;
+    const tex = new THREE.DataTexture(new Uint8Array(w * h * 4), w, h, THREE.RGBAFormat);
+    tex.magFilter = tex.minFilter = THREE.NearestFilter;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const [x0, z0, x1, z1] = tilesRect(BUILDABLE.i0, BUILDABLE.j0, BUILDABLE.i1, BUILDABLE.j1);
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false }));
+    m.rotation.x = -Math.PI / 2;
+    m.position.set((x0 + x1) / 2, 0.2, (z0 + z1) / 2);
+    m.renderOrder = 5;
+    m.visible = false;
+    return m;
+  }
+
+  /** The layer on show: the player's choice, else the building being placed shows its own cover. */
+  heatLayerId() {
+    if (this.heatChoice) return this.heatChoice;
+    if (this.draft?.kind === 'prop') return PROP_RULES[this.draft.prop]?.buffer ? 'nuisance' : 'beauty';
+    return this.draft?.kind === 'civic' ? primaryLayer(this.draft.civic) : null;
+  }
+
+  /** The town as it would be with the current civic draft, when that draft is a valid placement. */
+  candidate(town) {
+    const d = this.draft, ev = this.result;
+    if (d?.kind === 'prop') return ev?.ok && !ev.same ? withProp(town, d.prop, ev.placement, d.moving) : town;
+    return d?.kind === 'civic' && ev?.ok && !ev.same ? withBuilding(town, d.civic, ev.placement) : town;
+  }
+
+  updateHeat(town) {
+    const id = this.heatLayerId();
+    const shown = this.candidate(town);
+    const households = this.households?.() || new Map();
+    const key = id && JSON.stringify([id, town.revision, shown === town ? null : shown.civic, id === 'satisfaction' ? [...households.values()].map((h) => [h.project, h.residentAgentIds, h.characters?.map((c) => c.interestIds)]) : null]);
+    this.heat.visible = !!id;
+    if (!id || key === this.heatKey) return;
+    this.heatKey = key;
+    const { px, w, h } = heatPixels(shown, id, { satisfaction: id === 'satisfaction' ? townSatisfaction(shown, households) : null });
+    // Texture rows run south to north on the turned plane; the pixels run north to south.
+    const data = this.heat.material.map.image.data;
+    for (let y = 0; y < h; y++) data.set(px.subarray(y * w * 4, (y + 1) * w * 4), (h - 1 - y) * w * 4);
+    this.heat.material.map.needsUpdate = true;
+  }
+
+  /** What the current civic draft would change for each home (memoised per placement). */
+  impact(town) {
+    const d = this.draft, ev = this.result;
+    if (!['civic', 'prop'].includes(d?.kind) || !ev?.ok || ev.same) return null;
+    const households = this.households?.() || new Map();
+    const key = JSON.stringify([town.revision, d.kind, d.civic || d.prop, d.moving || null, ev.placement, [...households.values()].map((h) => [h.project, h.residentAgentIds, h.characters?.map((c) => c.interestIds)])]);
+    if (key !== this.impactKey) {
+      this.impactKey = key;
+      this.impactValue = d.kind === 'prop' ? propPreview(town, households, d.prop, ev.placement, d.moving) : placementPreview(town, households, d.civic, ev.placement);
+    }
+    return this.impactValue;
+  }
+
+  renderLayers() {
+    const id = this.heatLayerId();
+    const layer = heatLayer(id);
+    const auto = !this.heatChoice && !!id;
+    const root = this.parts.layers;
+    // The select stays mounted so focus and keyboard use survive refreshes; only its value and the legend change.
+    if (!root.querySelector('select')) {
+      root.innerHTML = `<label>${icon('layers')}<span>Coverage</span><select data-heat aria-label="Coverage layer"><option value="">Off</option>${HEAT_LAYERS.map((l) => `<option value="${l.id}">${esc(l.label)}</option>`).join('')}</select></label><div data-layers-info></div>`;
+    }
+    const select = root.querySelector('select');
+    select.options[0].textContent = this.draft?.kind === 'civic' ? 'Building’s own cover' : this.draft?.kind === 'prop' ? 'Prop’s own effect' : 'Off';
+    if (select.value !== (this.heatChoice || '')) select.value = this.heatChoice || '';
+    const legend = !layer ? '' : layer.kind === 'satisfaction'
+      ? '<span class="tp-legend sat"><i class="good"></i>Met <i class="low"></i>Thin <i class="bad"></i>Needs attention</span>'
+      : `<span class="tp-legend ${layer.kind}"><i class="ramp"></i>${layer.kind === 'nuisance' ? 'Quiet → noisy' : 'Weak → strong'}</span>`;
+    const info = layer ? `<small>${auto ? 'Showing ' : ''}${esc(layer.label)} · town simulation</small>${legend}` : '<small>Town simulation · pick a layer to see cover</small>';
+    const box = root.querySelector('[data-layers-info]');
+    if (box.innerHTML !== info) box.innerHTML = info;
   }
 
   clear(group) {
@@ -745,7 +929,7 @@ export class TownPlanner {
     }
     // Every home's reserved footprint and entrance.
     for (const h of town.homes) if (h.i != null) this.guides.add(this.outline(h, h.connected === false ? COLORS.bad : COLORS.white, 0.6));
-    for (const c of town.civic || []) this.guides.add(this.outline(c, c.connected === false ? COLORS.bad : CIVIC[c.kind]?.color ?? COLORS.white, 0.85));
+    for (const c of town.civic || []) this.guides.add(this.outline(c, c.connected === false ? COLORS.bad : PUBLIC_BUILDINGS[c.kind]?.color ?? COLORS.white, 0.85));
     // While choosing a plot: eligible frontage (where an entrance could open onto a connected street).
     const civicDraft = this.draft?.kind === 'civic' ? this.draft.civic : null;
     if (this.tool === 'place' || this.tool === 'move' || civicDraft) {
@@ -775,7 +959,11 @@ export class TownPlanner {
       const home = this.civicAt(this.hover) || this.town().homes.find((h) => h.i != null && homeTiles(h).some(([i, j]) => i === this.hover.i && j === this.hover.j));
       if (home) this.preview.add(this.outline(home, COLORS.ok, 1), this.chevrons(home, COLORS.ok));
     }
-    if (this.hover && !d && this.tool === 'civic') {
+    if (this.hover && !d && this.tool === 'props') {
+      const p = this.propAt(this.hover);
+      if (p) this.preview.add(this.tilePlane(p.i, p.j, COLORS.ok, 0.6, { y: 0.28, group: this.preview }));
+    }
+    if (this.hover && !d && isBuildTool(this.tool)) {
       const b = this.civicAt(this.hover);
       if (b) this.preview.add(this.outline(b, COLORS.ok, 1), this.chevrons(b, COLORS.ok));
     }
@@ -797,13 +985,19 @@ export class TownPlanner {
       }
       for (const k of ev.civic || []) {
         const c = this.town().civic?.find((x) => x.kind === k);
-        if (c) this.preview.add(this.outline(c, COLORS.bad, 1), this.hologram(c, COLORS.bad, CIVIC[k].height || 9));
+        if (c) this.preview.add(this.outline(c, COLORS.bad, 1), this.hologram(c, COLORS.bad, PUBLIC_BUILDINGS[k].height || 9));
       }
+      return;
+    }
+    if (d.kind === 'prop') {
+      for (const t of ev.tiles) this.preview.add(this.tilePlane(t.i, t.j, ev.ok ? COLORS.ok : COLORS.bad, 0.85, { y: 0.28, group: this.preview }));
+      const was = d.moving && this.town().props?.find((p) => p.id === d.moving);
+      if (was) this.preview.add(this.tilePlane(was.i, was.j, COLORS.white, 0.5, { y: 0.27, inset: 1.2 }));
       return;
     }
     const color = ev.ok ? COLORS.ok : COLORS.bad;
     for (const t of ev.tiles) this.preview.add(this.tilePlane(t.i, t.j, t.ok ? COLORS.ok : COLORS.bad, t.ok ? 0.42 : 0.8, { y: 0.26 }));
-    const height = d.kind === 'move' ? this.homeHeight?.(d.project) || 7 : d.kind === 'civic' ? CIVIC[d.civic].height || 9 : 7.4;
+    const height = d.kind === 'move' ? this.homeHeight?.(d.project) || 7 : d.kind === 'civic' ? PUBLIC_BUILDINGS[d.civic].height || 9 : 7.4;
     this.preview.add(this.outline(ev.placement, color, 1), this.hologram(ev.placement, color, height), this.chevrons(ev.placement, color));
     const e = ev.entrance;
     this.preview.add(this.tilePlane(e.i, e.j, color, 0.6, { y: 0.29, inset: 1.2, group: this.preview }));
@@ -827,11 +1021,11 @@ export class TownPlanner {
     });
     // The tooltip by the pointer: what clicking here would do.
     const ev = this.result;
-    const show = this.pointerXY && !this.busy && !this.renaming && (ev || this.tool === 'move' || this.tool === 'road' || this.tool === 'remove' || this.tool === 'civic');
+    const show = this.pointerXY && !this.busy && !this.renaming && (ev || this.tool === 'move' || this.tool === 'road' || this.tool === 'remove' || this.tool === 'props' || isBuildTool(this.tool));
     this.cursor.hidden = !show;
     if (show) {
       const d = this.draft;
-      const text = ev ? ev.short : this.tool === 'move' ? 'Pick up a building' : this.tool === 'civic' ? 'Choose a building from the list' : this.tool === 'remove' ? 'Start bulldozing here' : 'Start a street here';
+      const text = ev ? ev.short : this.tool === 'move' ? 'Pick up a building' : isBuildTool(this.tool) ? 'Choose a building from the list' : this.tool === 'props' ? (this.hover && this.propAt(this.hover) ? 'Pick up this prop' : 'Choose a prop from the list') : this.tool === 'remove' ? 'Start bulldozing here' : 'Start a street here';
       const state = ev ? (ev.ok ? 'ok' : 'bad') : 'idle';
       const hint = !d ? 'Click' : d.fixed ? (ev?.ok ? 'Enter to confirm' : '') : d.kind === 'road' || d.kind === 'remove' ? 'Click to finish' : 'Click to choose';
       const html = `<span class="tp-cursor-state ${state}">${icon(state === 'bad' ? 'x' : state === 'ok' ? 'check' : 'plus')}</span><b>${esc(text)}</b>${hint ? `<small>${esc(hint)}</small>` : ''}`;
@@ -860,12 +1054,15 @@ export class TownPlanner {
     const d = this.draft;
     const ev = this.result;
     const streets = roadMap(town).size;
-    const name = d?.project ? this.homeName(d.project) : d?.kind === 'place' ? this.placing?.label : d?.kind === 'civic' ? CIVIC[d.civic].name : null;
+    const impact = this.busy ? null : this.impact(town);
+    const name = d?.project ? this.homeName(d.project) : d?.kind === 'place' ? this.placing?.label : d?.kind === 'civic' ? PUBLIC_BUILDINGS[d.civic].name : d?.kind === 'prop' ? TOWN_PROPS[d.prop].name : null;
 
     this.set('banner', `<div class="tp-emblem">${icon(this.placing ? 'house' : 'map')}</div>
       <div class="tp-title"><small>${this.placing ? 'New home' : 'Town planning'}</small><b>${this.placing ? esc(this.placing.label) : 'Plan town'}</b></div>
       <div class="tp-stats">
         ${p ? `<button type="button" class="tp-stat link${p.overCapacity ? ' over' : p.atCapacity ? ' full' : ''}" data-ledger-open title="Projects and permits">${icon('house')}<b>${p.counted ?? p.active}<i>/${p.allowed}</i></b><small>Permits</small></button>` : ''}
+        ${town.tier ? `<span class="tp-stat tier" title="Town tier · town simulation">${icon('landmark')}<b>${town.tier.current}<i> ${esc(town.tier.name)}</i></b><small>Town tier</small></span>` : ''}
+        ${town.pride ? `<span class="tp-stat pride" title="Civic Pride · earned once per milestone a well-served town reaches; spent on upgrades">${icon('sparkles')}<b>${town.pride.balance}</b><small>Civic Pride</small></span>` : ''}
         <span class="tp-stat">${icon('route')}<b>${streets}</b><small>Street tiles</small></span>
         ${p ? `<span class="tp-stat next" title="${esc(p.hint)}">${icon('star')}<b>Lv ${p.nextLevel}</b><small>${p.xpToNext.toLocaleString('en-US')} XP to next permit</small></span>` : ''}
       </div>
@@ -876,10 +1073,11 @@ export class TownPlanner {
 
     const state = this.busy ? 'busy' : ev ? (ev.ok ? 'ok' : 'bad') : 'idle';
     const headline = this.busy ? this.message || 'Saving…' : ev ? ev.summary : this.message || tool.help;
-    const step = !d ? '' : d.kind === 'civic' ? (d.fixed ? (ev?.ok ? 'Confirm to build, or click another plot' : 'Click another plot or press R') : 'Click a plot to choose it') : d.kind === 'road' || d.kind === 'remove' ? (!d.fixed ? 'Click the last tile' : ev?.ok ? 'Confirm to save' : 'Click a new start tile') : d.fixed ? (ev?.ok ? 'Confirm to save, or click another plot' : 'Click another plot or press R') : d.kind === 'move' ? 'Click its new plot' : 'Click a plot to choose it';
+    const step = !d ? '' : d.kind === 'prop' ? (d.fixed ? (ev?.ok ? 'Confirm, or click another tile' : 'Click another tile') : 'Click a tile to choose it') : d.kind === 'civic' ? (d.fixed ? (ev?.ok ? 'Confirm to build, or click another plot' : 'Click another plot or press R') : 'Click a plot to choose it') : d.kind === 'road' || d.kind === 'remove' ? (!d.fixed ? 'Click the last tile' : ev?.ok ? 'Confirm to save' : 'Click a new start tile') : d.fixed ? (ev?.ok ? 'Confirm to save, or click another plot' : 'Click another plot or press R') : d.kind === 'move' ? 'Click its new plot' : 'Click a plot to choose it';
     const newCivic = d?.kind === 'civic' && !town.civic?.some((c) => c.kind === d.civic);
     const turn = this.tool === 'road'
       ? `<button type="button" class="tp-key" data-rotate title="Flip the corner (R)">${icon('cornerDownRight')}<span>Flip corner</span><kbd>R</kbd></button>`
+      : this.tool === 'props' ? (d?.moving ? `<button type="button" class="tp-key danger" data-prop-remove ${this.busy ? 'disabled' : ''}>${icon(this.removingProp === d.moving ? 'check' : 'trash')}<span>${this.removingProp === d.moving ? `Sure? +${propRefund(d.prop)} back` : `Remove · +${propRefund(d.prop)} back`}</span></button>` : '')
       : this.tool !== 'remove' ? `<button type="button" class="tp-key" data-rotate title="Turn (R)">${icon('rotateCw')}<span>Rotate</span><kbd>R</kbd></button>` : '';
     this.set('card', this.renaming
       ? `<form class="tp-rename"><span class="tp-state idle">${icon('signpost')}</span><label><small>Rename street</small><input name="street" maxlength="40" value="${esc(this.renaming.name)}" aria-label="Street name"></label><button type="submit" class="tp-confirm">${icon('check')}<span>Save</span></button><button type="button" class="tp-key" data-rename-cancel><span>Cancel</span><kbd>Esc</kbd></button></form>`
@@ -888,14 +1086,16 @@ export class TownPlanner {
           <small>${esc(tool.long)}${name ? ` · <b>${esc(name)}</b>` : ''}${step ? ` · ${esc(step)}` : ''}</small>
           <p class="${state}">${esc(headline)}</p>
           ${this.message && ev && !this.busy ? `<p class="tp-note">${esc(this.message)}</p>` : ''}
+          ${impact ? `<div class="tp-impact"><b>${icon('house')} ${esc(previewHeadline(impact))}</b>${impact.homes.length ? `<ul>${previewLines(impact, this.homeName).map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}</div>` : ''}
         </div>
         <div class="tp-actions">
           ${turn}
           <button type="button" class="tp-key" data-cancel ${d && !this.busy ? '' : 'disabled'}><span>Cancel</span><kbd>Esc</kbd></button>
-          <button type="button" class="tp-confirm" data-confirm ${d?.fixed && ev?.ok && !this.busy ? '' : 'disabled'}>${icon(d?.kind === 'place' || newCivic ? 'hammer' : 'check')}<span>${d?.kind === 'place' || newCivic ? 'Build here' : 'Confirm'}</span><kbd>Enter</kbd></button>
+          <button type="button" class="tp-confirm" data-confirm ${d?.fixed && ev?.ok && !this.busy ? '' : 'disabled'}>${icon(d?.kind === 'place' || newCivic ? 'hammer' : d?.kind === 'prop' && !d.moving ? 'sparkles' : 'check')}<span>${d?.kind === 'place' || newCivic ? 'Build here' : d?.kind === 'prop' && !d.moving ? `Buy · ${TOWN_PROPS[d.prop].cost}` : 'Confirm'}</span><kbd>Enter</kbd></button>
         </div>`);
     this.parts.card.dataset.state = this.renaming ? 'idle' : state;
     this.renderCivic(town);
+    this.renderLayers();
     // A short shake when a preview turns invalid.
     if (state === 'bad' && this.lastState !== 'bad') {
       this.parts.card.classList.remove('shake');
@@ -916,32 +1116,93 @@ export class TownPlanner {
     }
   }
 
-  /** The list of civic buildings: place unlocked ones, move or remove placed ones, see what unlocks next. */
+  /** The props palette: cost, effect, tier locks and the Civic Pride balance. */
+  renderProps(town) {
+    const tier = town.tier?.current ?? 1;
+    const pride = town.pride?.balance ?? 0;
+    const count = (town.props || []).length;
+    const effect = (k) => {
+      const r = PROP_RULES[k];
+      return `Green space +${r.beauty}${r.reach > 1 ? ` · reach ${r.reach}` : ''}${r.buffer ? ` · shields from noise −${r.buffer}` : ''}`;
+    };
+    const row = (k) => {
+      const def = TOWN_PROPS[k];
+      const locked = def.townTier > tier;
+      const picked = this.propKind === k || (this.draft?.kind === 'prop' && this.draft.prop === k && !this.draft.moving);
+      const color = `#${def.color.toString(16).padStart(6, '0')}`;
+      const action = locked ? `<span class="tp-civic-lock">${icon('lock')}<b>Tier ${def.townTier}</b></span>`
+        : `<button type="button" class="tp-civic-place" data-prop-pick="${k}" ${pride < def.cost || count >= MAX_PROPS ? 'disabled' : ''}>${icon('sparkles')}<span>${def.cost}</span></button>`;
+      return `<li class="tp-prop${locked ? ' locked' : ''}${picked ? ' picked' : ''}" style="--c:${color}" title="${esc(`${def.name} · ${effect(k)} · ${def.cost} Civic Pride${locked ? ` · unlocks at tier ${def.townTier}` : ''}`)}">
+        <div class="tp-prop-icon">${icon(def.icon)}</div><b>${esc(def.name)}</b><small>${esc(effect(k))}</small>
+        <div class="tp-civic-actions">${action}</div></li>`;
+    };
+    this.parts.civic.setAttribute('aria-label', 'Town props');
+    this.set('civic', `<header><span>${icon('treeDeciduous')}</span><div><b>Town props</b><small>${count} of ${MAX_PROPS} placed · ${pride} Civic Pride · removing refunds half</small></div></header>
+      <p class="tp-props-note">Props alone lift green space to “thin”; a park or garden nearby makes it good.</p><ul>${PROP_KINDS.map(row).join('')}</ul>`);
+  }
+
+  /** The next town tier: its requirements (met or not) and what it unlocks. */
+  tierMarkup(town) {
+    const t = town.tier;
+    if (!t) return '';
+    if (!t.next) return `<div class="tp-tier-next done">${icon('trophy')}<b>Tier ${t.current} · ${esc(t.name)}</b><small>Top tier reached</small></div>`;
+    const reqs = t.next.requirements.map((r) => `<li class="${r.met ? 'met' : ''}">${icon(r.met ? 'check' : 'circle')}<span>${esc(r.label)}</span></li>`).join('');
+    const unlocks = t.next.unlocks.map((k) => PUBLIC_BUILDINGS[k]?.name).filter(Boolean).join(', ');
+    return `<div class="tp-tier-next">${icon('landmark')}<b>Next: tier ${t.next.tier} · ${esc(t.next.name)}</b><ul>${reqs}</ul>${unlocks ? `<small>Unlocks ${esc(unlocks)}</small>` : ''}</div>`;
+  }
+
+  /** The list of civic buildings or recreation venues: place unlocked ones, move, upgrade or remove placed ones, see what unlocks next. */
   renderCivic(town) {
-    const show = this.tool === 'civic' && !this.placing;
+    const show = (isBuildTool(this.tool) || this.tool === 'props') && !this.placing;
     this.parts.civic.hidden = !show;
     this.el.classList.toggle('civic-open', show);
     if (!show) return;
-    const level = town.permits?.level ?? 1;
+    if (this.tool === 'props') return this.renderProps(town);
+    const leisure = this.tool === 'leisure';
+    const defs = leisure ? RECREATION : CIVIC;
+    const kinds = leisure ? RECREATION_KINDS : CIVIC_KINDS;
+    const tier = town.tier?.current ?? 1;
+    const pride = town.pride?.balance ?? 0;
     const placed = new Map((town.civic || []).map((c) => [c.kind, c]));
-    const unlocked = CIVIC_KINDS.filter((k) => CIVIC[k].level <= level).length;
+    const unlocked = kinds.filter((k) => defs[k].townTier <= tier).length;
     const pics = civicPictures();
-    const rows = CIVIC_KINDS.map((k) => {
-      const def = CIVIC[k];
+    const row = (k) => {
+      const def = defs[k];
       const c = placed.get(k);
-      const locked = !c && def.level > level;
+      const locked = !c && def.townTier > tier;
       const picked = this.draft?.kind === 'civic' && this.draft.civic === k;
       const color = `#${def.color.toString(16).padStart(6, '0')}`;
-      const status = c ? (c.connected === false ? 'Cut off from Main Street' : 'In your town') : locked ? `Unlocks at level ${def.level}` : 'Ready to place';
-      const actions = locked ? `<span class="tp-civic-lock">${icon('lock')}<b>Level ${def.level}</b></span>`
-        : c ? `<button type="button" class="tp-civic-btn" data-civic-pick="${k}" aria-label="Move ${esc(def.name)}">${icon('move')}<span>Move</span></button><button type="button" class="tp-civic-btn danger${this.removingCivic === k ? ' confirm' : ''}" data-civic-remove="${k}" aria-label="${this.removingCivic === k ? 'Confirm removing' : 'Remove'} ${esc(def.name)}" title="${this.removingCivic === k ? 'Click again to remove' : 'Remove'}">${this.removingCivic === k ? `${icon('check')}<span>Sure?</span>` : icon('trash')}</button>`
+      const status = c ? (c.connected === false ? 'Cut off from Main Street' : 'In your town') : locked ? `Unlocks at tier ${def.townTier} · ${tierName(def.townTier)}` : 'Ready to place';
+      const likes = (def.interests || []).map((id) => INTEREST_BY_ID[id]?.label).filter(Boolean);
+      const up = c && upgradable(k) ? nextUpgrade(c) : null;
+      const level = c && upgradable(k) ? upgradeLevel(c) : null;
+      const upgrade = up ? `<button type="button" class="tp-civic-btn upgrade" data-civic-upgrade="${k}" ${pride >= up.cost ? '' : 'disabled'} aria-label="Upgrade ${esc(def.name)} to level ${up.level} for ${up.cost} Civic Pride" title="Level ${up.level}: +${up.reach} tiles of cover · ${up.cost} Civic Pride">${icon('sparkles')}<span>${up.cost}</span></button>` : '';
+      const actions = locked ? `<span class="tp-civic-lock">${icon('lock')}<b>Tier ${def.townTier}</b></span>`
+        : c ? `<button type="button" class="tp-civic-btn" data-civic-pick="${k}" aria-label="Move ${esc(def.name)}">${icon('move')}<span>Move</span></button>${upgrade}<button type="button" class="tp-civic-btn danger${this.removingCivic === k ? ' confirm' : ''}" data-civic-remove="${k}" aria-label="${this.removingCivic === k ? 'Confirm removing' : 'Remove'} ${esc(def.name)}" title="${this.removingCivic === k ? 'Click again to remove' : 'Remove'}">${this.removingCivic === k ? `${icon('check')}<span>Sure?</span>` : icon('trash')}</button>`
         : `<button type="button" class="tp-civic-place" data-civic-pick="${k}">${icon('hammer')}<span>Place</span></button>`;
       const pic = pics[k] ? `<img src="${pics[k]}" alt="" draggable="false">` : `<span class="tp-civic-fallback">${icon(def.icon)}</span>`;
-      return `<li class="${locked ? 'locked' : ''}${c ? ' placed' : ''}${picked ? ' picked' : ''}" style="--c:${color}" title="${esc(`${def.name} · ${def.size.w} × ${def.size.d} tiles · ${status}`)}">
-        <div class="tp-civic-pic">${pic}${c ? `<span class="tp-civic-badge">${icon('check')}</span>` : ''}</div>
-        <b>${esc(def.name)}</b><small>${def.size.w} × ${def.size.d} plot · ${esc(status)}</small>
+      const tip = `${def.name} · ${def.size.w} × ${def.size.d} tiles · ${status}${level ? ` · level ${level}` : ''}${likes.length ? ` · For residents who like ${likes.join(', ')}` : ''}`;
+      return `<li class="${locked ? 'locked' : ''}${c ? ' placed' : ''}${picked ? ' picked' : ''}" style="--c:${color}" title="${esc(tip)}">
+        <div class="tp-civic-pic">${pic}${c ? `<span class="tp-civic-badge">${level > 1 ? `<b>L${level}</b>` : icon('check')}</span>` : ''}</div>
+        <b>${esc(def.name)}</b><small>${def.size.w} × ${def.size.d} plot · ${esc(status)}${level ? ` · level ${level}` : ''}</small>
+        ${likes.length ? `<small class="tp-civic-likes">${icon('sparkles')}<span>${esc(likes.join(' · '))}</span></small>` : ''}
         <div class="tp-civic-actions">${actions}</div></li>`;
+    };
+    const next = this.tierMarkup(town);
+    if (!leisure) {
+      this.parts.civic.setAttribute('aria-label', 'Civic buildings');
+      return this.set('civic', `<header><span>${icon('landmark')}</span><div><b>Civic buildings</b><small>${unlocked} of ${kinds.length} unlocked · tier ${tier} · ${pride} Civic Pride for upgrades</small></div></header>${next}<ul>${kinds.map(row).join('')}</ul>`);
+    }
+    // Recreation: one section per group, each opening at its first venue's town tier.
+    const tiers = RECREATION_TIERS.map((t) => {
+      const ks = kinds.filter((k) => defs[k].tier === t.tier);
+      if (!ks.length) return '';
+      const from = Math.min(...ks.map((k) => defs[k].townTier)), to = Math.max(...ks.map((k) => defs[k].townTier));
+      const open = from <= tier;
+      return `<section class="tp-tier${open ? '' : ' locked'}"><h3>${icon(open ? 'lockOpen' : 'lock')}<b>${esc(t.name)}</b><small>${from === to ? `Town tier ${from}` : `Town tiers ${from}–${to}`} · ${esc(t.blurb)}</small></h3><ul>${ks.map(row).join('')}</ul></section>`;
     }).join('');
-    this.set('civic', `<header><span>${icon('landmark')}</span><div><b>Civic buildings</b><small>${unlocked} of ${CIVIC_KINDS.length} unlocked · player level ${level}</small></div></header><ul>${rows}</ul>`);
+    this.parts.civic.setAttribute('aria-label', 'Recreation venues');
+    this.set('civic', `<header><span>${icon('ferrisWheel')}</span><div><b>Recreation</b><small>${unlocked} of ${kinds.length} unlocked · tier ${tier} · places residents could unwind</small></div></header>${next}${tiers}`);
   }
+
 }

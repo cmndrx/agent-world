@@ -1,5 +1,5 @@
 import { assignedRole } from '../../shared/team.mjs';
-import { careDialogFor, careSummary } from './care.js';
+import { interestsDialogFor, interestsSummary } from './interests.js';
 import { connectionView } from '../../shared/connections.mjs';
 import {ProjectsPanel} from './projects.js';
 import {canPromptFromStatus} from '../../shared/agent-view.mjs';
@@ -155,7 +155,7 @@ export class UI {
       if(e.target.closest('[data-prompt-agent]')&&this.sim)this.h.onPrompt?.(this.sim);
       if (e.target.closest('[data-close]')) this.close();
       if (e.target.closest('[data-outfit]') && this.sim) this.h.onOutfit?.(this.sim);
-      if (e.target.closest('[data-open-care]') && this.sim) this.careDialog?.open(this.connectionState === 'live', () => this.panel.querySelector('[data-open-care]'));
+      if (e.target.closest('[data-open-interests]') && this.sim) this.interestsDialog?.open(this.connectionState === 'live', () => this.panel.querySelector('[data-open-interests]'));
     });
     this.panel.addEventListener('change', (e) => {
       if (e.target.name === 'name' && this.sim?.character) this.h.onRename(this.sim, e.target.value);
@@ -351,7 +351,7 @@ export class UI {
         <div class="resident-metadata"><div><span style="color:${lotColor}">${icon('house')}</span> ${escapeHtml(sim.lot.name)}${sim.character ? ` · desk ${sim.character.slot}` : ''}</div><div data-slot="where"></div></div>
       </div>
       <div class="scroll">
-        <section class="resident-stats"><div data-slot="xp"></div><div data-slot="care-summary"></div>${sim.character ? '<button type="button" data-open-care>Care</button>' : ''}</section>
+        <section class="resident-stats"><div data-slot="xp"></div><div data-slot="interests"></div>${sim.character ? '<button type="button" data-open-interests>Interests</button>' : ''}</section>
         <h2 class="activity-view-title">Watch activity</h2>
         <button type="button" data-slot="hero" data-prompt-agent></button>
         <figure class="screen-wrap">
@@ -368,7 +368,7 @@ export class UI {
     // A live 3D bust of this agent (same model as in the world), idling while the panel is open.
     this.panel.querySelector('.avatar-3d-wrap').prepend(new AvatarPortrait({ look: () => sim.look, role: () => sim.roleInfo, mode: 'bust' }).canvas);
     this.html.panel = {};
-    this.careDialog = sim.character ? careDialogFor(sim) : null;
+    this.interestsDialog = sim.character ? interestsDialogFor(sim) : null;
     this.browserFeed.stop();
     this.renderPanel();
   }
@@ -391,7 +391,7 @@ export class UI {
   renderPanel() {
     const sim = this.sim;
     if (!sim) return;
-    this.careDialog?.update(this.connectionState === 'live');
+    this.interestsDialog?.update(this.connectionState === 'live');
     // The agent's real task browser, when its latest run has one.
     const browserRun = sim.character ? this.h.browserRun?.(sim) : null;
     if ((browserRun?.id ?? null) !== this.browserFeed.runId) {
@@ -405,7 +405,7 @@ export class UI {
     const xp = this.h.xpFor?.(sim);
     this.slot('xp', xp ? `<div class="agent-xp">${xpMarkup(xp)}</div>` : '');
     this.slot('profession', escapeHtml(assignedRole(sim.character?.assignedRole)?.title || ''));
-    this.slot('care-summary', sim.character ? careSummary(sim.character) : '');
+    this.slot('interests', sim.character ? interestsSummary(sim.character, sim.lot?.satisfaction) : '');
     const cls = plumbobFor(state);
 
     const input = this.panel.querySelector('input[name=name]');
@@ -462,7 +462,7 @@ export class UI {
       .join(''));
 
     const flavor = sim.activity?.flavor ? sim.activity.label : null;
-    this.slot('sim', s && this.connectionState !== 'live' ? 'Last received observation · screen paused. Current activity unavailable.' : sim.activity?.careId ? 'Reading is a player-directed simulated activity, separate from real agent work.' : flavor ? `${icon('sparkles')} <b>${escapeHtml(flavor)}</b> is made up — the agent is idle.` : `${icon('check')} Activity details reflect the real agent. Character happiness is simulated.`);
+    this.slot('sim', s && this.connectionState !== 'live' ? 'Last received observation · screen paused. Current activity unavailable.' : flavor ? `${icon('sparkles')} <b>${escapeHtml(flavor)}</b> is made up — the agent is idle.` : `${icon('check')} Activity details reflect the real agent. Character happiness is simulated.`);
   }
 
   /** Mirror the inspected Sim's screen into the drawer every frame. */

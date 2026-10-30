@@ -1,4 +1,18 @@
 // Browser microphone samples are resampled to the bounded format accepted by the bridge.
+export function microphoneChannel(channels){
+  let selected=null,energy=-1;
+  for(const samples of channels){let sum=0;for(const value of samples)sum+=value*value;if(sum>energy){energy=sum;selected=samples;}}
+  return selected;
+}
+
+export function microphoneSignal(samples){
+  let peak=0,windowEnergy=0,maxRms=0,count=0;
+  for(const value of samples){peak=Math.max(peak,Math.abs(value));windowEnergy+=value*value;count++;
+    if(count===1024){maxRms=Math.max(maxRms,Math.sqrt(windowEnergy/count));windowEnergy=0;count=0;}}
+  if(count)maxRms=Math.max(maxRms,Math.sqrt(windowEnergy/count));
+  return {peak,rms:maxRms,silent:peak<0.0001};
+}
+
 export function speechWave(samples,sampleRate){
   if(!Number.isFinite(sampleRate)||sampleRate<16000||sampleRate>192000||samples.length>sampleRate*30)throw Error('Record up to 30 seconds.');
   const count=Math.floor(samples.length*16000/sampleRate),bytes=new Uint8Array(44+count*2),view=new DataView(bytes.buffer);

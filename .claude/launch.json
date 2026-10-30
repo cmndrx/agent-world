@@ -4,14 +4,60 @@
     {
       "name": "demo",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["scripts/dev.mjs", "--demo"],
+      "runtimeArgs": [
+        "scripts/dev.mjs",
+        "--demo"
+      ],
       "port": 5177
     },
     {
       "name": "dev",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["scripts/dev.mjs"],
+      "runtimeArgs": [
+        "scripts/dev.mjs"
+      ],
       "port": 5177
+    },
+    {
+      "name": "qa-demo",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "AGENT_WORLD_PORT=4790",
+        "AGENT_WORLD_WEB_PORT=5190",
+        "node",
+        "scripts/dev.mjs",
+        "--demo"
+      ],
+      "port": 5190
+    },
+    {
+      "name": "town-sim",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "scripts/town-sim-fixture.mjs",
+        "4797"
+      ],
+      "port": 4797
+    },
+    {
+      "name": "town-sim-tier-up",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "scripts/town-sim-fixture.mjs",
+        "4799",
+        "tier-up"
+      ],
+      "port": 4799
+    },
+    {
+      "name": "town-sim-street",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "scripts/town-sim-fixture.mjs",
+        "4798",
+        "street"
+      ],
+      "port": 4798
     }
   ]
 }

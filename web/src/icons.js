@@ -7,6 +7,7 @@ import bookOpen from 'lucide-static/icons/book-open.svg?raw';
 import brain from 'lucide-static/icons/brain.svg?raw';
 import chevronDown from 'lucide-static/icons/chevron-down.svg?raw';
 import circleCheck from 'lucide-static/icons/circle-check.svg?raw';
+import circle from 'lucide-static/icons/circle.svg?raw';
 import circleHelp from 'lucide-static/icons/circle-help.svg?raw';
 import clock from 'lucide-static/icons/clock.svg?raw';
 import coffee from 'lucide-static/icons/coffee.svg?raw';
@@ -97,6 +98,11 @@ import circleAlert from 'lucide-static/icons/circle-alert.svg?raw';
 import flag from 'lucide-static/icons/flag.svg?raw';
 
 import mic from 'lucide-static/icons/mic.svg?raw';
+import volume2 from 'lucide-static/icons/volume-2.svg?raw';
+import settings2 from 'lucide-static/icons/settings-2.svg?raw';
+import audioLines from 'lucide-static/icons/audio-lines.svg?raw';
+import loaderCircle from 'lucide-static/icons/loader-circle.svg?raw';
+import download from 'lucide-static/icons/download.svg?raw';
 import square from 'lucide-static/icons/square.svg?raw';
 import arrowUp from 'lucide-static/icons/arrow-up.svg?raw';
 import archive from 'lucide-static/icons/archive.svg?raw';
@@ -127,17 +133,24 @@ import bot from 'lucide-static/icons/bot.svg?raw';
 import folderPlus from 'lucide-static/icons/folder-plus.svg?raw';
 import folderInput from 'lucide-static/icons/folder-input.svg?raw';
 import chevronRight from 'lucide-static/icons/chevron-right.svg?raw';
+import iceCreamCone from 'lucide-static/icons/ice-cream-cone.svg?raw';
+import utensils from 'lucide-static/icons/utensils.svg?raw';
+import dumbbell from 'lucide-static/icons/dumbbell.svg?raw';
+import clapperboard from 'lucide-static/icons/clapperboard.svg?raw';
+import wavesLadder from 'lucide-static/icons/waves-ladder.svg?raw';
+import ferrisWheel from 'lucide-static/icons/ferris-wheel.svg?raw';
 const RAW = {
   bellOff, bell, blocks, bookOpen, brain, chevronDown, circleCheck, circleHelp, clock, coffee, cpu, eye, gauge, monitor, monitorOff, flame, droplet,
   globe, hand, hourglass, house, keyboard, layers, moon, navigation, panelLeft, pencil, sparkles, sun, sunrise,
   sunset, terminal, triangleAlert, users, wifiOff, x, zap,
   hammer, shirt, paintRoller, trash, rotateCw, armchair, trees, check, palette,
-  brickWall, trophy, star, lock, lockOpen, partyPopper,
+  brickWall, trophy, star, lock, lockOpen, partyPopper, circle,
   map: mapIcon, cloudSun, cloudRain, cloudSnow, snowflake, leaf, flower, cat, dog, rabbit, gem, sprout, clover, treeDeciduous, landmark,
   camera, images, arrowLeft, shovel, flower2, store, building2, hardHat, info,
   briefcase, inbox, copy, externalLink, messageCircle, gamepad, plug, plus, listChecks, target, arrowRight, circleAlert, flag,
   route, eraser, move, cornerDownRight, signpost,
-  arrowUp, square, mic, archive, archiveRestore, search, rotateCcw, chevronRight, folderPlus, folderInput, code, shield, penTool, chartLine, graduationCap, heartPulse, megaphone, scale, flaskConical, userRoundPlus, clipboardList, lockKeyhole, music, banknote, heartHandshake, bot, squarePen, calendarClock, play, pause, repeat,
+  iceCreamCone, utensils, dumbbell, clapperboard, wavesLadder, ferrisWheel,
+  arrowUp, square, mic, volume2, settings2, audioLines, loaderCircle, download, archive, archiveRestore, search, rotateCcw, chevronRight, folderPlus, folderInput, code, shield, penTool, chartLine, graduationCap, heartPulse, megaphone, scale, flaskConical, userRoundPlus, clipboardList, lockKeyhole, music, banknote, heartHandshake, bot, squarePen, calendarClock, play, pause, repeat,
 };
 
 const cache = {};

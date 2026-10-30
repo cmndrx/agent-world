@@ -15,24 +15,25 @@ export class Celebrations {
     this.bursts = [];
   }
 
-  /** Paper confetti popping up over a spot and fluttering down. */
-  confetti(at, count = 90) {
+  /** Paper confetti popping up over a spot and fluttering down. `scale` enlarges it for far views (Plan town). */
+  confetti(at, count = 90, scale = 1) {
     const mat = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: 0.6, transparent: true });
-    const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.12, 0.08), mat, count);
+    const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.12 * scale, 0.08 * scale), mat, count);
+    const fling = Math.sqrt(scale);
     const parts = [];
     const color = new THREE.Color();
     for (let i = 0; i < count; i++) {
       const a = Math.random() * Math.PI * 2;
       const speed = 2 + Math.random() * 3;
       parts.push({
-        p: new THREE.Vector3(at.x, at.y + 2.5, at.z),
-        v: new THREE.Vector3(Math.cos(a) * speed * 0.6, 5 + Math.random() * 4, Math.sin(a) * speed * 0.6),
+        p: new THREE.Vector3(at.x, at.y + 2.5 * fling, at.z),
+        v: new THREE.Vector3(Math.cos(a) * speed * 0.6 * fling, (5 + Math.random() * 4) * fling, Math.sin(a) * speed * 0.6 * fling),
         r: new THREE.Vector3(Math.random() * 6, Math.random() * 6, Math.random() * 6),
         spin: new THREE.Vector3((Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12),
       });
       mesh.setColorAt(i, color.setHex(COLORS[i % COLORS.length]));
     }
-    this.add({ mesh, parts, life: 3.2, drag: 2.2, gravity: 7, size: 1 });
+    this.add({ mesh, parts, life: 3.2, drag: 2.2, gravity: 7 * fling, size: scale });
   }
 
   /** A few glowing bursts high over a home (bloom makes them shine). */

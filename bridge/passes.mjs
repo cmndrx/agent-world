@@ -95,11 +95,11 @@ export class PassStore {
     if(!item || typeof item.id!=='string' || !item.id || item.id.length>200 || item.type!=='reasoning' || typeof item.text!=='string' || !item.text.trim())return false;
     return this.change(data=>{
       const run=data.runs.find(r=>r.id===id&&r.status==='running'&&r.conversationSession);if(!run)return false;
-      const entry={id:item.id,text:item.text.trim().slice(0,4000)};
+      const entry={id:item.id,text:item.text.trim().slice(0,4000),...(['action','commentary'].includes(item.kind)?{kind:item.kind}:{})};
       run.reasoningSummaries ||= [];
       const previous=run.reasoningSummaries.find(s=>s.id===entry.id);
       if(previous?.text===entry.text)return false;
-      if(previous)previous.text=entry.text;else run.reasoningSummaries.push(entry);
+      if(previous)Object.assign(previous,entry);else run.reasoningSummaries.push(entry);
       // Public CLI summaries only; bound persisted and SSE payload size per run.
       while(run.reasoningSummaries.length>32 || run.reasoningSummaries.reduce((n,s)=>n+s.text.length,0)>64000)run.reasoningSummaries.shift();
       return true;
@@ -120,11 +120,11 @@ export class PassStore {
   resolve(input) {return this.change(data=>{const r=data.runs.find(r=>r.id===input.id);if(!r||r.status!=='interrupted'||input.confirmed!==true)throw new Error('Confirm inspection of an interrupted run.');if(r.childPid){try{process.kill(r.childPid,0);throw new Error('The previous runner process is still active. Wait before resolving.');}catch(e){if(e.code!=='ESRCH')throw e;}}r.status='failed';r.error='Interrupted run inspected; no automatic retry.';const p=data.proposals.find(p=>p.id===r.proposalId);if(p){p.status='failed';p.error=r.error;p.version++;}reconcileTeam(data);return r;});}
 }
 export function passResult(value){
-  if(!value||typeof value!=='object'||!Object.hasOwn(value,'next')||!text(value.summary,2000)||!Array.isArray(value.checks)||!Array.isArray(value.limitations)||[...value.checks,...value.limitations].some(v=>typeof v!=='string'))throw new Error('Runner did not return a structured result.');
+  if(!value||typeof value!=='object'||!Object.hasOwn(value,'next')||!text(value.summary,32000)||!Array.isArray(value.checks)||!Array.isArray(value.limitations)||[...value.checks,...value.limitations].some(v=>typeof v!=='string'))throw new Error('Runner did not return a structured result.');
   const next=value.next===null?null:value.next;
   if(next!==null&&(typeof next!=='object'||Array.isArray(next)||!text(next.title,200)||!text(next.instruction,4000)))throw new Error('Invalid next proposal.');
   let findings;if(value.findings!=null){if(!Array.isArray(value.findings)||value.findings.length>30||value.findings.some(f=>!f||!['P0','P1','P2','P3'].includes(f.priority)||!text(f.title,200)||!text(f.body,2000)||!text(f.file,500)||!Number.isInteger(f.line)||f.line<1))throw new Error('Invalid review findings.');findings=value.findings.map(f=>({priority:f.priority,title:text(f.title,200),body:text(f.body,2000),file:text(f.file,500),line:f.line}));}
   const handoffs=validateHandoffs(value.handoffs);
   const roles=value.roommateRoles==null?null:roommateRoles(value.roommateRoles);
-  return {...(roles?{roommateRoles:roles}:{}),...(handoffs.length?{handoffs}:{}),...(findings?{findings}:{}),summary:text(value.summary,2000),checks:value.checks.slice(0,20).map(v=>text(v,500)),limitations:value.limitations.slice(0,20).map(v=>text(v,500)),next:next?{title:text(next.title,200),instruction:text(next.instruction,4000)}:null};
+  return {...(roles?{roommateRoles:roles}:{}),...(handoffs.length?{handoffs}:{}),...(findings?{findings}:{}),summary:text(value.summary,32000),checks:value.checks.slice(0,20).map(v=>text(v,500)),limitations:value.limitations.slice(0,20).map(v=>text(v,500)),next:next?{title:text(next.title,200),instruction:text(next.instruction,4000)}:null};
 }

@@ -1,5 +1,9 @@
 # Proposal: player-led agent happiness
 
+> **Superseded (October 27, 2026).** The human asked to replace this happiness system. Care actions, cooldowns and
+> resident happiness are retired; interests remain and now become home needs met by venues in range. See
+> `docs/TOWN_SIM_PLAN.md`. The text below is kept as a historical record.
+
 ## Implemented first test (October 11, 2026)
 
 The human authorized a small implementation using easy care actions. The current

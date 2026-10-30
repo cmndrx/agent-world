@@ -10,9 +10,20 @@ import {homeResponse} from './home-response.js';
 
 const CATEGORY_ICON={technology:'code',design:'penTool',data:'chartLine',science:'flaskConical',business:'briefcase',finance:'banknote',marketing:'megaphone',writing:'pencil',legal:'scale',health:'heartPulse',education:'graduationCap',entertainment:'music',organization:'clipboardList',relationships:'heartHandshake',civic:'landmark'};
 const roleIcon=id=>icon(CATEGORY_ICON[PROFESSION_BY_ID[id]?.category]||'sparkles');
+const LEVEL_TEXT={good:'Every need met',low:'Some needs are thin',bad:'Needs attention'};
+const LEVEL_RANK={bad:0,low:1,good:2};
+/** Town simulation: what the layout gives this home (shared/home-satisfaction.mjs). Never reflects agent work. */
+export function needsMarkup(sat){
+  if(!sat)return '';
+  const rows=[...sat.needs].sort((a,b)=>LEVEL_RANK[a.level]-LEVEL_RANK[b.level]||a.value-b.value)
+    .map(n=>`<li data-level="${n.level}"><b>${esc(n.label)}</b><small>${esc(n.hint)}</small></li>`).join('');
+  return `<section class="ho-needs"><h3>${icon('landmark')} Town needs <small>town simulation</small></h3>
+    <p class="ho-needs-score" data-level="${sat.level}"><b>Satisfaction ${sat.score}/100</b> · ${LEVEL_TEXT[sat.level]}</p>
+    ${rows?`<ul>${rows}</ul>`:'<p class="ho-needs-empty">Nothing needed yet. New needs appear as civic buildings and venues unlock.</p>'}</section>`;
+}
 export class HomeOverview {
-  constructor({onChat,look}) {
-    this.onChat=onChat;this.look=look;this.avatars=new Map();this.dialog=document.createElement('dialog');this.dialog.className='home-overview glass';document.body.append(this.dialog);
+  constructor({onChat,look,satisfaction}) {
+    this.onChat=onChat;this.look=look;this.satisfactionFor=satisfaction;this.avatars=new Map();this.dialog=document.createElement('dialog');this.dialog.className='home-overview glass';document.body.append(this.dialog);
     this.dialog.addEventListener('close',()=>{clearInterval(this.timer);for(const p of this.avatars.values())p.dispose();this.avatars.clear();});
     this.dialog.addEventListener('change',e=>{if(e.target.matches('[data-test-level]'))this.testLevel=e.target.value;});
     this.dialog.addEventListener('click',async e=>{
@@ -71,6 +82,7 @@ export class HomeOverview {
       open<=0&&xp.level>=2?`<p class="ho-note">${icon('info')}<span>${d.capacity<MAX_LEVEL?`Every available room is full. Slot ${d.capacity+1} unlocks at home level ${d.capacity+1} · ${HOME_XP_THRESHOLDS[d.capacity]} pooled XP.`:`All ${MAX_LEVEL} rooms are full.`} You can still ask for suggestions.</span></p>`:''].join('');
     this.dialog.innerHTML=`<header class="panel-head ho-head"><span class="panel-icon ho-house">${icon('house')}</span><div><h2>${esc(d.name)}</h2><small>${esc(levelName(xp.level))} · ${d.residents.length} of ${d.capacity} rooms filled</small></div><button class="icon-btn" data-close aria-label="Close">${icon('x')}</button></header>
       <section class="ho-xp">${xpMarkup(xp,{label:'Home'})}<small class="ho-xp-note">${xp.level===MAX_LEVEL?'Maximum home level reached.':`Next building: ${esc(levelName(BUILDING_UNLOCK_LEVELS.find(level=>level>xp.level)))} at home level ${BUILDING_UNLOCK_LEVELS.find(level=>level>xp.level)}. One room unlocks every level.`}</small></section>
+      ${needsMarkup(this.satisfactionFor?.(this.project))}
       <section class="ho-testing"><h3>Home level · Testing</h3><p>Change the building and unlocked rooms. Agent and player XP stay unchanged. Existing residents stay when you lower the level.</p>
         <div class="ho-actions"><select class="ho-select" data-test-level aria-label="Test home level" ${this.busy||!d.built?'disabled':''}>${['earned',...Array.from({length:MAX_LEVEL},(_,i)=>String(i+1))].map(value=>`<option value="${value}" ${value===(this.testLevel??(d.testing?String(xp.level):'earned'))?'selected':''}>${value==='earned'?'Use earned XP':`Level ${value} · ${esc(levelName(Number(value)))}`}</option>`).join('')}</select><button class="ho-btn" data-apply-level ${this.busy||!d.built?'disabled':''}>${this.busy?'Saving…':'Apply'}</button></div>
         <small>${d.testing?`Testing adjustment: ${d.testing.xp>=0?'+':''}${d.testing.xp} home XP. Future earned XP still counts.`:'Using earned resident XP.'}</small>

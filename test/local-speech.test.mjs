@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {LocalSpeech,localSpeechURL,pcmWave} from '../bridge/local-speech.mjs';
-import {speechWave,spokenReply} from '../shared/speech-audio.mjs';
+import {speechWave,spokenReply,microphoneChannel,microphoneSignal} from '../shared/speech-audio.mjs';
 import {LocalVoiceChat} from '../web/src/local-voice.js';
 
 const wave=()=>Buffer.from(speechWave(new Float32Array(16000).fill(0.1),16000));
@@ -73,5 +73,27 @@ test('finishing a recording inserts returned text into the draft only and never 
 test('cancel during transcription discards late text; silence never reaches the speech backend',async()=>{
   let inserted=false,resolve;const voice=new LocalVoiceChat(()=>{},()=>inserted=true);voice.state={status:'recording'};voice.sampleRate=16000;voice.sampleCount=16000;voice.chunks=[new Float32Array(16000).fill(0.1)];voice.captureAbort=new AbortController();voice.request=()=>new Promise(r=>resolve=r);
   const finish=voice.finishRecording();voice.stop();resolve({text:'Late result'});await finish;assert.equal(inserted,false);assert.equal(voice.state.status,'idle');
-  voice.state={status:'recording'};voice.sampleCount=16000;voice.chunks=[new Float32Array(16000)];voice.request=()=>{throw Error('Must not reach backend');};await voice.finishRecording();assert.match(voice.state.message,/silent/);
+  voice.state={status:'recording'};voice.sampleCount=16000;voice.chunks=[new Float32Array(16000)];voice.request=()=>{throw Error('Must not reach backend');};await voice.finishRecording();assert.match(voice.state.message,/No microphone signal/);
+});
+test('USB and multichannel inputs preserve the active channel rather than silently using channel zero',()=>{
+ const silent=new Float32Array(128),right=new Float32Array(128).fill(0.05),left=new Float32Array(128).fill(0.01);
+ assert.equal(microphoneChannel([silent,right]),right);assert.equal(microphoneChannel([left,right]),right);assert.equal(microphoneChannel([]),null);
+ assert.equal(microphoneChannel([right]),right);assert.equal(microphoneChannel([right,Float32Array.from(right,v=>-v)]),right);
+});
+test('spoken replies can be enabled without microphone capture and disabled without replaying pending work',()=>{
+ const voice=new LocalVoiceChat(()=>{},()=>{}),context={project:'/fixture',slot:1,provider:'codex'};
+ voice.toggleReplies(context);assert.equal(voice.repliesEnabled,true);assert.equal(voice.active(),false);
+ voice.speaking=true;voice.follow('sent',context);voice.updateRuns([{proposalId:'sent',...context,status:'completed',result:{summary:'Spoken answer'}}]);assert.equal(voice.queue.length,1);
+ voice.toggleReplies(context);assert.equal(voice.repliesEnabled,false);assert.equal(voice.pending.size,0);assert.equal(voice.queue.length,0);
+});
+test('read aloud queues only selected response text with the selected conversation context',()=>{
+ const voice=new LocalVoiceChat(()=>{},()=>{}),context={project:'/fixture',slot:1,provider:'claude',thread:'owned'};let called=0;
+ voice.speakNext=()=>called++;voice.readReply('A real returned answer',context);
+ assert.equal(called,1);assert.equal(voice.repliesEnabled,true);assert.deepEqual(voice.queue,[{text:'A real returned answer',context}]);
+});
+test('quiet speech with long pauses is not rejected by a whole-recording volume threshold',async()=>{
+ const samples=new Float32Array(16000*30);for(let i=0;i<16000;i++)samples[i]=0.001*Math.sin(i*0.1);
+ assert.equal(microphoneSignal(samples).silent,false);assert.equal(microphoneSignal(new Float32Array(16000)).silent,true);
+ const voice=new LocalVoiceChat(()=>{},()=>{});voice.state={status:'recording'};voice.sampleRate=16000;voice.sampleCount=samples.length;voice.chunks=[samples];voice.captureAbort=new AbortController();let requested=false;
+ voice.request=async action=>{assert.equal(action,'transcribe');requested=true;return {text:'Quiet speech'};};await voice.finishRecording();assert.equal(requested,true);assert.equal(voice.state.status,'ready');
 });

@@ -1,3 +1,5 @@
+> **Conversational replies (October 24):** Answers render safe Markdown. The runner asks for a natural answer matched to the question; structured check/caveat/next-pass metadata remains stored for the runner and is not displayed beneath replies. **Working… / Work & progress** interleaves emitted public commentary with observed action labels/counts. Recorded public reasoning summaries are the fallback when commentary is unavailable; neither is private internal reasoning. Older runs cannot gain missing historical actions or recover truncated text. Formatting supports a restricted Markdown subset, not every CommonMark extension.
+
 > **Provider accounts:** Mayor Martin offers in-game sign-in for both Codex and Claude Code. Later, open Connections → Codex account or Claude Code account to see the CLI-reported email, authentication method and plan (when available), sign in, or Sign out. Signing out clears that provider’s CLI credentials on this computer, keeps projects/chats and historical town rewards, and is blocked while its approved, queued, running or interrupted game work remains. It does not promise to sign out desktop or browser sessions. Account details appear only in the local no-store account response; credentials, OAuth output and private codes are never returned or saved by Agent World. Codex linking now checks account authentication independently of usage/quota availability.
 
 > **Chat composer:** conversation rows show names only. While a game prompt is active, an empty composer shows a square Stop button; typing switches it to the Send arrow. Sending a follow-up queues that exact message behind current work and continues the same owned conversation. Clearing the draft restores Stop. Queued messages stay visible, and a run must establish its conversation before dependent messages can execute.
@@ -42,26 +44,33 @@ Busy or unsuitable space makes an activity unavailable; residents remain on thei
 own floor. Run `node scripts/home-activity-fixture.mjs` for an isolated visual QA
 page on :4796, with no observer, provider execution or real state.
 
-**Player-led interest care (October 15):** Click a resident and open Care from
-Character. Fifteen home activities support ten active scene seconds for up to +5
-simulated happiness, followed by a thirty-second cooldown. Actions require the
-matching interest, real household resources and a reachable same-floor station.
-The server validates resources and sequential scene progress; elapsed time alone
-does not reward care. Work, cancellation, resource loss, restart or interrupted
-scene progress grants nothing. Passive leisure grants no happiness or XP.
-Choose interests allows one to three of the 68 reviewed interests; 53 currently
-have explicit unavailable care reasons, including unimplemented venue/pet scenes.
-Build mode offers a free television and an authored above-fireplace mounting option.
-No resources are placed automatically. See [implementation evidence and remaining
-limitations](docs/INTEREST_CARE_IMPLEMENTATION.md). The updated bridge and client
-must both load; rebuilding does not update running processes. Current real
-resident assignments remain unchanged until the blocked scoped update can run.
+**Home satisfaction (October 27):** The town layout, not care clicks, decides how
+happy each home is (town simulation, never agent work). Civic buildings and venues
+spread cover over nearby tiles; each home's satisfaction is its weakest need: fire,
+police, education, health, garbage, water, power, green space, quiet, and its
+residents' interests served by a venue in range. Cover travels along the streets: a
+building too many street tiles away gives a home nothing. Needs switch on as their buildings
+unlock. A home's sign names its most urgent unmet need, and the home overview lists
+every need under Town needs. In Plan town, the Coverage picker shows any layer as a
+heatmap, and placing a building previews which homes it would help before you confirm.
+Healthy towns climb six tiers (Hamlet to Metropolis) that unlock civic buildings and
+venues; each tier needs enough homes or residents, no home with a bad need and a
+minimum average satisfaction, and never drops. Civic Pride is earned once per milestone
+(a need first met, a home first fully satisfied, a tier reached) and buys civic building
+upgrades that widen their cover, plus small props (trees, flower beds, benches, hedges,
+fountains, gazebos, statues) placed with the Props tool. Gems stay tied to real work.
+Idle residents sometimes walk along the streets to a venue that meets one of their interests
+and come home again; real work brings them straight back to their desk. Click a resident and open Interests to choose one to
+three interests; venue interests become needs for that home. Nothing decays. The
+earlier Praise / Give snack / Read a book care actions are retired; saved happiness
+values are kept but ignored. See [the town simulation plan](docs/TOWN_SIM_PLAN.md).
 
 For a disposable town with provider execution disabled, after building run
-`node scripts/care-fixture.mjs` and open http://127.0.0.1:4793. Its gameplay and
-provider home are isolated under the system temporary directory; no real events
+`node scripts/town-sim-fixture.mjs` and open http://127.0.0.1:4793. It places one
+home, a park, a fire station and a dump so home satisfaction is visible. Its gameplay
+and provider home are isolated under the system temporary directory; no real events
 are invented. Stop the fixture server when finished. See
-[the proposal](docs/INTERESTS_HAPPINESS_PROPOSAL.md) for later scope.
+[the town simulation plan](docs/TOWN_SIM_PLAN.md).
 
 Local project imports start with one Personal Assistant owner, including projects
 with saved teams or multiple observed sessions. Saved identities and history are
@@ -184,6 +193,14 @@ Style is saved in `~/.agent-world/style.json`, separate from observed events and
 - The list shows a picture of each building.
 - They're scenery: nothing about them reflects agent work.
 
+**Recreation: places residents could unwind.** Plan town's Leisure tool (`6`) lists ten venues in four tiers, chosen from the recreation catalog for the activities residents' interests point to. One of each, placed with the same plot and street rules as civic buildings:
+- Tier 1 · Neighbourhood: Public park (level 1; walks, cycling, jogging, outdoor games, dog walks, photography), Ice cream parlour (2), Arcade (3).
+- Tier 2 · Downtown: Restaurant (4; favourite meals, dining out, fine dining, celebrations), Community garden (5), Gym (6).
+- Tier 3 · Night out: Movie theater (7), Live music lounge (8), Public pool (9; swimming, poolside relaxation).
+- Tier 4 · Landmark: Sports complex (11; competitive sports, competitions, personal records).
+- Each card lists the interests it serves. Each venue has a walk-in interior and one simulated host (park ranger, scooper, chef, lifeguard…).
+- Scenery only: a venue never shows that a resident visited it, and placing one grants no happiness. Venue care is not implemented yet.
+
 **Roles.** Residents get a job title (Tester, Designer, Researcher and so on) from the kind of work their sessions do most, counted once per day. Helper agents start as interns; a helper type that works in a home on 3 different days is hired and gets a name. Off-duty residents stay inside their home.
 
 **Photos and gardens.**
@@ -214,7 +231,7 @@ Agent World borrows SimCity's road-first planning (streets create frontage, home
 
 **Add project.** In Plan town's Projects drawer, **Build a home** → choose **Import existing project** (a local Codex project) or **Create new project** (name and folder) → Plan town opens in **Place home** with a ghost footprint on the best free plot → move it, press `R` to turn it, and click a plot (green marks show eligible frontage on connected streets) → **Build home here**. Only then is the folder/project created or imported, the project activated and home construction started; the bridge rechecks capacity and the plot first. Escape or Cancel changes nothing and uses no permit. If a new folder was created but a later step fails, the message says where the folder is; it is never deleted.
 
-**Plan town tools** (hotkeys `1` Road, `2` Bulldoze, `3` Move, `4` Place, `5` Civic; `R` rotate/flip, `Enter` confirm, `Esc` cancel, `M` leave; drag or WASD pans anywhere on buildable land). Draw road (click a start tile and an end tile; one 90° turn that follows the longer leg first, `R` flips it; new streets must join an existing one; basic streets are free), Remove road (a straight stretch; Main Street stays and no home may lose its connection; affected homes are outlined red with the reason), Move building (pick a home, choose a plot, `R` to turn, confirm) and Place home (only while adding a project). Every action is a preview until Confirm or Enter; Escape cancels the preview, then leaves. Click a street sign to rename the street. Previews show green new street tiles, blue existing ones (crossing a street makes an intersection), red blocked tiles with the reason, the home's reserved footprint and its entrance arrow.
+**Plan town tools** (hotkeys `1` Road, `2` Bulldoze, `3` Move, `4` Place, `5` Civic, `6` Leisure; `R` rotate/flip, `Enter` confirm, `Esc` cancel, `M` leave; drag or WASD pans anywhere on buildable land). Draw road (click a start tile and an end tile; one 90° turn that follows the longer leg first, `R` flips it; new streets must join an existing one; basic streets are free), Remove road (a straight stretch; Main Street stays and no home may lose its connection; affected homes are outlined red with the reason), Move building (pick a home, choose a plot, `R` to turn, confirm) and Place home (only while adding a project). Every action is a preview until Confirm or Enter; Escape cancels the preview, then leaves. Click a street sign to rename the street. Previews show green new street tiles, blue existing ones (crossing a street makes an intersection), red blocked tiles with the reason, the home's reserved footprint and its entrance arrow.
 
 **Placement rules** (shared/town.mjs, used by the preview and again by the bridge): the whole footprint on buildable land; no overlap with streets, other homes, civic buildings or protected civic land (the town square with the Town Hall, and Main Street itself); the entrance faces a street tile; that street connects to Main Street.
 
@@ -381,7 +398,14 @@ The normal prompt runner still uses `codex exec`; it cannot collect first-time a
 
 Current verification (2026-10-07): the real provider request appeared in Electron and the human selected Always allow. A fresh native-tool connection then returned the Agent World interface without another approval. First-use documentation before the window-state block is handled correctly. Local ad-hoc rebuilds can invalidate macOS Documents-folder approval; the human completed the requested consent and a fresh packaged Electron setup displayed “Native app access verified.” for Agent World without another approval. The ordinary game test could not execute because Codex desktop owns its conversation; native access in a normal game prompt remains unverified for that chat. Codex native-app approval and macOS folder access are separate permissions. See `docs/NEXT_PASS.md` for the exact pending test and evidence.
 
-## Local voice messages (2026-10-15)
+## Local voice messages (updated 2026-10-24)
+
+**Voice setup & test** offers a user-approved in-app English model download,
+microphone/transcript and local speaker checks, recovery messages and copyable
+privacy-limited diagnostics. macOS, Windows and Linux use the WASM worker without
+requiring native speech tools or an audio API key. Actual Windows/Bluetooth
+hardware verification remains pending; see `docs/VOICE_RELEASE_CHECKS.md`.
+
 
 Codex and Claude resident chats now use local push-to-talk audio: click the mic,
 Finish recording, review the transcript appended to your draft, then Send.

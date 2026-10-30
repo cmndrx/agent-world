@@ -1,3 +1,4 @@
+import {markdown,progressHtml} from '../web/src/chat-markdown.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -9,7 +10,7 @@ import {chatMessages,runThread} from '../shared/chat.mjs';
 const source=fs.readFileSync(new URL('../web/src/pass-card.js',import.meta.url),'utf8');
 const doc={activeElement:null};
 const Card=vm.runInNewContext(source.replace(/^import .*;\r?\n/gm,'').replace('export class PassCard','class PassCard')+'\nPassCard',{
-  document:doc,defaultExecution,projectTeam,assignedRole,mentionSuggestions,esc:s=>String(s),icon:()=>'',
+  document:doc,markdown,progressHtml,defaultExecution,projectTeam,assignedRole,mentionSuggestions,esc:s=>String(s),icon:()=>'',
   chatArchived:()=>false,chatThreads:()=>[],chatMessages,runThread,chatConversation:()=>null,conversationTarget:()=>null,
   experience:()=>({residents:{}}),residentKey:()=>'',levelChip:()=>'',validThread:()=>false,
 });
@@ -46,7 +47,7 @@ test('Claude reply disclosure renders live/retained text and preserves draft, ca
  const {card,field,dialog}=fixture();const thread='12345678-1234-1234-1234-123456789abc';
  card.providerChoice='claude';card.newConversation=false;card.targetThread=()=>thread;
  const run={id:'public-run',project:'/fixture',slot:1,provider:'claude',conversationSession:thread,status:'running',instruction:'Fixture'};
- card.data.runs=[run];card.render();assert.match(dialog.innerHTML,/Public progress · live/);assert.match(dialog.innerHTML,/Waiting for Claude’s public progress/);
+ card.data.runs=[run];card.render();assert.match(dialog.innerHTML,/Working…/);assert.match(dialog.innerHTML,/Waiting for Claude’s public progress/);
  const draft=field.value,caret=field.selectionStart;
  dialog.querySelectorAll=()=>[{dataset:{reasoning:'public-run-assistant'},open:false}];
  run.reasoningSummaries=[{id:'text',text:'Checking public files.'}];card.render();
@@ -55,9 +56,9 @@ test('Claude reply disclosure renders live/retained text and preserves draft, ca
  card.connected=false;card.render();assert.match(dialog.innerHTML,/Checking public files/);assert.match(dialog.innerHTML,/Live activity unavailable/);
  run.reasoningSummaries=[];card.render();assert.match(dialog.innerHTML,/Live progress disconnected/);
  run.reasoningSummaries=[{id:'text',text:'Checking public files.'}];run.status='completed';run.result={summary:'Done',checks:[],limitations:[],next:null};card.render();
- assert.match(dialog.innerHTML,/>Public progress<\/summary>/);assert.match(dialog.innerHTML,/Checking public files/);assert.doesNotMatch(dialog.innerHTML,/Public progress · live/);
+ assert.match(dialog.innerHTML,/>Work & progress<\/summary>/);assert.match(dialog.innerHTML,/Checking public files/);assert.doesNotMatch(dialog.innerHTML,/Working…/);
  run.reasoningSummaries=[];card.render();assert.doesNotMatch(dialog.innerHTML,/data-reasoning=/);
- card.connected=true;run.status='running';run.provider='codex';card.providerChoice='codex';card.render();assert.match(dialog.innerHTML,/Reasoning · live/);assert.match(dialog.innerHTML,/Waiting for Codex/);
+ card.connected=true;run.status='running';run.provider='codex';card.providerChoice='codex';card.render();assert.match(dialog.innerHTML,/Working…/);assert.match(dialog.innerHTML,/Waiting for Codex/);
 });
 test('recruitment/rename roster updates refresh suggestions without inventing or sending work',()=>{
   const {card,field,box}=fixture();card.households=[home];card.updateMentions();
@@ -74,4 +75,20 @@ test('mention keyboard selection inserts a name without submitting, and Escape d
   card.render();assert.equal(card.mentionIndex,1);assert.match(box.innerHTML,/class="selected">@Tyler/);
   const enter=key('Enter');keydown.call(card,enter);assert.equal(field.value,'Please @Tyler ');assert.equal(enter.prevented,true);
   field.value='Then @';field.selectionStart=6;card.updateMentions();keydown.call(card,key('Escape'));assert.equal(card.mention,null);assert.equal(box.innerHTML,'');card.render();assert.equal(box.innerHTML,'');
+});
+
+test('completed replies hide run metadata while retaining Markdown, actions, progress and structured reports',()=>{
+ for(const provider of ['codex','claude']){
+  const {card,dialog}=fixture();const thread='12345678-1234-1234-1234-123456789abc';
+  card.providerChoice=provider;card.newConversation=false;card.targetThread=()=>thread;
+  const report={summary:'A **natural answer** with a relevant caveat.',checks:['INTERNAL_CHECK'],limitations:['INTERNAL_CAVEAT'],next:{title:'INTERNAL_NEXT',instruction:'Do not execute'},handoffs:[]};
+  const run={id:'metadata-run',project:'/fixture',slot:1,provider,conversationSession:thread,status:'completed',instruction:'Fixture',result:report,reasoningSummaries:[{id:'public',kind:'commentary',text:'A public progress update.'}]};
+  card.data.runs=[run];card.render();
+  assert.match(dialog.innerHTML,/A <strong>natural answer<\/strong> with a relevant caveat/);
+  assert.match(dialog.innerHTML,/Work & progress/);assert.match(dialog.innerHTML,/A public progress update/);
+  assert.match(dialog.innerHTML,/aria-label="Read aloud"/);assert.match(dialog.innerHTML,/aria-label="Copy response"/);
+  assert.doesNotMatch(dialog.innerHTML,/Run details|chat-report|INTERNAL_CHECK|INTERNAL_CAVEAT|INTERNAL_NEXT/);
+  assert.equal(card.messages.find(m=>m.role==='assistant').report,report);
+  assert.deepEqual(run.result,report);
+ }
 });

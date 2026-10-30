@@ -5,9 +5,10 @@
 // They're scenery: nothing here reflects agent work.
 
 import * as THREE from 'three';
-import { CivicStaff } from './civic-staff.js';
+import { CivicStaff, hasStaff } from './civic-staff.js';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import { CIVIC, CIVIC_KINDS, civicTransform } from '../../shared/town.mjs';
+import { PUBLIC_BUILDINGS, PUBLIC_KINDS, civicTransform } from '../../shared/town.mjs';
+import { VENUE_BUILD } from './recreation.js';
 import { icon } from './icons.js';
 import { PALETTE, box, buildLightPool, cyl, ico, mergeStatic } from './models.js';
 import { escapeHtml as esc } from './sim.js';
@@ -67,6 +68,15 @@ class Kit {
   }
 
   add(group, ...meshes) { this[group].add(...meshes); return meshes[0]; }
+
+  /** A glowing box (signs, neon, screens, lamps): `base` by day, plus `night` after dark. */
+  glow(w, h, d, color, x, y, z, base = 0.06, night = 0.55) {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), glowMat(color, base, night));
+    mesh.position.set(x, y, z);
+    mesh.userData.dynamic = true;
+    mesh.userData.glow = true;
+    return mesh;
+  }
 
   /** Paving from the front edge to a door at (x, z). */
   path(x, z, w = 2.2, color = PAVING) {
@@ -517,10 +527,10 @@ function steam(k) {
   return puffs;
 }
 
-/** Build one civic building in its own frame. */
+/** Build one civic building or recreation venue in its own frame. */
 export function buildCivic(kind) {
   const k = new Kit(kind);
-  BUILD[kind](k);
+  (BUILD[kind] || VENUE_BUILD[kind])(k);
   k.ext.add(buildLightPool(5, 3, k.doorX, 0.1, k.D / 2 - 2));
   for (const g of [k.ext, k.inside, k.roof]) mergeStatic(g);
   const puffs = kind === 'power_plant' ? steam(k) : [];
@@ -551,7 +561,7 @@ export function civicPictures() {
   sun.position.set(14, 26, 18);
   scene.add(sun);
   const camera = new THREE.PerspectiveCamera(26, 1.5, 0.5, 500);
-  for (const kind of CIVIC_KINDS) {
+  for (const kind of PUBLIC_KINDS) {
     const b = buildCivic(kind);
     scene.add(b.root);
     const bounds = new THREE.Box3().setFromObject(b.root);
@@ -583,7 +593,7 @@ export class CivicBuildings {
 
   /** Rebuild buildings whose placement changed; remove ones taken off the map. */
   setTown(town) {
-    const placed = new Map((town?.civic || []).filter((c) => CIVIC[c.kind]).map((c) => [c.kind, c]));
+    const placed = new Map((town?.civic || []).filter((c) => Object.hasOwn(PUBLIC_BUILDINGS, c.kind)).map((c) => [c.kind, c]));
     for (const [kind, it] of this.items) {
       const c = placed.get(kind);
       if (c && it.key === `${c.i},${c.j},${c.rot}`) continue;
@@ -593,21 +603,35 @@ export class CivicBuildings {
     for (const [kind, c] of placed) {
       if (this.items.has(kind)) continue;
       const b = buildCivic(kind);
-      b.staff = new CivicStaff(kind, CIVIC_KINDS.indexOf(kind) + 1);
-      b.root.add(b.staff.root);
+      if (hasStaff(kind)) {
+        b.staff = new CivicStaff(kind, PUBLIC_KINDS.indexOf(kind) + 1);
+        b.root.add(b.staff.root);
+      }
       const t = civicTransform(c);
       b.root.position.set(t.x, 0, t.z);
       b.root.rotation.y = t.yaw;
       const el = document.createElement('div');
       el.className = 'civic-sign';
-      el.style.setProperty('--c', `#${CIVIC[kind].color.toString(16).padStart(6, '0')}`);
-      el.innerHTML = `${icon(CIVIC[kind].icon)}<b>${esc(CIVIC[kind].name)}</b>`;
+      const def = PUBLIC_BUILDINGS[kind];
+      el.style.setProperty('--c', `#${def.color.toString(16).padStart(6, '0')}`);
+      el.innerHTML = `${icon(def.icon)}<b>${esc(def.name)}</b>`;
       const label = new CSS2DObject(el);
       label.position.set(0, b.top + 1.4, 0);
       b.root.add(label);
       this.group.add(b.root);
       this.items.set(kind, { ...b, label, key: `${c.i},${c.j},${c.rot}`, yaw: t.yaw, roofOn: true, roofK: 1, roofV: 0 });
     }
+  }
+
+  /** Town simulation: how many residents are visiting a venue right now (shown on its sign; 0 hides it). */
+  setVisitors(kind, n) {
+    const it = this.items.get(kind);
+    if (!it) return;
+    const el = it.label.element;
+    let badge = el.querySelector('.civic-visitors');
+    if (!n) { badge?.remove(); return; }
+    if (!badge) { badge = document.createElement('small'); badge.className = 'civic-visitors'; el.append(badge); }
+    badge.textContent = `${n} visiting`;
   }
 
   /** World rectangles [x0, z0, x1, z1] of every hall, for the weather (rooms stay dry). */

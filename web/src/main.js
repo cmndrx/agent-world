@@ -38,11 +38,14 @@ import { Commons } from './commons.js';
 import { Seasons } from './seasons.js';
 import { Explore, foundMessage } from './explore.js';
 import { TownPlanner } from './town-planner.js';
-import { BUILDABLE, eligiblePlots, emptyTown, homeTransform, tilesRect } from '../../shared/town.mjs';
+import { BUILDABLE, civicTransform, eligiblePlots, emptyTown, homeTransform, tileCenter, tilesRect } from '../../shared/town.mjs';
+import { townSatisfaction } from '../../shared/home-satisfaction.mjs';
 import { WeatherFx, fxUniforms } from './fx.js';
 import { Garden } from './garden.js';
 import { Album, PhotoMode } from './photo.js';
 import { CivicBuildings } from './civic.js';
+import { TownProps } from './props.js';
+import { VenueVisits } from './visits.js';
 import { Landscape } from './landscape.js';
 import { declutter, declutterSigns } from './declutter.js';
 import { HIRE_AFTER_DAYS, emptyCity, helperKey, helperType, residentKey, roleOf, roleWhy, staff } from '../../shared/city.mjs';
@@ -96,8 +99,11 @@ const weatherFx = new WeatherFx(scene);
 // The world around the neighborhood (scenery only): groves, pond, cars, birds, skyline.
 const landscape = new Landscape(scene);
 landscape.setTown(town);
-// Civic buildings the player placed (fire station, hospital, …): shared/town.mjs, unlocked by player level.
+// Civic buildings the player placed (fire station, hospital, …): shared/town.mjs, unlocked by town tier.
 const civic = new CivicBuildings(scene);
+const townProps = new TownProps(scene); // trees, benches, fountains… bought with Civic Pride (town simulation)
+// Idle residents occasionally walk to venues that meet their interests (town simulation; never agent work).
+const visits = new VenueVisits({ town: () => town, satisfaction: () => satisfaction, sims: () => sims.values(), night: () => env.night, civic });
 // The work ledger (play layer): kinds of work per day, which gives residents their roles (shared/city.mjs).
 let city = emptyCity();
 let demoMode = false;
@@ -111,6 +117,7 @@ const sessionToSim = new Map(); // session id -> sim key
 let selectedProjects=new Set();
 let emptyLot=null;
 const households = new Map(); // project -> household
+let satisfaction = new Map(); // project -> home satisfaction (shared/home-satisfaction.mjs)
 
 const charKey = (project, slot) => `${project}#${slot}`;
 // Customization (decor, paint, outfits): simulation layer only. See docs/GAMEPLAY.md.
@@ -187,11 +194,11 @@ function applyHousehold(h) {
       sim.setLook(style.residents?.[key]);
       if (movingIn) welcomeResident(sim, h);
     } else {
-      sim.receiveCare(c, replaying || firstSnapshot);
       sim.character = c;
     }
   }
   knownResidents.add(h.project);
+  refreshSatisfaction();
   applyRoles();
   if (!replaying) passCard.setData({households:[...households.values()]});
 }
@@ -369,7 +376,16 @@ function connect() {
       if (gameplay.connection) applyRoles();
     }
     else if (m.type === 'photos') { photos = m.photos || []; album?.setPhotos(photos); }
-    else if (m.type === 'town') { town = m.town || emptyTown(); applyLayout(); planner?.refresh(); ui.projectsPanel.setTown(town); }
+    else if (m.type === 'town') {
+      const before = town.tier?.current;
+      town = m.town || emptyTown(); applyLayout(); planner?.refresh(); ui.projectsPanel.setTown(town);
+      // Town simulation: a live tier-up (from the player's own layout) gets a small celebration; never on load.
+      if (before && town.tier?.current > before && !replaying) {
+        cheer(`Your town is now a <b>${escapeHtml(town.tier.name)}</b> · tier ${town.tier.current}${town.tier.next ? '' : ' · top tier'} · new buildings to place`, '🏛️');
+        const hall = [...lots.values()].find((l) => !l.unplaced);
+        if (hall) celebrations.fireworks(hall.toWorld(0, 0));
+      }
+    }
     else if (m.type === 'catalog') { if(selectedProjects!==null){m.projects=m.projects.filter(p=>selectedProjects.has(p.home));m.conversations=m.conversations.filter(p=>selectedProjects.has(p.project));} library.setData({ projects: m.projects, conversations: m.conversations }); work.setData({ conversations: m.conversations }); passCard.setData({conversations:m.conversations}); syncLibrarySessions(); }
     else if (m.type === 'passes') { passCard.setData(m); activityRuns = m.passes?.runs || []; syncRunnerActivity(); levels.setData(m.passes?.runs || []); }
     else if (m.type === 'productivity') {
@@ -429,6 +445,7 @@ function applyLayout() {
   scenery.setTown(town);
   landscape.setTown(town);
   civic.setTown(town);
+  townProps.setTown(town);
   // Rooms stay dry and snow-free (fx.js); the room spans x −7.25…7.25, z −5.25…5.25 in each lot (turned with it).
   weatherFx.setRooms([...lots.values()].filter((l) => !l.unplaced).map((l) => {
     const p = l.group.position, turned = Math.abs(Math.sin(l.yaw || 0)) > 0.5, [hx, hz] = turned ? [5.25, 7.25] : [7.25, 5.25];
@@ -438,6 +455,13 @@ function applyLayout() {
     const first = eligiblePlots(town, { limit: 1 })[0];
     if (first) { const t = homeTransform(first); emptyLot.position.set(t.x, 0, t.z); emptyLot.rotation.y = t.yaw; }
   }
+  refreshSatisfaction();
+}
+
+/** Home satisfaction from the town layout (simulation, never agent work): docs/TOWN_SIM_PLAN.md. */
+function refreshSatisfaction() {
+  satisfaction = townSatisfaction(town, households);
+  for (const lot of lots.values()) lot.setSatisfaction(satisfaction.get(lot.project) || null);
 }
 
 /** Recompute gems and levels, then update houses, the chip and the catalog. */
@@ -861,6 +885,7 @@ function frame() {
   commons.update(dt, t, env.night, rig.target, camera, rig.maxDistance - 16);
   mayorCharacter.update(t, !!mayor?.dialog.open, dt);
   civic.update(dt, t, { night: env.night, camera, target: rig.target, peekOpen: rig.maxDistance - 16 });
+  visits.update();
   landscape.update(dt, t, env.night, null);
   if (t - lastRoleCheck > 2) {
     lastRoleCheck = t;
@@ -1001,7 +1026,7 @@ function syncLibrarySessions() {
     lot.setConversationCount(count);
   }
 }
-const homeOverview = new HomeOverview({look: (project, slot) => sims.get(charKey(project, slot))?.look, onChat: (project,slot) => {const sim=sims.get(charKey(project,slot));if(sim)openAgentChat(sim);else passCard.openHome(project);}});
+const homeOverview = new HomeOverview({satisfaction: (project) => satisfaction.get(project) || null, look: (project, slot) => sims.get(charKey(project, slot))?.look, onChat: (project,slot) => {const sim=sims.get(charKey(project,slot));if(sim)openAgentChat(sim);else passCard.openHome(project);}});
 document.addEventListener('click', e => {
   const home = e.target.closest('[data-work-home]');
   if (home) homeOverview.open(home.dataset.workHome);
@@ -1068,6 +1093,7 @@ planner = new TownPlanner({
   town: () => town,
   homeName: (project) => households.get(project)?.name || project.split(/[\\/]/).pop(),
   homeHeight: (project) => lots.get(project)?.plan?.height || 7,
+  households: () => households,
   suppressed: () => rig.suppressClick,
   ledger: ui.projectsPanel.host,
   onLedgerOpen: () => ui.projectsPanel.load(),
@@ -1075,6 +1101,12 @@ planner = new TownPlanner({
     const res = await fetch('/api/town', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(action) });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(body.error || 'Couldn’t save the town plan.');
+    // Town simulation feedback: a small burst where a building, upgrade or prop lands (player action, never agent work).
+    const spot = action.action === 'place-prop' || action.action === 'move-prop' ? tileCenter(action.i, action.j)
+      : action.action === 'place-civic' ? (() => { const c = (town.civic || []).find((b) => b.kind === action.kind); return c ? civicTransform({ ...c, i: action.i, j: action.j, rot: action.rot }) : null; })()
+        : action.action === 'upgrade-civic' ? (() => { const c = (town.civic || []).find((b) => b.kind === action.kind); return c ? civicTransform(c) : null; })() : null;
+    // Plan town looks down from far away: big pieces so the burst reads at that distance.
+    if (spot) celebrations.confetti(new THREE.Vector3(spot.x, 0, spot.z), action.action === 'move-prop' ? 12 : action.action === 'place-prop' ? 24 : 45, 10);
     return body.result;
   },
   onToggle: (active, center, distance) => {

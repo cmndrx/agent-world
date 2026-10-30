@@ -1,0 +1,9 @@
+// Labels only: never persist command arguments, tool inputs/results or raw thinking.
+export function publicAction(item,completed=false){
+ const type=item?.type,id=item?.id;if(typeof id!=='string'||!id||id.length>150)return null;
+ const labels={commandExecution:['Running a command','Ran a command'],command_execution:['Running a command','Ran a command'],fileChange:['Editing files','Edited files'],file_change:['Editing files','Edited files'],mcpToolCall:['Using a tool','Used a tool'],mcp_tool_call:['Using a tool','Used a tool'],webSearch:['Searching the web','Searched the web'],web_search:['Searching the web','Searched the web'],imageView:['Viewing an image','Viewed an image']};
+ if(['agent_message','agentMessage'].includes(type)&&item.phase==='commentary'&&completed&&typeof item.text==='string')return {id:'commentary:'+id,type:'reasoning',kind:'commentary',text:item.text.slice(0,4000)};
+ const label=labels[type];if(!label)return null;
+ return {id:'action:'+id,type:'reasoning',kind:'action',text:item.status==='failed'?'Action failed':label[completed?1:0]};
+}
+export const conversationalInstruction='Write the summary field as your complete, natural answer to the human, using Markdown where helpful. Match the question: simple questions deserve direct answers, not a work-pass report. Do not add routine Checks, Limitations or Next sections to the answer. Include material caveats naturally when relevant; never hide failures. Keep actually performed checks and uncertainties in the separate metadata arrays; empty arrays are valid for ordinary questions. Set next to null unless a next-pass proposal is genuinely useful. Public commentary should be brief, concrete updates about what you found and what you are doing; do not narrate private deliberation, invent tool activity or target a word/source count the human did not request.';

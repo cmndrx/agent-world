@@ -1,3 +1,4 @@
+import {publicAction} from '../shared/chat-progress.mjs';
 import {spawnProvider,signalProvider} from './cli-process.mjs';
 import {validThread} from '../shared/pass-conversations.mjs';
 // Actual app-server turn transport. Only public items and matched browser approvals are exposed.
@@ -29,6 +30,10 @@ export class CodexTurn {
   if(m.method==='turn/started'){if(this.turn&&this.turn!==p.turn.id)return;this.turn=p.turn.id;}
   if(p.turnId&&this.turn&&p.turnId!==this.turn)return;
   if(['item/started','item/completed'].includes(m.method)&&p.item){this.items.set(p.item.id,p.item);if(p.item.type==='agentMessage'&&m.method==='item/completed'&&p.item.phase!=='commentary')this.answer=p.item.text;}
+  if(['item/started','item/completed'].includes(m.method)&&p.item){
+   const action=publicAction(p.item,m.method==='item/completed');if(action)this.onReasoning(action);
+  }
+  if(m.method==='item/agentMessage/delta'&&(p.phase==='commentary'||this.items.get(p.itemId)?.phase==='commentary')){const id='commentary:'+p.itemId;const text=((this.summaries.get(id)||'')+String(p.delta||'')).slice(0,4000);this.summaries.set(id,text);this.onReasoning({id,type:'reasoning',kind:'commentary',text});}
   if(m.method==='item/reasoning/summaryTextDelta'){const id=p.itemId+':'+p.summaryIndex;const text=((this.summaries.get(id)||'')+String(p.delta||'')).slice(0,4000);this.summaries.set(id,text);this.onReasoning({id,type:'reasoning',text});}
   if(m.method==='turn/completed'&&(!this.turn||p.turn.id===this.turn)){if(p.turn.status!=='completed')return this.fail(p.turn.error?.message||'Codex turn did not complete.');try{const result=JSON.parse(this.answer||'');this.done=true;this.resolve(result);}catch{this.fail('Codex returned no valid structured response.');}}
  }

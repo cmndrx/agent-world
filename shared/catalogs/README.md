@@ -63,7 +63,9 @@ possible venues, independent of profession compatibility.
 
 Building `category` uses the foundation's four values: `residential`,
 `recreational`, `infrastructure`, `work`. Category is separate from zoning;
-zones, capacity, costs, unlock levels and pollution rules are still undecided.
+zones, capacity, costs and pollution rules are still undecided. Ten recreational
+templates are placeable as venues (`RECREATION` in `shared/town.mjs`, keyed by
+`venue`), with player-level unlock tiers defined there, not here.
 Profession and interest categories are grouping keys rather than eligibility rules.
 
 `home`, `townhall`, `personal_assistant`, `junior_developer` and `researcher`

@@ -82,7 +82,7 @@ test('concurrent adds never exceed capacity; replacing swaps one project for ano
   assert.ok(s.households.some((h) => h.project === gone));
 });
 
-test('inactive projects take no prompts, schedules, chats or care; removal waits for running work', async (t) => {
+test('inactive projects take no prompts, schedules or chats; removal waits for running work', async (t) => {
   const w = await town(t, {
     selected: ['a', 'b'], runs: [...done(4), { id: 'live', project: 'b', slot: 1, status: 'running', title: 'Long fixture prompt' }],
     proposals: [{ id: 'queued', project: 'b', slot: 1, status: 'approved', title: 'Queued fixture prompt', instruction: 'x', version: 1 }],
@@ -91,7 +91,7 @@ test('inactive projects take no prompts, schedules, chats or care; removal waits
   assert.equal(s.town.homes.length, 2, 'migration placed both active homes');
   // Remove A (idle) at once.
   assert.equal((await w.post('/api/codex-projects', { action: 'remove', project: w.folders.a })).body.result.removed, true);
-  for (const [route, body] of [['/api/pass-proposal', { project: w.folders.a, slot: 1, title: 'x', instruction: 'x' }], ['/api/schedules', { action: 'create', project: w.folders.a, slot: 1 }], ['/api/pass-chat', { project: w.folders.a, slot: 1, thread: 't', action: 'archive' }], ['/api/care', { project: w.folders.a, agentId: 'x' }]]) {
+  for (const [route, body] of [['/api/pass-proposal', { project: w.folders.a, slot: 1, title: 'x', instruction: 'x' }], ['/api/schedules', { action: 'create', project: w.folders.a, slot: 1 }], ['/api/pass-chat', { project: w.folders.a, slot: 1, thread: 't', action: 'archive' }]]) {
     const r = await w.post(route, body);
     assert.equal(r.status, 400, route);
     assert.match(r.body.error, /isn’t active in your town/, route);
@@ -187,7 +187,7 @@ test('migration backs up the row layout, keeps street names and is safe to repea
   assert.ok(fs.readdirSync(path.join(again.dir, 'backups')).some((b) => b.startsWith('town-unreadable')));
 });
 
-test('civic buildings are placed through the town API, checked against the player level and saved', async (t) => {
+test('civic buildings are placed through the town API, checked against the town tier and saved', async (t) => {
   const w = await town(t, { runs: done(4) }); // 4 responses · 100 XP · player level 2
   const s0 = await w.state();
   assert.equal(s0.town.permits.level, 2);
@@ -195,7 +195,8 @@ test('civic buildings are placed through the town API, checked against the playe
   const at = { i: -1, j: -1, rot: 0, revision: s0.town.revision }; // a 3 × 2 fire station facing Main Street
   const locked = await w.post('/api/town', { action: 'place-civic', kind: 'police', ...at });
   assert.equal(locked.status, 400);
-  assert.match(locked.body.error, /level 3/);
+  assert.match(locked.body.error, /town tier 2/);
+  assert.equal(s0.town.tier.current, 1);
   assert.equal((await w.post('/api/town', { action: 'place-civic', kind: 'fire_station', ...at })).status, 200);
   const s1 = await w.state();
   assert.deepEqual(s1.town.civic.map((c) => [c.kind, c.i, c.j, c.connected]), [['fire_station', -1, -1, true]]);
